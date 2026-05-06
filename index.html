@@ -1,13 +1,609 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>swarm-app</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SWARM-X Global Command Center</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --bg:#060810;
+    --bg2:#0a0e18;
+    --bg3:#0e1422;
+    --accent:#ff6a00;
+    --accent2:#ff8c00;
+    --cyan:#00d4ff;
+    --green:#00ff88;
+    --gold:#ffd700;
+    --red:#ff3a3a;
+    --border:#1a2040;
+    --border2:#ff6a0033;
+    --text:#c0cce0;
+    --text2:#6080a0;
+    --font:'Rajdhani',sans-serif;
+    --mono:'Share Tech Mono',monospace;
+    --title:'Orbitron',sans-serif;
+  }
+  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px;min-height:100vh;overflow-x:hidden;}
+
+  /* SCANLINE EFFECT */
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:9999;}
+
+  /* TOP BAR */
+  .topbar{display:grid;grid-template-columns:220px 1fr auto;align-items:center;padding:8px 16px;background:var(--bg2);border-bottom:1px solid var(--border);gap:12px;}
+  .logo{font-family:var(--title);font-size:16px;font-weight:900;color:var(--accent);letter-spacing:4px;text-shadow:0 0 20px var(--accent);}
+  .logo span{color:var(--cyan);}
+  .logo-sub{font-size:7px;color:var(--text2);letter-spacing:3px;font-family:var(--mono);}
+  .top-stats{display:flex;gap:20px;justify-content:center;}
+  .top-stat{text-align:center;padding:0 16px;border-right:1px solid var(--border);}
+  .top-stat:last-child{border:none;}
+  .top-stat-val{font-family:var(--title);font-size:14px;font-weight:700;}
+  .top-stat-label{font-size:8px;color:var(--text2);letter-spacing:2px;font-family:var(--mono);}
+  .top-right{display:flex;gap:8px;align-items:center;}
+  .status-pill{padding:4px 10px;border-radius:2px;font-size:9px;font-family:var(--mono);letter-spacing:2px;border:1px solid;}
+
+  /* MAIN GRID */
+  .main{display:grid;grid-template-columns:180px 1fr 220px;height:calc(100vh - 46px - 120px);border-bottom:1px solid var(--border);}
+
+  /* SIDEBAR */
+  .sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:10px 0;overflow-y:auto;}
+  .sidebar-section{padding:6px 12px;font-size:8px;color:var(--text2);letter-spacing:2px;font-family:var(--mono);margin-top:10px;}
+  .sidebar-item{padding:7px 12px;font-size:11px;font-weight:600;letter-spacing:1px;display:flex;align-items:center;gap:8px;cursor:pointer;border-left:2px solid transparent;transition:all 0.2s;}
+  .sidebar-item:hover{background:rgba(255,106,0,0.05);color:var(--accent);}
+  .sidebar-item.active{background:rgba(255,106,0,0.1);border-left-color:var(--accent);color:var(--accent);}
+  .sidebar-item .dot{width:5px;height:5px;border-radius:50%;}
+
+  /* CENTER MAP */
+  .center{position:relative;background:var(--bg);overflow:hidden;}
+  .map-container{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center;}
+  .map-title{position:absolute;top:10px;left:14px;font-size:8px;color:var(--text2);letter-spacing:3px;font-family:var(--mono);}
+
+  /* SVG World Map */
+  .world-svg{width:90%;height:90%;opacity:0.85;}
+
+  /* Connection lines overlay */
+  .connections{position:absolute;inset:0;pointer-events:none;}
+
+  /* AGENT PANEL */
+  .agent-panel{background:var(--bg2);border-left:1px solid var(--border);overflow-y:auto;}
+  .panel-header{padding:10px 12px;border-bottom:1px solid var(--border);font-size:8px;color:var(--accent);letter-spacing:3px;font-family:var(--mono);display:flex;justify-content:space-between;align-items:center;}
+  .agent-row{padding:7px 12px;border-bottom:1px solid rgba(26,32,64,0.5);display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .agent-name{font-size:10px;font-weight:700;letter-spacing:1px;}
+  .agent-bar-bg{flex:1;height:3px;background:#1a2040;border-radius:2px;overflow:hidden;}
+  .agent-bar{height:100%;border-radius:2px;transition:width 1s;}
+  .agent-pct{font-size:10px;font-family:var(--mono);width:32px;text-align:right;}
+  .agent-status{font-size:8px;font-family:var(--mono);padding:2px 6px;border-radius:2px;}
+
+  /* QUEEN AGENT */
+  .queen-section{padding:10px 12px;border-bottom:1px solid var(--border);}
+  .queen-card{background:linear-gradient(135deg,#0a0810,#150a05);border:1px solid var(--accent);border-radius:4px;padding:10px;display:flex;gap:10px;align-items:center;}
+  .queen-avatar{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle,#ff6a00,#330a00);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 0 15px var(--accent);}
+  .queen-name{font-family:var(--title);font-size:11px;font-weight:700;color:var(--accent);}
+  .queen-title{font-size:8px;color:var(--text2);letter-spacing:1px;font-family:var(--mono);}
+  .queen-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;}
+  .qstat{background:rgba(255,106,0,0.08);padding:4px 6px;border-radius:2px;}
+  .qstat-val{font-size:12px;font-weight:700;color:var(--accent);font-family:var(--mono);}
+  .qstat-label{font-size:7px;color:var(--text2);letter-spacing:1px;}
+
+  /* BOTTOM GRID */
+  .bottom-grid{display:grid;grid-template-columns:repeat(9,1fr);height:120px;border-top:1px solid var(--border);}
+  .bottom-panel{border-right:1px solid var(--border);padding:8px 10px;overflow:hidden;}
+  .bottom-panel:last-child{border:none;}
+  .bp-title{font-size:7px;color:var(--text2);letter-spacing:2px;font-family:var(--mono);margin-bottom:6px;white-space:nowrap;}
+  .bp-val{font-family:var(--title);font-size:13px;font-weight:700;}
+  .bp-sub{font-size:8px;color:var(--text2);margin-top:2px;}
+
+  /* REVENUE BARS */
+  .mini-bars{display:flex;gap:2px;align-items:flex-end;height:40px;margin-top:6px;}
+  .mini-bar{flex:1;border-radius:1px 1px 0 0;min-width:4px;}
+
+  /* IKABOO MODE */
+  .ikaboo{background:radial-gradient(circle,#1a0500,#080300);border:1px solid var(--red);border-radius:4px;padding:8px;text-align:center;height:calc(100% - 20px);}
+  .ikaboo-text{font-family:var(--title);font-size:9px;color:var(--red);letter-spacing:2px;text-shadow:0 0 10px var(--red);}
+
+  /* AUTOMATION ITEMS */
+  .auto-item{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
+  .auto-name{font-size:9px;color:var(--text);}
+  .auto-badge{font-size:7px;font-family:var(--mono);padding:1px 5px;border-radius:2px;}
+
+  /* VOICE */
+  .voice-waves{display:flex;gap:2px;align-items:center;height:30px;margin-top:8px;}
+  .wave{width:3px;border-radius:2px;background:var(--cyan);animation:wave 0.8s ease-in-out infinite alternate;}
+  @keyframes wave{from{height:4px}to{height:24px}}
+
+  /* SCALING CHART */
+  .scale-chart{position:relative;height:50px;margin-top:4px;}
+  .scale-line{stroke:var(--accent);stroke-width:1.5;fill:none;}
+  .scale-fill{fill:url(#scaleGrad);opacity:0.3;}
+
+  /* TECH STACK FOOTER */
+  .tech-footer{background:var(--bg2);border-top:1px solid var(--border);padding:6px 16px;display:flex;align-items:center;gap:20px;}
+  .tech-label{font-size:8px;color:var(--text2);letter-spacing:2px;font-family:var(--mono);flex-shrink:0;}
+  .tech-icons{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .tech-icon{font-size:9px;color:var(--text2);padding:3px 8px;border:1px solid var(--border);border-radius:2px;font-family:var(--mono);}
+  .tagline{margin-left:auto;font-family:var(--title);font-size:9px;color:var(--accent);letter-spacing:3px;opacity:0.7;}
+
+  /* LIVE TERMINAL */
+  .terminal{padding:8px 10px;}
+  .terminal-line{font-family:var(--mono);font-size:9px;color:var(--green);margin-bottom:2px;}
+  .terminal-line.dim{color:var(--text2);}
+  .terminal-line.warn{color:var(--accent);}
+
+  /* PULSE ANIMATION */
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.95)}}
+  @keyframes glow{0%,100%{box-shadow:0 0 5px var(--accent)}50%{box-shadow:0 0 20px var(--accent)}}
+  .pulse{animation:pulse 2s infinite;}
+  .glow{animation:glow 2s infinite;}
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar{width:3px;}
+  ::-webkit-scrollbar-track{background:var(--bg);}
+  ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:2px;}
+
+  /* MOBILE MOCKUP */
+  .mobile-frame{width:36px;height:60px;border:1px solid var(--cyan);border-radius:4px;background:#050810;margin:0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+  .mobile-screen-line{width:26px;height:2px;background:var(--cyan);border-radius:1px;opacity:0.6;}
+
+  /* NODE MAP */
+  .node-dot{width:6px;height:6px;border-radius:50%;position:absolute;}
+
+  /* ACTIVITY FEED */
+  .feed-item{font-size:9px;font-family:var(--mono);color:var(--text2);margin-bottom:3px;padding-left:8px;border-left:1px solid var(--border);}
+  .feed-item span{color:var(--green);}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div>
+    <div class="logo">SWARM<span>-X</span></div>
+    <div class="logo-sub">GLOBAL COMMAND CENTER</div>
+  </div>
+  <div class="top-stats">
+    <div class="top-stat">
+      <div class="top-stat-val" style="color:var(--accent)">$24.8M</div>
+      <div class="top-stat-label">REVENUE PROCESSED</div>
+    </div>
+    <div class="top-stat">
+      <div class="top-stat-val" style="color:var(--cyan)">128</div>
+      <div class="top-stat-label">ACTIVE TASKS</div>
+    </div>
+    <div class="top-stat">
+      <div class="top-stat-val" style="color:var(--gold)">2,880</div>
+      <div class="top-stat-label">WORKFLOWS RAN</div>
+    </div>
+    <div class="top-stat">
+      <div class="top-stat-val" style="color:var(--green)">573</div>
+      <div class="top-stat-label">AGENTS DEPLOYED</div>
+    </div>
+    <div class="top-stat">
+      <div class="top-stat-val" style="color:var(--green)">94.1%</div>
+      <div class="top-stat-label">SUCCESS RATE</div>
+    </div>
+  </div>
+  <div class="top-right">
+    <div class="status-pill" style="color:var(--green);border-color:var(--green);background:rgba(0,255,136,0.05)">● ONLINE</div>
+    <div class="status-pill" style="color:var(--accent);border-color:var(--accent);background:rgba(255,106,0,0.05)">STRATEGY MODE</div>
+    <div class="status-pill" style="color:var(--text2);border-color:var(--border)">v2.0.1</div>
+  </div>
+</div>
+
+<!-- MAIN 3-COLUMN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">// NAVIGATION</div>
+    <div class="sidebar-item active"><div class="dot" style="background:var(--accent)"></div>COMMAND CENTER</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--cyan)"></div>AGENTS</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--gold)"></div>AUTOMATIONS</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--green)"></div>ANALYTICS</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--text2)"></div>MARKETPLACE</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--text2)"></div>MEMORY CORE</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--text2)"></div>LOGISTICS</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--text2)"></div>FINANCE ENGINE</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--text2)"></div>SECURITY</div>
+    <div class="sidebar-item"><div class="dot" style="background:var(--red)"></div>IKABOO MODE</div>
+    <div class="sidebar-section">// QUEEN AGENT</div>
+    <div class="queen-section">
+      <div class="queen-card">
+        <div class="queen-avatar">👑</div>
+        <div>
+          <div class="queen-name">IKABOO</div>
+          <div class="queen-title">QUEEN AGENT · ACTIVE</div>
+          <div class="queen-stats">
+            <div class="qstat"><div class="qstat-val">98%</div><div class="qstat-label">EFFICIENCY</div></div>
+            <div class="qstat"><div class="qstat-val">47</div><div class="qstat-label">TASKS</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-section">// LIVE TERMINAL</div>
+    <div class="terminal">
+      <div class="terminal-line">&gt; boot_sequence.exe</div>
+      <div class="terminal-line dim">[OK] agents loaded</div>
+      <div class="terminal-line">&gt; task_queue: 128</div>
+      <div class="terminal-line warn">[!] high load: 87%</div>
+      <div class="terminal-line">&gt; auto_scale ON</div>
+      <div class="terminal-line dim">[OK] memory synced</div>
+      <div class="terminal-line">&gt; _</div>
+    </div>
+  </div>
+
+  <!-- CENTER: GLOBAL MAP -->
+  <div class="center">
+    <div class="map-title">1. GLOBAL COMMAND MAP · REAL-TIME NODE ACTIVITY</div>
+    <div class="map-container">
+      <svg class="world-svg" viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="mapGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#ff6a00" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#060810" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Background glow -->
+        <ellipse cx="400" cy="225" rx="380" ry="210" fill="url(#mapGlow)"/>
+
+        <!-- World map simplified paths -->
+        <!-- North America -->
+        <path d="M80,80 L160,70 L200,100 L220,140 L200,180 L160,200 L120,190 L80,160 L60,120 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Central America -->
+        <path d="M160,200 L180,210 L175,240 L155,245 L148,225 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- South America -->
+        <path d="M180,250 L230,240 L260,270 L270,330 L250,380 L210,390 L180,360 L160,310 L165,270 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Europe -->
+        <path d="M340,60 L390,50 L420,70 L430,100 L400,120 L360,115 L340,90 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Africa -->
+        <path d="M350,140 L420,130 L450,160 L460,230 L440,300 L400,330 L360,310 L340,260 L330,200 L340,160 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Russia/Asia -->
+        <path d="M430,40 L570,30 L640,60 L660,90 L620,110 L560,100 L500,110 L460,100 L430,70 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Middle East -->
+        <path d="M440,120 L490,115 L510,140 L500,170 L460,175 L435,155 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- India -->
+        <path d="M510,140 L560,135 L570,170 L550,210 L520,220 L500,195 L505,165 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Southeast Asia -->
+        <path d="M580,140 L640,135 L660,160 L640,185 L605,180 L580,165 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- China -->
+        <path d="M560,90 L640,85 L670,110 L660,140 L620,150 L570,140 L550,115 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Australia -->
+        <path d="M610,270 L680,260 L710,290 L700,340 L660,360 L620,340 L600,310 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- Japan -->
+        <path d="M680,100 L700,95 L710,110 L700,125 L682,118 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+        <!-- UK/Ireland -->
+        <path d="M328,65 L338,60 L342,75 L332,80 Z" fill="#0f1a0a" stroke="#1a4020" stroke-width="0.5" opacity="0.8"/>
+
+        <!-- CONNECTION LINES between nodes -->
+        <!-- NYC to London -->
+        <line x1="185" y1="130" x2="345" y2="78" stroke="#ff6a00" stroke-width="0.5" opacity="0.4" stroke-dasharray="4,4"/>
+        <!-- NYC to São Paulo -->
+        <line x1="185" y1="130" x2="215" y2="310" stroke="#ff6a00" stroke-width="0.5" opacity="0.3" stroke-dasharray="4,4"/>
+        <!-- London to Dubai -->
+        <line x1="345" y1="78" x2="470" y2="148" stroke="#00d4ff" stroke-width="0.5" opacity="0.4" stroke-dasharray="4,4"/>
+        <!-- London to Singapore -->
+        <line x1="345" y1="78" x2="615" y2="168" stroke="#00d4ff" stroke-width="0.5" opacity="0.3" stroke-dasharray="4,4"/>
+        <!-- Singapore to Tokyo -->
+        <line x1="615" y1="168" x2="692" y2="108" stroke="#00ff88" stroke-width="0.5" opacity="0.4" stroke-dasharray="4,4"/>
+        <!-- Singapore to Sydney -->
+        <line x1="615" y1="168" x2="655" y2="295" stroke="#00ff88" stroke-width="0.5" opacity="0.3" stroke-dasharray="4,4"/>
+        <!-- Dubai to Mumbai -->
+        <line x1="470" y1="148" x2="530" y2="175" stroke="#ffd700" stroke-width="0.5" opacity="0.4" stroke-dasharray="4,4"/>
+        <!-- LA to Tokyo -->
+        <line x1="80" y1="145" x2="692" y2="108" stroke="#ff6a00" stroke-width="0.4" opacity="0.2" stroke-dasharray="4,4"/>
+
+        <!-- NODE DOTS with glow -->
+        <!-- New York -->
+        <circle cx="185" cy="130" r="5" fill="#ff6a00" opacity="0.9" filter="url(#glow)"/>
+        <circle cx="185" cy="130" r="10" fill="none" stroke="#ff6a00" stroke-width="0.5" opacity="0.4"/>
+        <text x="190" y="120" fill="#ff6a00" font-size="8" font-family="Share Tech Mono">NEW YORK</text>
+
+        <!-- Los Angeles -->
+        <circle cx="80" cy="145" r="4" fill="#ff6a00" opacity="0.7" filter="url(#glow)"/>
+        <text x="50" y="140" fill="#ff8c00" font-size="7" font-family="Share Tech Mono">LA</text>
+
+        <!-- London -->
+        <circle cx="345" cy="78" r="5" fill="#00d4ff" opacity="0.9" filter="url(#glow)"/>
+        <circle cx="345" cy="78" r="10" fill="none" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
+        <text x="350" y="68" fill="#00d4ff" font-size="8" font-family="Share Tech Mono">LONDON</text>
+
+        <!-- São Paulo -->
+        <circle cx="215" cy="310" r="4" fill="#ff6a00" opacity="0.7" filter="url(#glow)"/>
+        <text x="220" y="308" fill="#ff8c00" font-size="7" font-family="Share Tech Mono">SÃO PAULO</text>
+
+        <!-- Dubai -->
+        <circle cx="470" cy="148" r="4" fill="#ffd700" opacity="0.8" filter="url(#glow)"/>
+        <text x="475" y="145" fill="#ffd700" font-size="7" font-family="Share Tech Mono">DUBAI</text>
+
+        <!-- Mumbai -->
+        <circle cx="530" cy="175" r="4" fill="#ffd700" opacity="0.7" filter="url(#glow)"/>
+        <text x="535" y="172" fill="#ffd700" font-size="7" font-family="Share Tech Mono">MUMBAI</text>
+
+        <!-- Singapore -->
+        <circle cx="615" cy="168" r="5" fill="#00ff88" opacity="0.9" filter="url(#glow)"/>
+        <circle cx="615" cy="168" r="10" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.4"/>
+        <text x="620" y="158" fill="#00ff88" font-size="8" font-family="Share Tech Mono">SINGAPORE</text>
+
+        <!-- Tokyo -->
+        <circle cx="692" cy="108" r="5" fill="#00ff88" opacity="0.9" filter="url(#glow)"/>
+        <text x="697" y="105" fill="#00ff88" font-size="8" font-family="Share Tech Mono">TOKYO</text>
+
+        <!-- Sydney -->
+        <circle cx="655" cy="295" r="4" fill="#00d4ff" opacity="0.7" filter="url(#glow)"/>
+        <text x="660" y="292" fill="#00d4ff" font-size="7" font-family="Share Tech Mono">SYDNEY</text>
+
+        <!-- Lagos -->
+        <circle cx="365" cy="220" r="3" fill="#ff6a00" opacity="0.6"/>
+        <text x="370" y="218" fill="#ff8c00" font-size="7" font-family="Share Tech Mono">LAGOS</text>
+
+        <!-- OVERLAY: SWARM AGENT GRID preview -->
+        <rect x="490" y="220" width="180" height="120" rx="3" fill="#0a0e18" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="500" y="235" fill="#ff6a00" font-size="7" font-family="Share Tech Mono" letter-spacing="2">3. SWARM AGENT GRID</text>
+        <!-- Mini agent grid -->
+        <rect x="500" y="242" width="75" height="16" rx="2" fill="#0e1422" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="505" y="253" fill="#00d4ff" font-size="7" font-family="Share Tech Mono">Research Agent</text>
+        <rect x="582" y="242" width="75" height="16" rx="2" fill="#0e1422" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="587" y="253" fill="#00ff88" font-size="7" font-family="Share Tech Mono">Builder Agent</text>
+        <rect x="500" y="264" width="75" height="16" rx="2" fill="#0e1422" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="505" y="275" fill="#ffd700" font-size="7" font-family="Share Tech Mono">Analyst Agent</text>
+        <rect x="582" y="264" width="75" height="16" rx="2" fill="#0e1422" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="587" y="275" fill="#da70d6" font-size="7" font-family="Share Tech Mono">Memory Core</text>
+        <rect x="500" y="286" width="75" height="16" rx="2" fill="#0e1422" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="505" y="297" fill="#ff6347" font-size="7" font-family="Share Tech Mono">Automation Eng</text>
+        <rect x="582" y="286" width="75" height="16" rx="2" fill="#0e1422" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="587" y="297" fill="#7b68ee" font-size="7" font-family="Share Tech Mono">Visionary</text>
+
+        <!-- Mini chart bottom right -->
+        <rect x="490" y="348" width="180" height="60" rx="3" fill="#0a0e18" stroke="#1a2040" stroke-width="0.5"/>
+        <text x="500" y="360" fill="#ff6a00" font-size="7" font-family="Share Tech Mono" letter-spacing="1">CONFLICT GRAPH</text>
+        <polyline points="500,395 520,385 540,390 560,375 580,380 600,365 620,370 640,358 660,355" stroke="#ff6a00" stroke-width="1" fill="none" opacity="0.8"/>
+        <polyline points="500,395 520,392 540,388 560,382 580,378 600,372 620,368 640,362 660,355 660,400 500,400" fill="#ff6a00" opacity="0.1"/>
+
+        <!-- Queen Agent Panel reference -->
+        <rect x="0" y="260" width="170" height="110" rx="3" fill="#0a0e18" stroke="#ff6a0044" stroke-width="0.5"/>
+        <text x="10" y="275" fill="#ff6a00" font-size="7" font-family="Share Tech Mono" letter-spacing="2">2. QUEEN AGENT PANEL</text>
+        <circle cx="30" cy="310" r="20" fill="radial-gradient(#ff6a00,#330000)" stroke="#ff6a00" stroke-width="1" opacity="0.8"/>
+        <text x="27" y="314" fill="#ff6a00" font-size="16" text-anchor="middle">👑</text>
+        <text x="60" y="298" fill="#ff6a00" font-size="9" font-family="Share Tech Mono" font-weight="bold">IKABOO</text>
+        <text x="60" y="310" fill="#886644" font-size="7" font-family="Share Tech Mono">QUEEN AGENT</text>
+        <rect x="60" y="316" width="40" height="8" rx="1" fill="#ff6a0022" stroke="#ff6a0044" stroke-width="0.5"/>
+        <text x="65" y="323" fill="#ff6a00" font-size="6" font-family="Share Tech Mono">98% EFF</text>
+        <text x="10" y="350" fill="#446644" font-size="7" font-family="Share Tech Mono">COMMANDS ISSUED: 3,847</text>
+        <text x="10" y="362" fill="#446644" font-size="7" font-family="Share Tech Mono">TASKS COMPLETE: 2,991</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- RIGHT: SWARM AGENTS -->
+  <div class="agent-panel">
+    <div class="panel-header">
+      <span>SWARM AGENTS</span>
+      <span style="color:var(--green)">● 7 ONLINE</span>
+    </div>
+
+    <!-- Agent rows -->
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:var(--gold)">🎖 COMMANDER</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">overseer · planner</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:92%;background:var(--gold)"></div></div>
+      </div>
+      <div class="agent-pct" style="color:var(--gold)">92%</div>
+    </div>
+
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:var(--cyan)">🔬 RESEARCHER</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">intel · analysis</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:87%;background:var(--cyan)"></div></div>
+      </div>
+      <div class="agent-pct" style="color:var(--cyan)">87%</div>
+    </div>
+
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:#FF8C00">🛠 BUILDER</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">code · deploy</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:79%;background:#FF8C00"></div></div>
+      </div>
+      <div class="agent-pct" style="color:#FF8C00">79%</div>
+    </div>
+
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:var(--green)">📊 ANALYST</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">patterns · KPIs</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:95%;background:var(--green)"></div></div>
+      </div>
+      <div class="agent-pct" style="color:var(--green)">95%</div>
+    </div>
+
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:#DA70D6">💾 MEMORY CORE</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">context · history</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:100%;background:#DA70D6"></div></div>
+      </div>
+      <div class="agent-pct" style="color:#DA70D6">100%</div>
+    </div>
+
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:#FF6347">⚙ AUTOMATION</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">scripts · chains</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:83%;background:#FF6347"></div></div>
+      </div>
+      <div class="agent-pct" style="color:#FF6347">83%</div>
+    </div>
+
+    <div class="agent-row">
+      <div>
+        <div class="agent-name" style="color:#7B68EE">🔮 VISIONARY</div>
+        <div style="font-size:8px;color:var(--text2);font-family:var(--mono)">strategy · scale</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;flex:1;margin:0 8px">
+        <div class="agent-bar-bg"><div class="agent-bar" style="width:76%;background:#7B68EE"></div></div>
+      </div>
+      <div class="agent-pct" style="color:#7B68EE">76%</div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div style="padding:8px 12px;border-top:1px solid var(--border)">
+      <div style="font-size:8px;color:var(--text2);letter-spacing:2px;font-family:var(--mono);margin-bottom:6px">// LIVE ACTIVITY</div>
+      <div class="feed-item"><span>[01:24]</span> RESEARCHER deployed</div>
+      <div class="feed-item"><span>[01:22]</span> BUILDER task complete</div>
+      <div class="feed-item"><span>[01:19]</span> MEMORY synced</div>
+      <div class="feed-item"><span>[01:15]</span> ANALYST report ready</div>
+      <div class="feed-item"><span>[01:10]</span> AUTO chain triggered</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM 9-PANEL GRID -->
+<div class="bottom-grid">
+
+  <!-- 4. REVENUE + POWER METRICS -->
+  <div class="bottom-panel">
+    <div class="bp-title">4. REVENUE + POWER METRICS</div>
+    <div class="bp-val" style="color:var(--accent)">$24,800,000</div>
+    <div class="bp-sub">+34.2% this quarter</div>
+    <div class="mini-bars">
+      <div class="mini-bar" style="height:20%;background:var(--accent);opacity:0.4"></div>
+      <div class="mini-bar" style="height:35%;background:var(--accent);opacity:0.5"></div>
+      <div class="mini-bar" style="height:28%;background:var(--accent);opacity:0.5"></div>
+      <div class="mini-bar" style="height:55%;background:var(--accent);opacity:0.6"></div>
+      <div class="mini-bar" style="height:45%;background:var(--accent);opacity:0.6"></div>
+      <div class="mini-bar" style="height:70%;background:var(--accent);opacity:0.7"></div>
+      <div class="mini-bar" style="height:60%;background:var(--accent);opacity:0.7"></div>
+      <div class="mini-bar" style="height:90%;background:var(--accent)"></div>
+    </div>
+  </div>
+
+  <!-- 5. IKABOO MODE -->
+  <div class="bottom-panel" style="background:#080003;">
+    <div class="bp-title" style="color:var(--red)">5. IKABOO MODE</div>
+    <div class="ikaboo">
+      <div class="ikaboo-text pulse">⚡ IKABOO MODE</div>
+      <div class="ikaboo-text" style="font-size:7px;margin-top:4px">ACTIVATED</div>
+      <div style="font-size:8px;color:#662222;margin-top:6px;font-family:var(--mono)">DOMINATE MODE<br>ENTER THE DARK</div>
+    </div>
+  </div>
+
+  <!-- 6. AUTOMATION MARKETPLACE -->
+  <div class="bottom-panel">
+    <div class="bp-title">6. AUTOMATION MARKETPLACE</div>
+    <div class="auto-item">
+      <span class="auto-name">AI Research Bot</span>
+      <span class="auto-badge" style="background:rgba(0,212,255,0.1);color:var(--cyan);border:1px solid var(--cyan)33">LIVE</span>
+    </div>
+    <div class="auto-item">
+      <span class="auto-name">Email Automator</span>
+      <span class="auto-badge" style="background:rgba(0,255,136,0.1);color:var(--green);border:1px solid var(--green)33">$29</span>
+    </div>
+    <div class="auto-item">
+      <span class="auto-name">Titan Selector Pro</span>
+      <span class="auto-badge" style="background:rgba(255,106,0,0.1);color:var(--accent);border:1px solid var(--accent)33">$49</span>
+    </div>
+    <div class="auto-item">
+      <span class="auto-name">Data Extractor</span>
+      <span class="auto-badge" style="background:rgba(123,104,238,0.1);color:#7B68EE;border:1px solid #7B68EE33">$19</span>
+    </div>
+  </div>
+
+  <!-- 7. VOICE COMMAND SYSTEM -->
+  <div class="bottom-panel">
+    <div class="bp-title">7. VOICE COMMAND SYSTEM</div>
+    <div style="text-align:center;margin-top:4px">
+      <div style="font-size:18px;margin-bottom:4px">🎙</div>
+      <div style="font-size:8px;color:var(--cyan);font-family:var(--mono)">LISTENING...</div>
+    </div>
+    <div class="voice-waves" style="justify-content:center">
+      <div class="wave" style="animation-delay:0s"></div>
+      <div class="wave" style="animation-delay:0.1s"></div>
+      <div class="wave" style="animation-delay:0.2s"></div>
+      <div class="wave" style="animation-delay:0.3s"></div>
+      <div class="wave" style="animation-delay:0.4s"></div>
+      <div class="wave" style="animation-delay:0.3s"></div>
+      <div class="wave" style="animation-delay:0.2s"></div>
+      <div class="wave" style="animation-delay:0.1s"></div>
+    </div>
+  </div>
+
+  <!-- 8. MOBILE VERSION -->
+  <div class="bottom-panel">
+    <div class="bp-title">8. MOBILE VERSION</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+      <div class="mobile-frame">
+        <div class="mobile-screen-line"></div>
+        <div class="mobile-screen-line" style="width:18px"></div>
+        <div class="mobile-screen-line"></div>
+        <div class="mobile-screen-line" style="width:20px;opacity:0.3"></div>
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--cyan);font-family:var(--mono)">iOS + ANDROID</div>
+        <div style="font-size:8px;color:var(--text2);margin-top:2px">128 downloads</div>
+        <div style="font-size:8px;color:var(--green);margin-top:2px">● LIVE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. GLOBAL SCALING ARCHITECTURE -->
+  <div class="bottom-panel">
+    <div class="bp-title">9. GLOBAL SCALING ARCHITECTURE</div>
+    <div style="font-size:8px;color:var(--text2);font-family:var(--mono);margin-bottom:4px">Scalable from you to the world</div>
+    <svg width="100%" height="40" viewBox="0 0 140 40">
+      <defs>
+        <linearGradient id="scaleGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ff6a00" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#ff6a00" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <polyline class="scale-fill" points="0,38 20,34 40,28 60,20 80,14 100,10 120,6 140,3 140,40 0,40"/>
+      <polyline class="scale-line" points="0,38 20,34 40,28 60,20 80,14 100,10 120,6 140,3"/>
+      <text x="130" y="10" fill="#ff6a00" font-size="7" font-family="Share Tech Mono">128</text>
+    </svg>
+  </div>
+
+  <!-- 10. TECHNOLOGY STACK preview -->
+  <div class="bottom-panel" style="grid-column:span 3">
+    <div class="bp-title">10. TECHNOLOGY STACK · FRONTIERS · INTEGRATIONS · INFRASTRUCTURE</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+      <span class="tech-icon" style="color:var(--accent)">Claude AI</span>
+      <span class="tech-icon" style="color:var(--cyan)">Node.js</span>
+      <span class="tech-icon" style="color:var(--green)">Express</span>
+      <span class="tech-icon" style="color:#61DAFB">React</span>
+      <span class="tech-icon" style="color:var(--gold)">Render</span>
+      <span class="tech-icon" style="color:#F05032">GitHub</span>
+      <span class="tech-icon" style="color:#635BFF">Stripe</span>
+      <span class="tech-icon" style="color:var(--text2)">Supabase</span>
+      <span class="tech-icon" style="color:var(--text2)">Tavily</span>
+      <span class="tech-icon" style="color:var(--text2)">Clerk</span>
+      <span class="tech-icon" style="color:var(--text2)">Redis</span>
+      <span class="tech-icon" style="color:var(--text2)">Docker</span>
+      <span class="tech-icon" style="color:var(--text2)">Postgres</span>
+      <span class="tech-icon" style="color:var(--text2)">OpenAI</span>
+    </div>
+    <div style="margin-top:6px;font-family:var(--title);font-size:8px;color:var(--accent);letter-spacing:3px;opacity:0.6">BUILT FOR GLOBAL DOMINANCE · AUTOMATE. ORCHESTRATE. DOMINATE. · ⬡ SWARM-X</div>
+  </div>
+
+</div>
+
+</body>
 </html>
