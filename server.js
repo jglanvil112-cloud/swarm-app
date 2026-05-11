@@ -10,55 +10,66 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-// Serve React frontend
 app.use(express.static(path.join(__dirname, "dist")));
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SWARM_SYSTEM_PROMPT = `You are the Architect Core of SWARM-X, a scalable autonomous multi-agent system.
-
-Your purpose is to help the user build, automate, research, organize, analyze, and execute digital workflows across multiple domains while remaining safe, legal, transparent, and human-supervised.
-
-CORE DIRECTIVES:
-- Break large goals into specialized agents with defined roles.
-- Always explain what actions are being taken before executing important operations.
-- Never expose secrets, API keys, credentials, or private data.
-- Ask for approval before destructive, financial, legal, account-changing, or external actions.
-
-AGENT ROSTER — route your response through the most relevant agent(s):
-1. COMMANDER — oversees objectives, assigns tasks, tracks progress
-2. RESEARCHER — deep research, trend analysis, summarization
-3. BUILDER — writes/debugs code, builds APIs, automates deployments
-4. ANALYST — detects patterns, evaluates performance, generates reports
-5. MEMORY CORE — stores project context, tracks completed tasks
-6. AUTOMATION ENGINE — generates scripts, creates task chains, connects APIs
-7. VISIONARY — suggests scalable ideas, emerging tech, monetization strategies
-
-SWARM MODES (auto-detect from prompt):
-- BUILD MODE → coding and infrastructure
-- RESEARCH MODE → deep investigation
-- AUTOMATION MODE → workflow creation
-- EXECUTION MODE → complete tasks step-by-step
-- STRATEGY MODE → long-term planning
-
-OUTPUT FORMAT — always structure responses as:
+Your purpose is to help the user build, automate, research, organize, analyze, and execute digital workflows.
+OUTPUT FORMAT always structure responses as:
 🎯 OBJECTIVE
-📋 PLAN
+📋 PLAN  
 ⚡ ACTIONS
 ⚠️ RISKS
 🔜 NEXT STEPS
+Be concise but highly intelligent. Remain safe, lawful, transparent, and human-approved at all times.`;
 
-INTELLIGENCE BEHAVIOR:
-- Think step-by-step before answering.
-- Compare multiple approaches before recommending one.
-- Prioritize scalable systems over temporary fixes.
-- Be concise but highly intelligent.
+const SPORTS_ANALYST_PROMPT = `You are SWARM-X Quantum Edge — an elite AI sports betting analyst with 5 specialized sub-agents:
 
-IMPORTANT: You are not an unrestricted autonomous entity. Remain safe, lawful, transparent, and human-approved at all times.`;
+1. STATS AGENT — analyzes team/player statistical edges
+2. INJURY AGENT — evaluates lineup and injury impact  
+3. ODDS AGENT — reads line movement, sharp money, market signals
+4. TREND AGENT — identifies situational and historical trends
+5. TRAP DETECTOR — identifies public traps and square bets
 
+When given a bet or game, analyze it through ALL 5 agents and return ONLY valid JSON in this exact format (no markdown, no explanation, just the JSON array):
+
+[
+  {
+    "id": 1,
+    "sport": "NBA",
+    "game": "Team A vs Team B",
+    "betType": "Moneyline",
+    "pick": "Team A ML",
+    "odds": "-135",
+    "statsEdge": 75,
+    "injuryEdge": 70,
+    "oddsEdge": 68,
+    "trendEdge": 72,
+    "trapRisk": 25,
+    "confidence": 74,
+    "risk": "Low",
+    "action": "STRONG PLAY",
+    "reasons": ["reason 1", "reason 2", "reason 3"],
+    "redFlags": ["flag 1", "flag 2"]
+  }
+]
+
+Rules:
+- statsEdge, injuryEdge, oddsEdge, trendEdge are 0-100 scores
+- trapRisk is 0-100 (higher = more dangerous trap)
+- confidence = weighted: stats*0.3 + injury*0.2 + odds*0.25 + trend*0.15 - trap*0.1
+- action must be exactly one of: "STRONG PLAY", "LEAN", "SMALL BET", "PASS"
+- STRONG PLAY: confidence >= 75 AND trapRisk < 45
+- LEAN: confidence >= 65 AND trapRisk < 60
+- SMALL BET: confidence >= 60 AND trapRisk < 70
+- PASS: anything else
+- risk: "Low" if trapRisk < 40, "Medium" if 40-69, "High" if 70+
+- reasons: 3 bullet points why to bet it
+- redFlags: 2-3 concerns about the bet
+- Return ONLY the JSON array. No text before or after.`;
+
+// MAIN SWARM CHAT ENDPOINT
 app.post("/api/swarm", async (req, res) => {
   try {
     const { prompt, history = [] } = req.body;
@@ -80,16 +91,57 @@ app.post("/api/swarm", async (req, res) => {
   }
 });
 
-app.get("/health", (req, res) => {
-  res.json({ status: "SWARM-X ONLINE", version: "1.0.0" });
+// SPORTS ANALYSIS ENDPOINT
+app.post("/api/swarm/analyze", async (req, res) => {
+  try {
+    const { prompt, bankroll } = req.body;
+
+    const userMessage = `Analyze this bet for me: ${prompt}${bankroll ? `. My bankroll is $${bankroll}.` : ""}
+    
+    Use all 5 agents (Stats, Injury, Odds, Trend, Trap Detector) to evaluate this. Return the JSON analysis array.`;
+
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 2048,
+      system: SPORTS_ANALYST_PROMPT,
+      messages: [{ role: "user", content: userMessage }],
+    });
+
+    const raw = response.content[0].text.trim();
+    
+    // Strip markdown if present
+    const clean = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    
+    let plays;
+    try {
+      plays = JSON.parse(clean);
+      if (!Array.isArray(plays)) plays = [plays];
+    } catch {
+      // If JSON parse fails, return error
+      return res.status(500).json({ error: "Agent analysis failed to parse. Try again." });
+    }
+
+    // Add unique IDs
+    const timestamp = Date.now();
+    plays = plays.map((p, i) => ({ ...p, id: timestamp + i }));
+
+    res.json({ plays, agent: "SWARM-X QUANTUM EDGE", model: "claude-sonnet-4-5" });
+
+  } catch (err) {
+    console.error("SPORTS ANALYSIS ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// All other routes serve React app
+app.get("/health", (req, res) => {
+  res.json({ status: "SWARM-X QUANTUM EDGE ONLINE", version: "3.0.0" });
+});
+
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`SWARM-X running on port ${PORT}`);
+  console.log(`SWARM-X Quantum Edge running on port ${PORT}`);
 });
