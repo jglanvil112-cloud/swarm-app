@@ -1,12 +1,741 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SWARM-X Quantum Edge</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HOUSE OF JREYM · AI Commerce Swarm</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#030508;
+  --bg2:#060a10;
+  --bg3:#0a0f1a;
+  --gold:#d4af37;
+  --gold2:#f5d060;
+  --cyan:#00d4ff;
+  --green:#00ff88;
+  --red:#ff3a3a;
+  --purple:#9d4edd;
+  --orange:#ff8c00;
+  --border:#1a2040;
+}
+body{background:var(--bg);color:#c0d0e0;font-family:'Rajdhani',sans-serif;overflow:hidden;height:100vh;width:100vw;}
+canvas{position:fixed;top:0;left:0;z-index:0;}
+#ui{position:fixed;inset:0;z-index:10;display:grid;grid-template-rows:52px 1fr 90px;grid-template-columns:200px 1fr 240px;gap:0;}
+
+/* HEADER */
+#header{grid-column:1/-1;background:linear-gradient(180deg,rgba(3,5,8,0.98),rgba(3,5,8,0.85));border-bottom:1px solid var(--gold)22;display:flex;align-items:center;padding:0 16px;gap:20px;backdrop-filter:blur(8px);}
+.logo-wrap{display:flex;align-items:center;gap:10px;}
+.logo-crown{font-size:22px;filter:drop-shadow(0 0 8px var(--gold));}
+.logo-text{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--gold);letter-spacing:3px;text-shadow:0 0 20px var(--gold)66;}
+.logo-sub{font-size:7px;color:#4a3a10;letter-spacing:4px;font-family:'Share Tech Mono',monospace;}
+.header-stats{display:flex;gap:1px;margin-left:16px;}
+.hstat{padding:0 14px;text-align:center;border-right:1px solid #1a2040;}
+.hstat:last-child{border:none;}
+.hstat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;}
+.hstat-label{font-size:7px;color:#303050;letter-spacing:2px;margin-top:1px;}
+.header-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.pill{padding:3px 10px;border-radius:2px;font-size:8px;font-family:'Share Tech Mono',monospace;letter-spacing:2px;border:1px solid;}
+.status-live{color:var(--green);border-color:var(--green)44;background:rgba(0,255,136,0.06);}
+.mode-pill{color:var(--gold);border-color:var(--gold)44;background:rgba(212,175,55,0.06);}
+
+/* LEFT SIDEBAR */
+#left{background:rgba(3,5,8,0.9);border-right:1px solid #1a200833;padding:10px 0;overflow-y:auto;backdrop-filter:blur(4px);}
+.side-section{padding:6px 12px;font-size:7px;color:#2a3050;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-top:8px;}
+.agent-item{padding:7px 10px;display:flex;align-items:center;gap:7px;cursor:pointer;border-left:2px solid transparent;transition:all 0.2s;}
+.agent-item:hover,.agent-item.sel{background:rgba(212,175,55,0.04);border-left-color:var(--gold);}
+.agent-icon{font-size:14px;width:20px;text-align:center;flex-shrink:0;}
+.agent-meta{flex:1;min-width:0;}
+.agent-nm{font-size:9px;font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.agent-st{font-size:7px;color:#303050;font-family:'Share Tech Mono',monospace;margin-top:1px;}
+.agent-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.agent-minibar{height:2px;background:#0a1020;border-radius:1px;margin-top:3px;}
+.agent-minifill{height:100%;border-radius:1px;transition:width 1s;}
+
+/* CENTER */
+#center{background:transparent;position:relative;overflow:hidden;}
+#canvas-wrap{position:absolute;inset:0;}
+.center-overlay{position:absolute;inset:0;pointer-events:none;}
+.corner-tl,.corner-tr,.corner-bl,.corner-br{position:absolute;width:40px;height:40px;border-color:var(--gold);border-style:solid;opacity:0.3;}
+.corner-tl{top:10px;left:10px;border-width:2px 0 0 2px;}
+.corner-tr{top:10px;right:10px;border-width:2px 2px 0 0;}
+.corner-bl{bottom:10px;left:10px;border-width:0 0 2px 2px;}
+.corner-br{bottom:10px;right:10px;border-width:0 2px 2px 0;}
+.center-title{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:8px;color:#2a3050;letter-spacing:4px;font-family:'Share Tech Mono',monospace;white-space:nowrap;}
+
+/* AGENT DETAIL POPUP */
+#detail{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(3,5,8,0.95);border:1px solid var(--gold)33;border-radius:4px;padding:12px 20px;min-width:280px;text-align:center;transition:all 0.3s;backdrop-filter:blur(8px);display:none;}
+#detail.show{display:block;}
+
+/* INPUT */
+#mission-bar{position:absolute;bottom:8px;left:10px;right:10px;display:flex;gap:8px;}
+#mission-bar input{flex:1;background:rgba(6,10,16,0.9);border:1px solid var(--gold)33;border-radius:3px;padding:8px 14px;color:var(--gold);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;caret-color:var(--gold);}
+#mission-bar input::placeholder{color:#2a3050;}
+#mission-bar button{padding:8px 18px;background:rgba(212,175,55,0.1);border:1px solid var(--gold)55;border-radius:3px;color:var(--gold);font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;cursor:pointer;white-space:nowrap;}
+#mission-bar button:hover{background:rgba(212,175,55,0.2);}
+
+/* RIGHT SIDEBAR */
+#right{background:rgba(3,5,8,0.9);border-left:1px solid #1a200833;padding:10px;overflow-y:auto;backdrop-filter:blur(4px);display:flex;flex-direction:column;gap:0;}
+.panel{background:rgba(6,10,16,0.8);border:1px solid #1a2040;border-radius:3px;padding:10px;margin-bottom:8px;}
+.panel-title{font-size:7px;color:#2a3050;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
+.metric-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.metric-label{font-size:9px;color:#404060;}
+.metric-val{font-size:11px;font-weight:700;font-family:'Share Tech Mono',monospace;}
+.revenue-bar-wrap{height:3px;background:#0a1020;border-radius:2px;margin:3px 0;}
+.revenue-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--gold),var(--gold2));box-shadow:0 0 6px var(--gold)66;}
+.log-entry{font-size:8px;font-family:'Share Tech Mono',monospace;padding:3px 0;border-bottom:1px solid #0a1020;line-height:1.5;}
+.log-entry:last-child{border:none;}
+.approval-item{background:rgba(212,175,55,0.04);border:1px solid var(--gold)22;border-radius:2px;padding:6px;margin-bottom:5px;}
+.approval-title{font-size:9px;color:var(--gold);font-weight:600;margin-bottom:3px;}
+.approval-sub{font-size:7px;color:#404060;font-family:'Share Tech Mono',monospace;}
+.approval-btns{display:flex;gap:4px;margin-top:5px;}
+.btn-approve{flex:1;padding:3px;background:rgba(0,255,136,0.1);border:1px solid var(--green)44;border-radius:2px;color:var(--green);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;}
+.btn-reject{flex:1;padding:3px;background:rgba(255,58,58,0.1);border:1px solid var(--red)44;border-radius:2px;color:var(--red);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;}
+.weekly-row{display:flex;gap:2px;align-items:flex-end;height:30px;margin-top:6px;}
+.weekly-bar{flex:1;border-radius:1px 1px 0 0;background:var(--gold);opacity:0.6;min-width:4px;}
+.tag{display:inline-block;padding:2px 6px;border-radius:2px;font-size:7px;font-family:'Share Tech Mono',monospace;margin:2px;border:1px solid;}
+
+/* BOTTOM */
+#bottom{grid-column:1/-1;background:rgba(3,5,8,0.92);border-top:1px solid var(--gold)11;display:grid;grid-template-columns:200px 1fr 240px;backdrop-filter:blur(4px);}
+#bottom-left{padding:8px 12px;border-right:1px solid #1a2040;}
+#bottom-center{padding:8px 14px;display:flex;flex-direction:column;gap:3px;}
+#bottom-right{padding:8px 12px;border-left:1px solid #1a2040;}
+.btm-title{font-size:7px;color:#2a3050;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:5px;}
+.comm-entry{font-size:8px;font-family:'Share Tech Mono',monospace;margin-bottom:3px;line-height:1.4;}
+.trend-tag{display:inline-block;padding:2px 8px;border-radius:2px;font-size:8px;margin-right:4px;margin-bottom:3px;border:1px solid;font-family:'Share Tech Mono',monospace;}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:2px;}
+::-webkit-scrollbar-thumb{background:var(--gold)44;border-radius:1px;}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+@keyframes pulse-out{0%{transform:scale(1);opacity:0.8}100%{transform:scale(2.5);opacity:0}}
+@keyframes float-up{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-30px);opacity:0}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo-wrap">
+    <div class="logo-crown">👑</div>
+    <div>
+      <div class="logo-text">HOUSE OF JREYM</div>
+      <div class="logo-sub">AUTONOMOUS AI COMMERCE SWARM</div>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><div class="hstat-val" id="h-revenue" style="color:var(--gold)">$0</div><div class="hstat-label">REVENUE TODAY</div></div>
+    <div class="hstat"><div class="hstat-val" id="h-listings" style="color:var(--cyan)">0</div><div class="hstat-label">ACTIVE LISTINGS</div></div>
+    <div class="hstat"><div class="hstat-val" id="h-orders" style="color:var(--green)">0</div><div class="hstat-label">ORDERS TODAY</div></div>
+    <div class="hstat"><div class="hstat-val" id="h-conversion" style="color:var(--purple)">0%</div><div class="hstat-label">CONVERSION</div></div>
+    <div class="hstat"><div class="hstat-val" id="h-agents" style="color:var(--gold)">10</div><div class="hstat-label">AGENTS ACTIVE</div></div>
+    <div class="hstat"><div class="hstat-val" id="h-tasks" style="color:var(--orange)">0</div><div class="hstat-label">TASKS RUNNING</div></div>
+  </div>
+  <div class="header-right">
+    <div class="pill status-live">● LIVE 24/7</div>
+    <div class="pill mode-pill">PROFIT MODE</div>
+    <div class="pill" style="color:#404060;border-color:#1a2040" id="h-time">--:--:--</div>
+  </div>
+</div>
+
+<!-- LEFT: AGENT ROSTER -->
+<div id="left">
+  <div class="side-section">// AGENT ROSTER</div>
+  <div id="agent-list"></div>
+  <div class="side-section">// SYSTEM HEALTH</div>
+  <div style="padding:0 12px">
+    <div id="sys-health" style="font-size:8px;color:#303050;font-family:'Share Tech Mono',monospace;line-height:1.9"></div>
+  </div>
+</div>
+
+<!-- CENTER: MAIN CANVAS -->
+<div id="center">
+  <div id="canvas-wrap"></div>
+  <div class="center-overlay">
+    <div class="corner-tl"></div><div class="corner-tr"></div>
+    <div class="corner-bl"></div><div class="corner-br"></div>
+    <div class="center-title">HOUSE OF JREYM · LIVE AGENT COLONY · ETSY COMMERCE ENGINE</div>
+  </div>
+  <div id="detail">
+    <div id="detail-icon" style="font-size:24px;margin-bottom:4px"></div>
+    <div id="detail-name" style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--gold);letter-spacing:2px"></div>
+    <div id="detail-role" style="font-size:9px;color:#404060;font-family:'Share Tech Mono',monospace;margin-top:2px"></div>
+    <div id="detail-task" style="font-size:10px;color:var(--cyan);margin-top:8px;padding:4px 10px;border:1px solid var(--cyan)22;border-radius:2px;background:rgba(0,212,255,0.04)"></div>
+    <div id="detail-stats" style="display:flex;gap:12px;justify-content:center;margin-top:8px;font-size:9px;font-family:'Share Tech Mono',monospace"></div>
+  </div>
+  <div id="mission-bar">
+    <input id="mission-input" placeholder='Give the swarm a mission: "Find trending Halloween niches" or "Create 10 listings for dog lovers"' onkeydown="if(event.key==='Enter')deployMission()"/>
+    <button onclick="deployMission()">👑 DEPLOY SWARM</button>
+  </div>
+</div>
+
+<!-- RIGHT SIDEBAR -->
+<div id="right">
+  <div class="panel">
+    <div class="panel-title">// REVENUE TRACKER</div>
+    <div class="metric-row"><span class="metric-label">Today</span><span class="metric-val" id="rev-today" style="color:var(--gold)">$0.00</span></div>
+    <div class="revenue-bar-wrap"><div class="revenue-bar" id="rev-bar" style="width:0%"></div></div>
+    <div class="metric-row"><span class="metric-label">This Week</span><span class="metric-val" id="rev-week" style="color:var(--gold2)">$0.00</span></div>
+    <div class="metric-row"><span class="metric-label">Best Listing</span><span class="metric-val" id="rev-best" style="color:var(--green)">—</span></div>
+    <div class="metric-row"><span class="metric-label">Profit Margin</span><span class="metric-val" id="rev-margin" style="color:var(--green)">0%</span></div>
+    <div class="weekly-row" id="weekly-chart"></div>
+    <div style="display:flex;justify-content:space-between;font-size:7px;color:#303050;font-family:'Share Tech Mono',monospace;margin-top:2px">
+      <span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">// HUMAN APPROVAL LAYER</div>
+    <div id="approval-list"></div>
+  </div>
+
+  <div class="panel" style="flex:1">
+    <div class="panel-title">// AGENT COMMS LOG</div>
+    <div id="right-log"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">// TOP NICHES</div>
+    <div id="niches"></div>
+  </div>
+</div>
+
+<!-- BOTTOM -->
+<div id="bottom">
+  <div id="bottom-left">
+    <div class="btm-title">// TRENDING NOW</div>
+    <div id="trends"></div>
+  </div>
+  <div id="bottom-center">
+    <div class="btm-title">// INTER-AGENT COMMUNICATION FEED</div>
+    <div id="comm-feed" style="display:flex;flex-direction:column;gap:2px;overflow:hidden;max-height:65px"></div>
+  </div>
+  <div id="bottom-right">
+    <div class="btm-title">// DAILY OPTIMIZATION</div>
+    <div id="opt-status" style="font-size:8px;color:#303050;font-family:'Share Tech Mono',monospace;line-height:1.8"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, centerX, centerY;
+const canvasWrap = document.getElementById('canvas-wrap');
+
+function resize(){
+  const rect = canvasWrap.getBoundingClientRect();
+  W = canvas.width = rect.width || window.innerWidth;
+  H = canvas.height = rect.height || window.innerHeight;
+  centerX = W/2;
+  centerY = H/2;
+}
+window.addEventListener('resize', () => { resize(); initAgentPositions(); });
+
+// ─── AGENT DEFINITIONS ────────────────────────────────────────────────────────
+const AGENTS = [
+  { id:0,  name:'TREND HUNTER',    icon:'🔍', color:'#00d4ff', role:'Market Intelligence',    tasks:['Scanning Etsy trends','Analyzing Pinterest data','Detecting viral niches','Monitoring competitors','Google Trends deep scan'] },
+  { id:1,  name:'PRODUCT FORGE',   icon:'⚒',  color:'#ff8c00', role:'Product Creation',       tasks:['Generating product ideas','Designing new items','Creating variations','Crafting bundles','Niche expansion'] },
+  { id:2,  name:'SEO AGENT',       icon:'📈', color:'#00ff88', role:'Search Optimization',     tasks:['Keyword research','Tag optimization','Title crafting','Algorithm analysis','Ranking improvement'] },
+  { id:3,  name:'DESIGN AGENT',    icon:'🎨', color:'#da70d6', role:'Visual Creation',         tasks:['Midjourney prompting','Canva automation','Mockup generation','Style iteration','Brand consistency'] },
+  { id:4,  name:'LISTING AGENT',   icon:'📝', color:'#ffd700', role:'Listing Management',      tasks:['Publishing listings','A/B testing copy','Price optimization','Photo ordering','Refresh cycle'] },
+  { id:5,  name:'ANALYTICS AGENT', icon:'📊', color:'#ff6a00', role:'Performance Tracking',    tasks:['Revenue analysis','CTR monitoring','Conversion tracking','Funnel analysis','ROI calculation'] },
+  { id:6,  name:'EVOLUTION AGENT', icon:'🧬', color:'#7b68ee', role:'Self-Improvement',        tasks:['Eliminating losers','Scaling winners','Model retraining','Strategy evolution','Memory update'] },
+  { id:7,  name:'CUSTOMER SVC',    icon:'💬', color:'#ff3a3a', role:'Customer Relations',      tasks:['Responding to messages','Review monitoring','Refund processing','FAQ automation','5-star pursuit'] },
+  { id:8,  name:'COMPLIANCE',      icon:'🛡',  color:'#20b2aa', role:'Policy Enforcement',      tasks:['IP checking','Policy scanning','TOS compliance','Copyright clearance','Risk assessment'] },
+  { id:9,  name:'SWARMX PRIME',    icon:'👑', color:'#d4af37', role:'Supreme Orchestrator',    tasks:['Coordinating all agents','Profit maximization','Strategic planning','Resource allocation','Evolution oversight'] },
+];
+
+// ─── AGENT STATE ──────────────────────────────────────────────────────────────
+let agentNodes = [];
+let ants = [];
+let particles = [];
+let dataPackets = [];
+let frame = 0;
+let revenue = 0, listings = 47, orders = 0, tasksDone = 0;
+let selectedAgent = null;
+let weeklyData = [120,185,205,340,280,420,0];
+
+function initAgentPositions(){
+  agentNodes = AGENTS.map((a, i) => {
+    const angle = (i / AGENTS.length) * Math.PI * 2 - Math.PI/2;
+    const r = Math.min(W, H) * 0.32;
+    return {
+      ...a,
+      x: centerX + Math.cos(angle) * r,
+      y: centerY + Math.sin(angle) * r,
+      angle,
+      radius: r,
+      pulsePhase: Math.random() * Math.PI * 2,
+      activity: 0.5 + Math.random() * 0.5,
+      taskIndex: Math.floor(Math.random() * a.tasks.length),
+      taskProgress: Math.random(),
+      busy: true,
+    };
+  });
+  initAnts();
+}
+
+// ─── ANT SYSTEM ───────────────────────────────────────────────────────────────
+function spawnAnt(fromIdx, toIdx){
+  const from = agentNodes[fromIdx];
+  const to = agentNodes[toIdx];
+  return {
+    id: Math.random(),
+    from: fromIdx, to: toIdx,
+    x: from.x, y: from.y,
+    tx: to.x, ty: to.y,
+    progress: 0,
+    speed: 0.004 + Math.random() * 0.006,
+    size: 2.5 + Math.random() * 2,
+    color: from.color,
+    trail: [],
+    payload: Math.random() > 0.4,
+    done: false,
+  };
+}
+
+function initAnts(){
+  ants = [];
+  for(let i=0;i<25;i++){
+    const from = Math.floor(Math.random()*AGENTS.length);
+    let to = Math.floor(Math.random()*AGENTS.length);
+    while(to===from) to = Math.floor(Math.random()*AGENTS.length);
+    const ant = spawnAnt(from, to);
+    ant.progress = Math.random();
+    ants.push(ant);
+  }
+}
+
+function updateAnts(){
+  ants.forEach(ant => {
+    ant.progress += ant.speed;
+    const t = ant.progress;
+    // Bezier curve path through center
+    const cx = centerX + (Math.random()-0.5)*40;
+    const cy = centerY + (Math.random()-0.5)*40;
+    ant.x = (1-t)*(1-t)*agentNodes[ant.from].x + 2*(1-t)*t*cx + t*t*agentNodes[ant.to].x;
+    ant.y = (1-t)*(1-t)*agentNodes[ant.from].y + 2*(1-t)*t*cy + t*t*agentNodes[ant.to].y;
+    ant.trail.push({x:ant.x,y:ant.y});
+    if(ant.trail.length>15) ant.trail.shift();
+    if(ant.progress>=1){
+      ant.done = true;
+      // Spawn new ant
+      const from = ant.to;
+      let to = Math.floor(Math.random()*AGENTS.length);
+      while(to===from) to = Math.floor(Math.random()*AGENTS.length);
+      ants.push(spawnAnt(from, to));
+      tasksDone++;
+    }
+  });
+  ants = ants.filter(a => !a.done);
+  // Keep population
+  while(ants.length < 20){
+    const from = Math.floor(Math.random()*AGENTS.length);
+    let to = Math.floor(Math.random()*AGENTS.length);
+    while(to===from) to = Math.floor(Math.random()*AGENTS.length);
+    ants.push(spawnAnt(from, to));
+  }
+}
+
+// ─── PARTICLES ────────────────────────────────────────────────────────────────
+function spawnParticle(x, y, color){
+  for(let i=0;i<4;i++){
+    const angle = Math.random()*Math.PI*2;
+    const speed = 0.5+Math.random()*2;
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color,r:1.5+Math.random()*2});
+  }
+}
+
+// ─── DRAW ─────────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#030508';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(212,175,55,0.025)';
+  ctx.lineWidth = 0.5;
+  for(let x=0;x<W;x+=35){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+  for(let y=0;y<H;y+=35){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+
+  // Center hub glow
+  const hubGrad = ctx.createRadialGradient(centerX,centerY,0,centerX,centerY,80);
+  hubGrad.addColorStop(0,'rgba(212,175,55,0.12)');
+  hubGrad.addColorStop(0.5,'rgba(212,175,55,0.04)');
+  hubGrad.addColorStop(1,'transparent');
+  ctx.fillStyle = hubGrad;
+  ctx.beginPath();ctx.arc(centerX,centerY,80,0,Math.PI*2);ctx.fill();
+
+  // Rotating rings around center
+  [60,80,100].forEach((r,i) => {
+    ctx.save();
+    ctx.translate(centerX,centerY);
+    ctx.rotate(frame*0.002*(i%2===0?1:-1));
+    ctx.beginPath();
+    ctx.arc(0,0,r,0,Math.PI*2);
+    ctx.strokeStyle = `rgba(212,175,55,${0.06-i*0.01})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,8]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  });
+
+  // Center crown
+  ctx.font = '28px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#d4af37';
+  ctx.shadowColor = '#d4af37';
+  ctx.shadowBlur = 20;
+  ctx.fillText('👑', centerX, centerY);
+  ctx.shadowBlur = 0;
+
+  // Connection lines between agents
+  agentNodes.forEach((a, i) => {
+    agentNodes.forEach((b, j) => {
+      if(j<=i) return;
+      const dist = Math.hypot(a.x-b.x,a.y-b.y);
+      if(dist > Math.min(W,H)*0.55) return;
+      ctx.beginPath();
+      ctx.moveTo(a.x,a.y);
+      ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle = a.color+'11';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    });
+    // Line to center
+    ctx.beginPath();
+    ctx.moveTo(a.x,a.y);
+    ctx.lineTo(centerX,centerY);
+    ctx.strokeStyle = a.color+'22';
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([3,6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Ant trails
+  ants.forEach(ant => {
+    if(ant.trail.length<2) return;
+    ctx.beginPath();
+    ctx.moveTo(ant.trail[0].x,ant.trail[0].y);
+    ant.trail.forEach(p=>ctx.lineTo(p.x,p.y));
+    ctx.strokeStyle = ant.color+'33';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // Ants (agents in motion)
+  ants.forEach(ant => {
+    const pulse = Math.sin(frame*0.1+ant.id*10)*0.3+0.7;
+    // Glow
+    const g = ctx.createRadialGradient(ant.x,ant.y,0,ant.x,ant.y,ant.size*3);
+    g.addColorStop(0,ant.color+'55');g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(ant.x,ant.y,ant.size*3,0,Math.PI*2);ctx.fill();
+    // Body
+    ctx.beginPath();ctx.arc(ant.x,ant.y,ant.size*pulse,0,Math.PI*2);
+    ctx.fillStyle=ant.color;ctx.fill();
+    // Payload
+    if(ant.payload){
+      ctx.beginPath();ctx.arc(ant.x,ant.y-ant.size-2,1.5,0,Math.PI*2);
+      ctx.fillStyle='#fff';ctx.fill();
+    }
+  });
+
+  // Particles
+  particles.forEach(p => {
+    p.x+=p.vx;p.y+=p.vy;p.life-=0.02;p.vy+=0.05;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);
+    ctx.fillStyle=p.color+(Math.floor(p.life*255).toString(16).padStart(2,'0'));
+    ctx.fill();
+  });
+  particles=particles.filter(p=>p.life>0);
+
+  // Agent nodes
+  agentNodes.forEach((a,i) => {
+    const pulse = Math.sin(frame*0.05+a.pulsePhase)*0.15+0.85;
+    const isSelected = selectedAgent===i;
+    const r = isSelected?28:22;
+
+    // Orbit ring
+    ctx.save();
+    ctx.translate(a.x,a.y);
+    ctx.rotate(frame*0.01*(i%2===0?1:-1));
+    ctx.beginPath();ctx.arc(0,0,r+8,0,Math.PI*1.5);
+    ctx.strokeStyle=a.color+'44';ctx.lineWidth=1;ctx.stroke();
+    ctx.restore();
+
+    // Pulse ring
+    if(isSelected){
+      ctx.beginPath();ctx.arc(a.x,a.y,r+14,0,Math.PI*2);
+      ctx.strokeStyle=a.color+'66';ctx.lineWidth=1.5;ctx.stroke();
+    }
+
+    // Main circle
+    const grad=ctx.createRadialGradient(a.x-4,a.y-4,0,a.x,a.y,r*pulse);
+    grad.addColorStop(0,a.color+'33');grad.addColorStop(1,'#030508');
+    ctx.beginPath();ctx.arc(a.x,a.y,r*pulse,0,Math.PI*2);
+    ctx.fillStyle=grad;ctx.fill();
+    ctx.strokeStyle=isSelected?a.color:a.color+'88';
+    ctx.lineWidth=isSelected?2:1;
+    ctx.stroke();
+    ctx.shadowColor=a.color;ctx.shadowBlur=isSelected?20:8;
+
+    // Task progress arc
+    ctx.beginPath();
+    ctx.arc(a.x,a.y,r*pulse+3,-Math.PI/2,-Math.PI/2+a.taskProgress*Math.PI*2);
+    ctx.strokeStyle=a.color+'88';ctx.lineWidth=2;ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // Icon
+    ctx.font=`${isSelected?18:14}px serif`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(a.icon,a.x,a.y);
+
+    // Activity dot
+    const dotX=a.x+r*Math.cos(-Math.PI/4),dotY=a.y+r*Math.sin(-Math.PI/4);
+    ctx.beginPath();ctx.arc(dotX,dotY,3,0,Math.PI*2);
+    ctx.fillStyle=a.color;
+    ctx.shadowColor=a.color;ctx.shadowBlur=6;
+    ctx.fill();ctx.shadowBlur=0;
+
+    // Label below
+    ctx.font=`700 8px 'Share Tech Mono', monospace`;
+    ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillStyle=isSelected?a.color:a.color+'cc';
+    ctx.fillText(a.name, a.x, a.y+r*pulse+6);
+  });
+
+  // Click hitboxes invisible — handled in click listener
+}
+
+// ─── ANIMATION LOOP ───────────────────────────────────────────────────────────
+let revenueTarget=0,ordersTarget=0;
+
+function update(){
+  frame++;
+  updateAnts();
+
+  // Drift agent positions slightly
+  agentNodes.forEach(a => {
+    a.pulsePhase+=0.02;
+    a.taskProgress+=0.003;
+    if(a.taskProgress>1){
+      a.taskProgress=0;
+      a.taskIndex=(a.taskIndex+1)%a.tasks.length;
+    }
+    a.activity=0.5+Math.sin(frame*0.01+a.id)*0.5;
+  });
+
+  // Simulate revenue
+  if(frame%60===0) revenueTarget+=Math.random()*8.5+1;
+  revenue+=(revenueTarget-revenue)*0.05;
+  if(frame%180===0) ordersTarget+=Math.floor(Math.random()*2);
+  orders+=(ordersTarget-orders)*0.1;
+
+  // Weekly bar grow
+  weeklyData[6]=Math.min(revenue,500);
+
+  // Update stats
+  const fmt=v=>'$'+v.toFixed(2);
+  document.getElementById('h-revenue').textContent=fmt(revenue);
+  document.getElementById('h-listings').textContent=listings;
+  document.getElementById('h-orders').textContent=Math.floor(orders);
+  document.getElementById('h-conversion').textContent=(2.3+Math.sin(frame*0.005)*0.8).toFixed(1)+'%';
+  document.getElementById('h-tasks').textContent=tasksDone;
+  document.getElementById('h-time').textContent=new Date().toLocaleTimeString();
+  document.getElementById('rev-today').textContent=fmt(revenue);
+  document.getElementById('rev-bar').style.width=Math.min(revenue/5,100)+'%';
+  document.getElementById('rev-week').textContent=fmt(revenue+weeklyData.slice(0,6).reduce((a,b)=>a+b,0));
+  document.getElementById('rev-margin').textContent=Math.round(62+Math.sin(frame*0.01)*5)+'%';
+
+  // Weekly chart
+  const maxW=Math.max(...weeklyData,1);
+  document.getElementById('weekly-chart').innerHTML=weeklyData.map((v,i)=>
+    `<div class="weekly-bar" style="height:${Math.round((v/maxW)*100)}%;opacity:${i===6?0.9:0.5};background:${i===6?'var(--gold2)':'var(--gold)'}" title="${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]}: $${v.toFixed(0)}"></div>`
+  ).join('');
+
+  // System health
+  document.getElementById('sys-health').innerHTML=`
+    CPU LOAD: ${Math.round(55+Math.sin(frame*0.02)*30)}%<br>
+    MEMORY: ${Math.round(62+Math.sin(frame*0.015)*15)}%<br>
+    API CALLS: ${tasksDone*3}<br>
+    VECTOR DB: ONLINE<br>
+    SUPABASE: ONLINE<br>
+    ETSY API: LIVE<br>
+    PRINTIFY: READY<br>
+    UPTIME: ${Math.floor(frame/60)}s
+  `;
+
+  // Niches
+  document.getElementById('niches').innerHTML=[
+    ['Halloween Svg','#ff6a00',92],
+    ['Dog Mom Gifts','#ff8c00',87],
+    ['Custom Portraits','#da70d6',83],
+    ['Boho Wall Art','#7b68ee',79],
+    ['Baby Shower','#00d4ff',74],
+  ].map(([n,c,s])=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+      <span style="font-size:9px;color:#a0b0c0">${n}</span>
+      <span style="font-size:9px;font-family:'Share Tech Mono',monospace;color:${c}">${s}%</span>
+    </div>
+    <div style="height:2px;background:#0a1020;border-radius:1px;margin-bottom:6px">
+      <div style="height:100%;width:${s}%;background:${c};border-radius:1px"></div>
+    </div>
+  `).join('');
+
+  // Trends
+  document.getElementById('trends').innerHTML=[
+    ['#FallVibes','#ff6a00'],['#CustomGifts','#00ff88'],['#BohoHome','#da70d6'],
+    ['#DogMom2026','#00d4ff'],['#SVGBundle','#ffd700'],['#WallArt','#7b68ee'],
+  ].map(([t,c])=>`<span class="trend-tag" style="color:${c};border-color:${c}33;background:${c}08">${t}</span>`).join('');
+
+  // Opt status
+  document.getElementById('opt-status').innerHTML=`
+    KILLED LOSERS: ${Math.floor(tasksDone/20)}<br>
+    SCALED WINNERS: ${Math.floor(tasksDone/30)}<br>
+    NEXT OPT: ${new Date(Date.now()+3600000).toLocaleTimeString()}<br>
+    WEEKLY RPT: SUNDAY<br>
+    LISTINGS LIVE: ${listings}
+  `;
+
+  draw();
+  requestAnimationFrame(update);
+}
+
+// ─── SIDEBAR AGENT LIST ───────────────────────────────────────────────────────
+function updateAgentList(){
+  document.getElementById('agent-list').innerHTML=AGENTS.map((a,i)=>`
+    <div class="agent-item${selectedAgent===i?' sel':''}" onclick="selectAgent(${i})">
+      <div class="agent-icon">${a.icon}</div>
+      <div class="agent-meta">
+        <div class="agent-nm" style="color:${a.color}">${a.name}</div>
+        <div class="agent-st">${agentNodes[i]?agentNodes[i].tasks[agentNodes[i].taskIndex]:'...'}</div>
+        <div class="agent-minibar"><div class="agent-minifill" style="width:${agentNodes[i]?Math.round(agentNodes[i].taskProgress*100):0}%;background:${a.color}"></div></div>
+      </div>
+      <div class="agent-dot" style="background:${a.color};box-shadow:0 0 6px ${a.color};animation:blink ${1+i*0.15}s infinite"></div>
+    </div>
+  `).join('');
+}
+setInterval(updateAgentList, 500);
+
+// ─── AGENT SELECT ─────────────────────────────────────────────────────────────
+function selectAgent(i){
+  selectedAgent = selectedAgent===i ? null : i;
+  const d = document.getElementById('detail');
+  if(selectedAgent===null){ d.classList.remove('show'); return; }
+  const a = AGENTS[i];
+  const node = agentNodes[i];
+  d.classList.add('show');
+  document.getElementById('detail-icon').textContent=a.icon;
+  document.getElementById('detail-name').style.color=a.color;
+  document.getElementById('detail-name').textContent=a.name;
+  document.getElementById('detail-role').textContent=a.role+' · ACTIVE';
+  document.getElementById('detail-task').textContent='▶ '+node.tasks[node.taskIndex];
+  document.getElementById('detail-stats').innerHTML=`
+    <span style="color:${a.color}">LOAD: ${Math.round(node.activity*100)}%</span>
+    <span style="color:#404060">|</span>
+    <span style="color:#a0b0c0">TASKS: ${Math.floor(tasksDone/AGENTS.length)}</span>
+  `;
+}
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  let hit=null;
+  agentNodes.forEach((a,i)=>{ if(Math.hypot(mx-a.x,my-a.y)<30) hit=i; });
+  selectAgent(hit);
+});
+
+// ─── COMM FEED ────────────────────────────────────────────────────────────────
+const COMMS=[
+  (a,b)=>`<span style="color:${a.color}">[${a.name}]</span> → <span style="color:${b.color}">[${b.name}]</span> <span style="color:#4a6a4a">Sending trend data for review</span>`,
+  (a,b)=>`<span style="color:${b.color}">[${b.name}]</span>: <span style="color:#4a6a4a">Confirmed. Processing ${Math.floor(Math.random()*50)+10} data points</span>`,
+  (a,b)=>`<span style="color:${a.color}">[${a.name}]</span>: <span style="color:#4a6a4a">Edge detected in ${['Halloween','Dog Mom','Custom Portrait','Boho'][Math.floor(Math.random()*4)]} niche</span>`,
+  (a,b)=>`<span style="color:${AGENTS[9].color}">[SWARMX PRIME]</span>: <span style="color:#d4af3788">Authorizing scale operation on listing #${Math.floor(Math.random()*1000)+100}</span>`,
+  (a,b)=>`<span style="color:${a.color}">[${a.name}]</span> → <span style="color:${b.color}">[${b.name}]</span> <span style="color:#4a6a4a">Task complete. Revenue impact: +$${(Math.random()*50+5).toFixed(2)}</span>`,
+];
+setInterval(()=>{
+  const a=AGENTS[Math.floor(Math.random()*AGENTS.length)];
+  let b=AGENTS[Math.floor(Math.random()*AGENTS.length)];
+  while(b===a)b=AGENTS[Math.floor(Math.random()*AGENTS.length)];
+  const tmpl=COMMS[Math.floor(Math.random()*COMMS.length)];
+  const feed=document.getElementById('comm-feed');
+  const entry=document.createElement('div');
+  entry.className='comm-entry';entry.innerHTML=tmpl(a,b);
+  feed.appendChild(entry);
+  while(feed.children.length>4)feed.removeChild(feed.firstChild);
+  // Also add to right log
+  const rlog=document.getElementById('right-log');
+  const re=document.createElement('div');re.className='log-entry';re.innerHTML=entry.innerHTML;
+  rlog.appendChild(re);while(rlog.children.length>8)rlog.removeChild(rlog.firstChild);
+  // Spawn particles at agents
+  if(agentNodes.length){ spawnParticle(agentNodes[AGENTS.indexOf(a)].x,agentNodes[AGENTS.indexOf(a)].y,a.color); }
+},1400);
+
+// ─── APPROVAL LAYER ───────────────────────────────────────────────────────────
+const APPROVALS=[
+  {title:'New Listing: "Fall Pumpkin SVG Bundle"',sub:'PRODUCT FORGE · $4.99 · Est. revenue: $180/mo'},
+  {title:'Scale Budget: Dog Mom Niche +$50 ads',sub:'ANALYTICS AGENT · ROI projection: 340%'},
+  {title:'Kill listing #4821 — 0 sales in 30d',sub:'EVOLUTION AGENT · Frees up slot for winner'},
+  {title:'New design batch: 15 Holiday items',sub:'DESIGN AGENT · Midjourney v6 · Review needed'},
+];
+let approvalIdx=0;
+function addApproval(){
+  const a=APPROVALS[approvalIdx%APPROVALS.length];approvalIdx++;
+  const list=document.getElementById('approval-list');
+  const el=document.createElement('div');el.className='approval-item';
+  el.innerHTML=`<div class="approval-title">${a.title}</div><div class="approval-sub">${a.sub}</div>
+    <div class="approval-btns">
+      <button class="btn-approve" onclick="this.closest('.approval-item').remove();listings++;revenue+=Math.random()*20;">✓ APPROVE</button>
+      <button class="btn-reject" onclick="this.closest('.approval-item').remove()">✗ REJECT</button>
+    </div>`;
+  list.insertBefore(el,list.firstChild);
+  while(list.children.length>3)list.removeChild(list.lastChild);
+}
+setInterval(addApproval,8000);
+addApproval();
+
+// ─── MISSION DEPLOY ───────────────────────────────────────────────────────────
+function deployMission(){
+  const input=document.getElementById('mission-input');
+  const val=input.value.trim();if(!val)return;
+  input.value='';
+  // Activate all agents
+  agentNodes.forEach(a=>{a.taskProgress=0;});
+  // Add to comms
+  const feed=document.getElementById('comm-feed');
+  const entry=document.createElement('div');entry.className='comm-entry';
+  entry.innerHTML=`<span style="color:var(--gold)">[MISSION DEPLOYED]</span> <span style="color:var(--gold2)">"${val}"</span>`;
+  feed.appendChild(entry);while(feed.children.length>4)feed.removeChild(feed.firstChild);
+  // Spawn burst
+  agentNodes.forEach(a=>spawnParticle(a.x,a.y,a.color));
+  // Add approval
+  setTimeout(()=>{
+    const list=document.getElementById('approval-list');
+    const el=document.createElement('div');el.className='approval-item';
+    el.innerHTML=`<div class="approval-title">Mission Result: "${val.slice(0,30)}..."</div>
+      <div class="approval-sub">SWARMX PRIME · ${AGENTS.length} agents deployed · Review output</div>
+      <div class="approval-btns">
+        <button class="btn-approve" onclick="this.closest('.approval-item').remove();revenue+=Math.random()*50+10;listings+=2;">✓ EXECUTE</button>
+        <button class="btn-reject" onclick="this.closest('.approval-item').remove()">✗ CANCEL</button>
+      </div>`;
+    list.insertBefore(el,list.firstChild);
+  },3000);
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+resize();
+setTimeout(()=>{ initAgentPositions(); update(); }, 100);
+</script>
+</body>
 </html>
