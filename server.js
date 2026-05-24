@@ -102,6 +102,41 @@ app.post("/api/swarm", async (req, res) => {
   }
 });
 
+
+// ── ETSY API ROUTES ──────────────────────────────────────────────────────────
+const ETSY_KEY = process.env.ETSY_API_KEY;
+const SHOP_NAME = 'HOUSEOFJREYM';
+
+app.get('/api/etsy/shop', async (req, res) => {
+  try {
+    const r = await fetch(`https://openapi.etsy.com/v3/application/shops/${SHOP_NAME}`, {
+      headers: { 'x-api-key': ETSY_KEY }
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/etsy/listings', async (req, res) => {
+  try {
+    const r = await fetch(`https://openapi.etsy.com/v3/application/shops/${SHOP_NAME}/listings/active?limit=25`, {
+      headers: { 'x-api-key': ETSY_KEY }
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/etsy/stats', async (req, res) => {
+  try {
+    const r = await fetch(`https://openapi.etsy.com/v3/application/shops/${SHOP_NAME}/receipts?limit=25`, {
+      headers: { 'x-api-key': ETSY_KEY }
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get("/health", (req, res) => {
   res.json({ status: "HOUSE OF JREYM ONLINE", agents: 10, version: "4.0.0" });
 });
