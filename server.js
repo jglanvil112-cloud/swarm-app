@@ -103,6 +103,40 @@ app.post("/api/swarm", async (req, res) => {
 });
 
 
+
+// ── PRINTIFY API ROUTES ───────────────────────────────────────────────────────
+const PRINTIFY_KEY = process.env.PRINTIFY_API_KEY;
+
+app.get('/api/printify/shops', async (req, res) => {
+  try {
+    const r = await fetch('https://api.printify.com/v1/shops.json', {
+      headers: { 'Authorization': 'Bearer ' + PRINTIFY_KEY }
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/printify/products', async (req, res) => {
+  try {
+    const r = await fetch('https://api.printify.com/v1/shops/' + req.query.shopId + '/products.json', {
+      headers: { 'Authorization': 'Bearer ' + PRINTIFY_KEY }
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/printify/catalog', async (req, res) => {
+  try {
+    const r = await fetch('https://api.printify.com/v1/catalog/blueprints.json', {
+      headers: { 'Authorization': 'Bearer ' + PRINTIFY_KEY }
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── ETSY API ROUTES ──────────────────────────────────────────────────────────
 const ETSY_KEY = process.env.ETSY_API_KEY;
 const SHOP_NAME = 'HOUSEOFJREYM';
