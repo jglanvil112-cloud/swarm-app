@@ -3,739 +3,1269 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HOUSE OF JREYM · AI Commerce Swarm</title>
+<title>HOUSE OF JREYM</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
-:root{
-  --bg:#030508;
-  --bg2:#060a10;
-  --bg3:#0a0f1a;
-  --gold:#d4af37;
-  --gold2:#f5d060;
-  --cyan:#00d4ff;
-  --green:#00ff88;
-  --red:#ff3a3a;
-  --purple:#9d4edd;
-  --orange:#ff8c00;
-  --border:#1a2040;
-}
-body{background:var(--bg);color:#c0d0e0;font-family:'Rajdhani',sans-serif;overflow:hidden;height:100vh;width:100vw;}
-canvas{position:fixed;top:0;left:0;z-index:0;}
-#ui{position:fixed;inset:0;z-index:10;display:grid;grid-template-rows:52px 1fr 90px;grid-template-columns:200px 1fr 240px;gap:0;}
+body{background:#030508;color:#c0d0e0;font-family:'Rajdhani',sans-serif;overflow:hidden;height:100vh;width:100vw;cursor:default;}
 
-/* HEADER */
-#header{grid-column:1/-1;background:linear-gradient(180deg,rgba(3,5,8,0.98),rgba(3,5,8,0.85));border-bottom:1px solid var(--gold)22;display:flex;align-items:center;padding:0 16px;gap:20px;backdrop-filter:blur(8px);}
-.logo-wrap{display:flex;align-items:center;gap:10px;}
-.logo-crown{font-size:22px;filter:drop-shadow(0 0 8px var(--gold));}
-.logo-text{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--gold);letter-spacing:3px;text-shadow:0 0 20px var(--gold)66;}
-.logo-sub{font-size:7px;color:#4a3a10;letter-spacing:4px;font-family:'Share Tech Mono',monospace;}
-.header-stats{display:flex;gap:1px;margin-left:16px;}
-.hstat{padding:0 14px;text-align:center;border-right:1px solid #1a2040;}
-.hstat:last-child{border:none;}
-.hstat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;}
-.hstat-label{font-size:7px;color:#303050;letter-spacing:2px;margin-top:1px;}
-.header-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
-.pill{padding:3px 10px;border-radius:2px;font-size:8px;font-family:'Share Tech Mono',monospace;letter-spacing:2px;border:1px solid;}
-.status-live{color:var(--green);border-color:var(--green)44;background:rgba(0,255,136,0.06);}
-.mode-pill{color:var(--gold);border-color:var(--gold)44;background:rgba(212,175,55,0.06);}
+/* SCANLINE */
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,212,255,0.012) 2px,rgba(0,212,255,0.012) 4px);pointer-events:none;z-index:999;}
 
-/* LEFT SIDEBAR */
-#left{background:rgba(3,5,8,0.9);border-right:1px solid #1a200833;padding:10px 0;overflow-y:auto;backdrop-filter:blur(4px);}
-.side-section{padding:6px 12px;font-size:7px;color:#2a3050;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-top:8px;}
-.agent-item{padding:7px 10px;display:flex;align-items:center;gap:7px;cursor:pointer;border-left:2px solid transparent;transition:all 0.2s;}
-.agent-item:hover,.agent-item.sel{background:rgba(212,175,55,0.04);border-left-color:var(--gold);}
-.agent-icon{font-size:14px;width:20px;text-align:center;flex-shrink:0;}
-.agent-meta{flex:1;min-width:0;}
-.agent-nm{font-size:9px;font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.agent-st{font-size:7px;color:#303050;font-family:'Share Tech Mono',monospace;margin-top:1px;}
-.agent-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
-.agent-minibar{height:2px;background:#0a1020;border-radius:1px;margin-top:3px;}
-.agent-minifill{height:100%;border-radius:1px;transition:width 1s;}
+/* GRID BG */
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;}
 
-/* CENTER */
-#center{background:transparent;position:relative;overflow:hidden;}
-#canvas-wrap{position:absolute;inset:0;}
-.center-overlay{position:absolute;inset:0;pointer-events:none;}
-.corner-tl,.corner-tr,.corner-bl,.corner-br{position:absolute;width:40px;height:40px;border-color:var(--gold);border-style:solid;opacity:0.3;}
-.corner-tl{top:10px;left:10px;border-width:2px 0 0 2px;}
-.corner-tr{top:10px;right:10px;border-width:2px 2px 0 0;}
-.corner-bl{bottom:10px;left:10px;border-width:0 0 2px 2px;}
-.corner-br{bottom:10px;right:10px;border-width:0 2px 2px 0;}
-.center-title{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:8px;color:#2a3050;letter-spacing:4px;font-family:'Share Tech Mono',monospace;white-space:nowrap;}
+.layout{display:grid;grid-template-rows:48px 1fr 52px 32px;height:100vh;gap:0;}
 
-/* AGENT DETAIL POPUP */
-#detail{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(3,5,8,0.95);border:1px solid var(--gold)33;border-radius:4px;padding:12px 20px;min-width:280px;text-align:center;transition:all 0.3s;backdrop-filter:blur(8px);display:none;}
-#detail.show{display:block;}
+/* ── HEADER ── */
+header{background:linear-gradient(180deg,#040608,#060a14);border-bottom:1px solid #d4af3733;display:flex;align-items:center;padding:0 12px;gap:10px;z-index:10;}
+.day-badge{background:#d4af3715;border:1px solid #d4af3744;border-radius:3px;padding:3px 10px;font-size:10px;color:#d4af37;font-family:'Orbitron',monospace;letter-spacing:1px;}
+.hstat{display:flex;align-items:center;gap:5px;padding:2px 8px;border:1px solid #1a2040;border-radius:3px;}
+.hstat-ico{font-size:11px;}
+.hstat-body{display:flex;flex-direction:column;line-height:1.1;}
+.hstat-label{font-size:6px;color:#3a4050;letter-spacing:1px;font-family:'Share Tech Mono',monospace;}
+.hstat-val{font-size:10px;font-weight:700;color:#c0d0e0;}
+.logo{flex:1;text-align:center;}
+.logo-main{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:#d4af37;letter-spacing:4px;text-shadow:0 0 20px #d4af3766,0 0 40px #d4af3333;}
+.logo-sub{font-size:7px;color:#4a5060;letter-spacing:5px;font-family:'Share Tech Mono',monospace;}
+.swarm-mode{display:flex;flex-direction:column;align-items:center;padding:3px 12px;border:1px solid #00ff8844;border-radius:3px;background:rgba(0,255,136,0.04);}
+.swarm-label{font-size:6px;color:#3a4050;letter-spacing:2px;font-family:'Share Tech Mono',monospace;}
+.swarm-val{font-size:9px;color:#00ff88;font-family:'Share Tech Mono',monospace;letter-spacing:1px;}
+.time-box{display:flex;flex-direction:column;align-items:center;padding:3px 10px;border:1px solid #1a2040;border-radius:3px;}
+.icon-btn{width:26px;height:26px;border:1px solid #1a2040;border-radius:3px;background:transparent;color:#4a5060;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;}
 
-/* INPUT */
-#mission-bar{position:absolute;bottom:8px;left:10px;right:10px;display:flex;gap:8px;}
-#mission-bar input{flex:1;background:rgba(6,10,16,0.9);border:1px solid var(--gold)33;border-radius:3px;padding:8px 14px;color:var(--gold);font-family:'Share Tech Mono',monospace;font-size:11px;outline:none;caret-color:var(--gold);}
-#mission-bar input::placeholder{color:#2a3050;}
-#mission-bar button{padding:8px 18px;background:rgba(212,175,55,0.1);border:1px solid var(--gold)55;border-radius:3px;color:var(--gold);font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;cursor:pointer;white-space:nowrap;}
-#mission-bar button:hover{background:rgba(212,175,55,0.2);}
+/* ── MAIN ── */
+.main{display:grid;grid-template-columns:1fr 200px;overflow:hidden;gap:0;}
 
-/* RIGHT SIDEBAR */
-#right{background:rgba(3,5,8,0.9);border-left:1px solid #1a200833;padding:10px;overflow-y:auto;backdrop-filter:blur(4px);display:flex;flex-direction:column;gap:0;}
-.panel{background:rgba(6,10,16,0.8);border:1px solid #1a2040;border-radius:3px;padding:10px;margin-bottom:8px;}
-.panel-title{font-size:7px;color:#2a3050;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
-.metric-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
-.metric-label{font-size:9px;color:#404060;}
-.metric-val{font-size:11px;font-weight:700;font-family:'Share Tech Mono',monospace;}
-.revenue-bar-wrap{height:3px;background:#0a1020;border-radius:2px;margin:3px 0;}
-.revenue-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--gold),var(--gold2));box-shadow:0 0 6px var(--gold)66;}
-.log-entry{font-size:8px;font-family:'Share Tech Mono',monospace;padding:3px 0;border-bottom:1px solid #0a1020;line-height:1.5;}
-.log-entry:last-child{border:none;}
-.approval-item{background:rgba(212,175,55,0.04);border:1px solid var(--gold)22;border-radius:2px;padding:6px;margin-bottom:5px;}
-.approval-title{font-size:9px;color:var(--gold);font-weight:600;margin-bottom:3px;}
-.approval-sub{font-size:7px;color:#404060;font-family:'Share Tech Mono',monospace;}
-.approval-btns{display:flex;gap:4px;margin-top:5px;}
-.btn-approve{flex:1;padding:3px;background:rgba(0,255,136,0.1);border:1px solid var(--green)44;border-radius:2px;color:var(--green);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;}
-.btn-reject{flex:1;padding:3px;background:rgba(255,58,58,0.1);border:1px solid var(--red)44;border-radius:2px;color:var(--red);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;}
-.weekly-row{display:flex;gap:2px;align-items:flex-end;height:30px;margin-top:6px;}
-.weekly-bar{flex:1;border-radius:1px 1px 0 0;background:var(--gold);opacity:0.6;min-width:4px;}
-.tag{display:inline-block;padding:2px 6px;border-radius:2px;font-size:7px;font-family:'Share Tech Mono',monospace;margin:2px;border:1px solid;}
+/* AGENT GRID */
+.agent-grid{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:5px;padding:5px 5px 5px 8px;overflow:hidden;}
 
-/* BOTTOM */
-#bottom{grid-column:1/-1;background:rgba(3,5,8,0.92);border-top:1px solid var(--gold)11;display:grid;grid-template-columns:200px 1fr 240px;backdrop-filter:blur(4px);}
-#bottom-left{padding:8px 12px;border-right:1px solid #1a2040;}
-#bottom-center{padding:8px 14px;display:flex;flex-direction:column;gap:3px;}
-#bottom-right{padding:8px 12px;border-left:1px solid #1a2040;}
-.btm-title{font-size:7px;color:#2a3050;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:5px;}
-.comm-entry{font-size:8px;font-family:'Share Tech Mono',monospace;margin-bottom:3px;line-height:1.4;}
-.trend-tag{display:inline-block;padding:2px 8px;border-radius:2px;font-size:8px;margin-right:4px;margin-bottom:3px;border:1px solid;font-family:'Share Tech Mono',monospace;}
+/* AGENT ROOM */
+.room{border-radius:8px;position:relative;overflow:hidden;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;}
+.room:hover{transform:scale(1.015);z-index:5;}
+.room-inner{flex:1;display:flex;flex-direction:column;padding:8px 10px;position:relative;}
 
-/* SCROLLBAR */
-::-webkit-scrollbar{width:2px;}
-::-webkit-scrollbar-thumb{background:var(--gold)44;border-radius:1px;}
+/* Corner brackets */
+.room::before,.room::after{content:'';position:absolute;width:14px;height:14px;z-index:2;}
+.room::before{top:0;left:0;border-top:2px solid;border-left:2px solid;border-radius:8px 0 0 0;}
+.room::after{bottom:0;right:0;border-bottom:2px solid;border-right:2px solid;border-radius:0 0 8px 0;}
 
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
-@keyframes pulse-out{0%{transform:scale(1);opacity:0.8}100%{transform:scale(2.5);opacity:0}}
-@keyframes float-up{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-30px);opacity:0}}
-@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+/* Character area */
+.char-area{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:4px;margin:4px 0;}
+.char-area svg{width:100%;height:100%;}
+
+.room-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
+.room-name{font-size:8px;font-weight:700;letter-spacing:2px;font-family:'Share Tech Mono',monospace;}
+.room-level{font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace;}
+.room-role{font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace;text-transform:uppercase;}
+.room-stat{font-size:15px;font-weight:900;font-family:'Orbitron',monospace;line-height:1;}
+.stat-label{font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace;letter-spacing:1px;}
+.progress-bar{height:3px;background:#0a1020;border-radius:2px;margin-top:4px;}
+.progress-fill{height:100%;border-radius:2px;transition:width 1.5s ease;}
+.active-dot{width:6px;height:6px;border-radius:50%;position:absolute;top:8px;right:8px;}
+
+/* ── CENTER ROOM ── */
+.center-room{border-radius:8px;border:1px solid #d4af3744;background:rgba(6,8,20,0.95);display:flex;flex-direction:column;padding:10px;position:relative;overflow:hidden;}
+.crisis-alert{background:rgba(255,58,58,0.08);border:1px solid #ff3a3a44;border-radius:5px;padding:7px 10px;margin-bottom:8px;}
+.crisis-title{font-size:8px;color:#ff3a3a;font-family:'Share Tech Mono',monospace;letter-spacing:2px;margin-bottom:3px;}
+.crisis-value{font-size:14px;font-weight:900;color:#ff3a3a;font-family:'Orbitron',monospace;line-height:1.2;}
+.crisis-detail{font-size:8px;color:#7a3030;font-family:'Share Tech Mono',monospace;margin-top:2px;}
+.meeting-label{text-align:center;font-size:8px;color:#d4af37;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:6px;}
+.meeting-table{position:relative;flex:1;display:flex;align-items:center;justify-content:center;}
+.meeting-btn{padding:7px;background:rgba(212,175,55,0.1);border:1px solid #d4af3755;border-radius:4px;color:#d4af37;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;cursor:pointer;width:100%;margin-top:8px;}
+.meeting-btn:hover{background:rgba(212,175,55,0.2);}
+
+/* ── RIGHT PANEL ── */
+.right-panel{background:rgba(3,5,8,0.96);border-left:1px solid #1a2040;display:flex;flex-direction:column;padding:6px 8px;gap:5px;overflow:hidden;}
+.panel-box{background:rgba(6,8,20,0.8);border-radius:5px;padding:7px 8px;}
+.panel-title{font-size:7px;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:6px;}
+.agenda-item{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.agenda-num{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;font-family:'Share Tech Mono',monospace;}
+.agenda-text{font-size:9px;font-weight:600;font-family:'Share Tech Mono',monospace;}
+.agenda-status{font-size:7px;font-family:'Share Tech Mono',monospace;}
+.chat-entry{font-size:8px;margin-bottom:3px;line-height:1.4;}
+.chat-agent{font-weight:700;font-family:'Share Tech Mono',monospace;}
+.chat-msg{color:#5a6070;}
+.chat-input{display:flex;gap:4px;margin-top:5px;}
+.chat-field{flex:1;background:#0a0e1a;border:1px solid #1a2040;border-radius:3px;padding:3px 6px;font-size:8px;color:#4a5060;font-family:'Share Tech Mono',monospace;}
+.chat-send{padding:3px 7px;background:rgba(212,175,55,0.1);border:1px solid #d4af3744;border-radius:3px;color:#d4af37;cursor:pointer;font-size:10px;}
+
+/* ── DECISION BOARD ── */
+.decision-board{background:rgba(3,5,8,0.96);border-top:1px solid #1a2040;display:grid;grid-template-columns:180px 1fr 160px;gap:8px;padding:5px 10px;align-items:center;}
+.decision-title{font-size:7px;color:#d4af37;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
+.decisions{display:flex;gap:5px;}
+.decision-card{flex:1;padding:5px 7px;border-radius:3px;cursor:pointer;transition:all 0.2s;border:1px solid;}
+.decision-card:hover{transform:translateY(-1px);}
+.dec-title{font-size:7px;font-weight:700;font-family:'Share Tech Mono',monospace;letter-spacing:1px;margin-bottom:2px;}
+.dec-desc{font-size:7px;color:#4a5060;margin-bottom:2px;}
+.dec-impact{font-size:8px;font-weight:700;font-family:'Share Tech Mono',monospace;}
+.vote-section{display:flex;flex-direction:column;gap:3px;}
+.vote-bar{height:5px;background:#1a2040;border-radius:3px;overflow:hidden;}
+.vote-fill{height:100%;background:#d4af37;border-radius:3px;box-shadow:0 0 6px #d4af37;transition:width 0.5s;}
+.agent-avatars{display:flex;gap:2px;flex-wrap:wrap;}
+.avatar-dot{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;border:1px solid;}
+
+/* ── BOTTOM NAV ── */
+nav{background:#030508;border-top:1px solid #1a2040;display:flex;justify-content:center;align-items:center;gap:4px;padding:3px 10px;}
+.nav-btn{padding:3px 12px;border-radius:3px;font-family:'Share Tech Mono',monospace;font-size:7px;letter-spacing:2px;cursor:pointer;border:1px solid #1a2040;background:transparent;color:#4a5060;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:1px;}
+.nav-btn.active{border-color:#d4af37;color:#d4af37;background:rgba(212,175,55,0.08);}
+.nav-btn:hover:not(.active){border-color:#2a3050;color:#8090a0;}
+.nav-icon{font-size:12px;}
+
+/* SYNERGY */
+.synergy-bar{height:4px;background:#1a2040;border-radius:2px;overflow:hidden;margin-bottom:3px;}
+.synergy-fill{height:100%;background:linear-gradient(90deg,#00ff88,#00d4ff);border-radius:2px;width:92%;}
+.morale{display:flex;align-items:center;gap:4px;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;align-items:center;justify-content:center;display:none;}
+.modal-overlay.open{display:flex;}
+.modal{background:#060810;border-radius:10px;padding:20px;width:340px;position:relative;}
+.modal-close{position:absolute;top:10px;right:14px;background:transparent;border:none;color:#4a5060;cursor:pointer;font-size:16px;}
+
+/* ANIMATIONS */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes glow-pulse{0%,100%{opacity:0.6}50%{opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes meeting-pulse{0%,100%{box-shadow:0 0 10px #d4af3733}50%{box-shadow:0 0 25px #d4af3766}}
+::-webkit-scrollbar{width:2px;}::-webkit-scrollbar-thumb{background:#d4af3733;}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div id="ui">
 
-<!-- HEADER -->
-<div id="header">
-  <div class="logo-wrap">
-    <div class="logo-crown">👑</div>
-    <div>
-      <div class="logo-text">HOUSE OF JREYM</div>
-      <div class="logo-sub">AUTONOMOUS AI COMMERCE SWARM</div>
+<div class="layout">
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="day-badge">👑 DAY 37</div>
+  <div class="hstat"><span class="hstat-ico">👥</span><div class="hstat-body"><span class="hstat-label">TEAM</span><span class="hstat-val">12</span></div></div>
+  <div class="hstat"><span class="hstat-ico">🍖</span><div class="hstat-body"><span class="hstat-label">FOOD</span><span class="hstat-val">38</span></div></div>
+  <div class="hstat"><span class="hstat-ico">💧</span><div class="hstat-body"><span class="hstat-label">WATER</span><span class="hstat-val">64</span></div></div>
+  <div class="hstat"><span class="hstat-ico">⚡</span><div class="hstat-body"><span class="hstat-label">POWER</span><span class="hstat-val">92</span></div></div>
+  <div class="hstat"><span class="hstat-ico">🛡</span><div class="hstat-body"><span class="hstat-label">DEFENSE</span><span class="hstat-val">17</span></div></div>
+  <div class="logo">
+    <div class="logo-main">HOUSE OF JREYM</div>
+    <div class="logo-sub">CREATIVE TECH EMPIRE</div>
+  </div>
+  <div class="swarm-mode"><span class="swarm-label">SWARM MODE</span><span class="swarm-val" id="swarm-val">● ACTIVE</span></div>
+  <div class="time-box"><span style="font-size:11px;color:#c0d0e0;font-family:'Share Tech Mono',monospace" id="clock">06:23 AM</span><span style="font-size:8px;color:#4a5060">18°C ☀️</span></div>
+  <button class="icon-btn">?</button><button class="icon-btn">✉</button><button class="icon-btn">⚙</button>
+</header>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+  <!-- AGENT GRID -->
+  <div class="agent-grid" id="agent-grid">
+    <!-- Rooms injected by JS -->
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <!-- Crisis -->
+    <div class="panel-box" style="border:1px solid #ff3a3a33;background:rgba(255,58,58,0.04)">
+      <div class="panel-title" style="color:#ff3a3a">CRISIS DETAILS <span style="float:right;cursor:pointer;color:#4a5060">✕</span></div>
+      <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:5px">
+        <span style="font-size:14px;animation:blink 1s infinite">⚠️</span>
+        <div>
+          <div style="font-size:9px;font-weight:700;color:#ff3a3a;font-family:'Share Tech Mono',monospace">ORGANIC TRAFFIC DROP</div>
+          <div style="font-size:7px;color:#6a3030;font-family:'Share Tech Mono',monospace">-32% · Algorithm Update (Google Core)</div>
+        </div>
+      </div>
+      <div style="font-size:7px;color:#4a5060;letter-spacing:2px;font-family:'Share Tech Mono',monospace;margin-bottom:3px">IMPACT</div>
+      <div style="font-size:8px;color:#8a4040;display:flex;flex-direction:column;gap:2px">
+        <div>● Rankings Falling</div><div>● Fewer Visitors</div><div>● Revenue At Risk</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">
+        <div style="font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace;letter-spacing:2px">SEVERITY</div>
+        <div style="display:flex;gap:2px" id="sev-bars"></div>
+      </div>
+    </div>
+
+    <!-- Agenda -->
+    <div class="panel-box">
+      <div class="panel-title" style="color:#d4af37">MEETING AGENDA</div>
+      <div id="agenda-list"></div>
+    </div>
+
+    <!-- Chat -->
+    <div class="panel-box" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <div class="panel-title" style="color:#00ff88;margin:0">TEAM CHAT</div>
+        <div style="font-size:7px;color:#00ff88;font-family:'Share Tech Mono',monospace;animation:blink 1s infinite">● LIVE</div>
+      </div>
+      <div id="chat-log" style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px"></div>
+      <div class="chat-input" style="margin-top:5px">
+        <input class="chat-field" placeholder="Type a message..."/>
+        <button class="chat-send">➤</button>
+      </div>
+    </div>
+
+    <!-- Niche tags -->
+    <div class="panel-box">
+      <div class="panel-title" style="color:#7b68ee">TOP NICHES</div>
+      <div id="niche-list"></div>
     </div>
   </div>
-  <div class="header-stats">
-    <div class="hstat"><div class="hstat-val" id="h-revenue" style="color:var(--gold)">$0</div><div class="hstat-label">REVENUE TODAY</div></div>
-    <div class="hstat"><div class="hstat-val" id="h-listings" style="color:var(--cyan)">0</div><div class="hstat-label">ACTIVE LISTINGS</div></div>
-    <div class="hstat"><div class="hstat-val" id="h-orders" style="color:var(--green)">0</div><div class="hstat-label">ORDERS TODAY</div></div>
-    <div class="hstat"><div class="hstat-val" id="h-conversion" style="color:var(--purple)">0%</div><div class="hstat-label">CONVERSION</div></div>
-    <div class="hstat"><div class="hstat-val" id="h-agents" style="color:var(--gold)">10</div><div class="hstat-label">AGENTS ACTIVE</div></div>
-    <div class="hstat"><div class="hstat-val" id="h-tasks" style="color:var(--orange)">0</div><div class="hstat-label">TASKS RUNNING</div></div>
-  </div>
-  <div class="header-right">
-    <div class="pill status-live">● LIVE 24/7</div>
-    <div class="pill mode-pill">PROFIT MODE</div>
-    <div class="pill" style="color:#404060;border-color:#1a2040" id="h-time">--:--:--</div>
-  </div>
 </div>
 
-<!-- LEFT: AGENT ROSTER -->
-<div id="left">
-  <div class="side-section">// AGENT ROSTER</div>
-  <div id="agent-list"></div>
-  <div class="side-section">// SYSTEM HEALTH</div>
-  <div style="padding:0 12px">
-    <div id="sys-health" style="font-size:8px;color:#303050;font-family:'Share Tech Mono',monospace;line-height:1.9"></div>
-  </div>
-</div>
-
-<!-- CENTER: MAIN CANVAS -->
-<div id="center">
-  <div id="canvas-wrap"></div>
-  <div class="center-overlay">
-    <div class="corner-tl"></div><div class="corner-tr"></div>
-    <div class="corner-bl"></div><div class="corner-br"></div>
-    <div class="center-title">HOUSE OF JREYM · LIVE AGENT COLONY · ETSY COMMERCE ENGINE</div>
-  </div>
-  <div id="detail">
-    <div id="detail-icon" style="font-size:24px;margin-bottom:4px"></div>
-    <div id="detail-name" style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--gold);letter-spacing:2px"></div>
-    <div id="detail-role" style="font-size:9px;color:#404060;font-family:'Share Tech Mono',monospace;margin-top:2px"></div>
-    <div id="detail-task" style="font-size:10px;color:var(--cyan);margin-top:8px;padding:4px 10px;border:1px solid var(--cyan)22;border-radius:2px;background:rgba(0,212,255,0.04)"></div>
-    <div id="detail-stats" style="display:flex;gap:12px;justify-content:center;margin-top:8px;font-size:9px;font-family:'Share Tech Mono',monospace"></div>
-  </div>
-  <div id="mission-bar">
-    <input id="mission-input" placeholder='Give the swarm a mission: "Find trending Halloween niches" or "Create 10 listings for dog lovers"' onkeydown="if(event.key==='Enter')deployMission()"/>
-    <button onclick="deployMission()">👑 DEPLOY SWARM</button>
-  </div>
-</div>
-
-<!-- RIGHT SIDEBAR -->
-<div id="right">
-  <div class="panel">
-    <div class="panel-title">// REVENUE TRACKER</div>
-    <div class="metric-row"><span class="metric-label">Today</span><span class="metric-val" id="rev-today" style="color:var(--gold)">$0.00</span></div>
-    <div class="revenue-bar-wrap"><div class="revenue-bar" id="rev-bar" style="width:0%"></div></div>
-    <div class="metric-row"><span class="metric-label">This Week</span><span class="metric-val" id="rev-week" style="color:var(--gold2)">$0.00</span></div>
-    <div class="metric-row"><span class="metric-label">Best Listing</span><span class="metric-val" id="rev-best" style="color:var(--green)">—</span></div>
-    <div class="metric-row"><span class="metric-label">Profit Margin</span><span class="metric-val" id="rev-margin" style="color:var(--green)">0%</span></div>
-    <div class="weekly-row" id="weekly-chart"></div>
-    <div style="display:flex;justify-content:space-between;font-size:7px;color:#303050;font-family:'Share Tech Mono',monospace;margin-top:2px">
-      <span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span>
+<!-- ── DECISION BOARD ── -->
+<div class="decision-board">
+  <div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+      <div style="font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace;letter-spacing:2px">TEAM SYNERGY</div>
+      <div style="font-size:7px;color:#00ff88;font-family:'Share Tech Mono',monospace">92%</div>
     </div>
+    <div class="synergy-bar"><div class="synergy-fill"></div></div>
+    <div class="morale"><span style="font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace;letter-spacing:1px">MORALE</span>❤️❤️❤️❤️❤️</div>
   </div>
-
-  <div class="panel">
-    <div class="panel-title">// HUMAN APPROVAL LAYER</div>
-    <div id="approval-list"></div>
+  <div>
+    <div class="decision-title">DECISION BOARD</div>
+    <div class="decisions" id="decisions"></div>
   </div>
-
-  <div class="panel" style="flex:1">
-    <div class="panel-title">// AGENT COMMS LOG</div>
-    <div id="right-log"></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-title">// TOP NICHES</div>
-    <div id="niches"></div>
-  </div>
-</div>
-
-<!-- BOTTOM -->
-<div id="bottom">
-  <div id="bottom-left">
-    <div class="btm-title">// TRENDING NOW</div>
-    <div id="trends"></div>
-  </div>
-  <div id="bottom-center">
-    <div class="btm-title">// INTER-AGENT COMMUNICATION FEED</div>
-    <div id="comm-feed" style="display:flex;flex-direction:column;gap:2px;overflow:hidden;max-height:65px"></div>
-  </div>
-  <div id="bottom-right">
-    <div class="btm-title">// DAILY OPTIMIZATION</div>
-    <div id="opt-status" style="font-size:8px;color:#303050;font-family:'Share Tech Mono',monospace;line-height:1.8"></div>
+  <div class="vote-section">
+    <div style="display:flex;justify-content:space-between">
+      <div style="font-size:7px;color:#4a5060;font-family:'Share Tech Mono',monospace">VOTE NOW</div>
+      <div style="font-size:7px;color:#d4af37;font-family:'Share Tech Mono',monospace" id="vote-count">6/9 VOTED</div>
+    </div>
+    <div class="vote-bar"><div class="vote-fill" id="vote-bar" style="width:67%"></div></div>
+    <div class="agent-avatars" id="vote-avatars"></div>
   </div>
 </div>
 
+<!-- ── NAV ── -->
+<nav>
+  <button class="nav-btn active" onclick="setNav(this)"><span class="nav-icon">🌐</span>NETWORK</button>
+  <button class="nav-btn" onclick="setNav(this)"><span class="nav-icon">👥</span>MEETINGS</button>
+  <button class="nav-btn" onclick="setNav(this)"><span class="nav-icon">🤖</span>AGENTS</button>
+  <button class="nav-btn" onclick="setNav(this)"><span class="nav-icon">📋</span>PROJECTS</button>
+  <button class="nav-btn" onclick="setNav(this)"><span class="nav-icon">🎯</span>QUESTS</button>
+  <button class="nav-btn" onclick="setNav(this)"><span class="nav-icon">📦</span>INVENTORY</button>
+  <button class="nav-btn" onclick="setNav(this)"><span class="nav-icon">⚙</span>SETTINGS</button>
+</nav>
+
+</div>
+
+<!-- AGENT MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">✕</button>
+    <div id="modal-content"></div>
+  </div>
 </div>
 
 <script>
-// ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-let W, H, centerX, centerY;
-const canvasWrap = document.getElementById('canvas-wrap');
-
-function resize(){
-  const rect = canvasWrap.getBoundingClientRect();
-  W = canvas.width = rect.width || window.innerWidth;
-  H = canvas.height = rect.height || window.innerHeight;
-  centerX = W/2;
-  centerY = H/2;
-}
-window.addEventListener('resize', () => { resize(); initAgentPositions(); });
-
-// ─── AGENT DEFINITIONS ────────────────────────────────────────────────────────
+// ── DATA ──────────────────────────────────────────────────────────────────────
 const AGENTS = [
-  { id:0,  name:'TREND HUNTER',    icon:'🔍', color:'#00d4ff', role:'Market Intelligence',    tasks:['Scanning Etsy trends','Analyzing Pinterest data','Detecting viral niches','Monitoring competitors','Google Trends deep scan'] },
-  { id:1,  name:'PRODUCT FORGE',   icon:'⚒',  color:'#ff8c00', role:'Product Creation',       tasks:['Generating product ideas','Designing new items','Creating variations','Crafting bundles','Niche expansion'] },
-  { id:2,  name:'SEO AGENT',       icon:'📈', color:'#00ff88', role:'Search Optimization',     tasks:['Keyword research','Tag optimization','Title crafting','Algorithm analysis','Ranking improvement'] },
-  { id:3,  name:'DESIGN AGENT',    icon:'🎨', color:'#da70d6', role:'Visual Creation',         tasks:['Midjourney prompting','Canva automation','Mockup generation','Style iteration','Brand consistency'] },
-  { id:4,  name:'LISTING AGENT',   icon:'📝', color:'#ffd700', role:'Listing Management',      tasks:['Publishing listings','A/B testing copy','Price optimization','Photo ordering','Refresh cycle'] },
-  { id:5,  name:'ANALYTICS AGENT', icon:'📊', color:'#ff6a00', role:'Performance Tracking',    tasks:['Revenue analysis','CTR monitoring','Conversion tracking','Funnel analysis','ROI calculation'] },
-  { id:6,  name:'EVOLUTION AGENT', icon:'🧬', color:'#7b68ee', role:'Self-Improvement',        tasks:['Eliminating losers','Scaling winners','Model retraining','Strategy evolution','Memory update'] },
-  { id:7,  name:'CUSTOMER SVC',    icon:'💬', color:'#ff3a3a', role:'Customer Relations',      tasks:['Responding to messages','Review monitoring','Refund processing','FAQ automation','5-star pursuit'] },
-  { id:8,  name:'COMPLIANCE',      icon:'🛡',  color:'#20b2aa', role:'Policy Enforcement',      tasks:['IP checking','Policy scanning','TOS compliance','Copyright clearance','Risk assessment'] },
-  { id:9,  name:'SWARMX PRIME',    icon:'👑', color:'#d4af37', role:'Supreme Orchestrator',    tasks:['Coordinating all agents','Profit maximization','Strategic planning','Resource allocation','Evolution oversight'] },
+  { id:1, name:'TREND HUNTER', icon:'🔍', color:'#00ff88', role:'Data Scout', level:17, stat:'TREND SCORE', val:'98%', pct:98, desc:'Scanning viral niches across Etsy, Pinterest & TikTok.', skinTone:'#8B4513', hairColor:'#1a0a00' },
+  { id:2, name:'PRODUCT CREATOR', icon:'⚒', color:'#a855f7', role:'Innovator', level:17, stat:'PRODUCTS LIVE', val:'47', pct:74, desc:'Generating new print-on-demand designs and bundles.', skinTone:'#5C2E00', hairColor:'#000' },
+  { id:3, name:'MARKETING', icon:'📢', color:'#ff6a00', role:'Campaign Booster', level:16, stat:'CAMPAIGN REACH', val:'+124%', pct:88, desc:'Running multi-platform campaigns across all channels.', skinTone:'#3E1A00', hairColor:'#1a0800' },
+  { id:4, name:'SEO OPTIMIZATION', icon:'📈', color:'#00d4ff', role:'Rank Booster', level:17, stat:'RANKING', val:'#1', pct:91, desc:'Keywords optimized. Algorithm update response active.', skinTone:'#6B3A2A', hairColor:'#0a0500' },
+  { id:5, name:'LISTING & CONTENT', icon:'📝', color:'#ffd700', role:'Content Architect', level:16, stat:'CONTENT SCORE', val:'97%', pct:97, desc:'All listings optimized. A/B testing 12 listings.', skinTone:'#4A2010', hairColor:'#000' },
+  { id:6, name:'ANALYTICS', icon:'📊', color:'#ff3a8c', role:'Data Wizard', level:16, stat:'TRAFFIC', val:'28.4K', pct:65, desc:'Traffic -32% organic. Conversion holding at 8.2%.', skinTone:'#5C3010', hairColor:'#080300' },
+  { id:7, name:'PRICING & PROFIT', icon:'💰', color:'#ffd700', role:'Profit Optimizer', level:16, stat:'MARGIN', val:'65%', pct:82, desc:'Revenue $24,560 | Costs $8,420 | Profit $16,140', skinTone:'#3E1800', hairColor:'#0a0400' },
+  { id:8, name:'CUSTOMER SERVICE', icon:'💬', color:'#ff6347', role:'Client Care', level:15, stat:'CSAT SCORE', val:'98%', pct:98, desc:'Zero unresolved tickets. 5-star pursuit active.', skinTone:'#7B4A30', hairColor:'#1a0800' },
+  { id:9, name:'ADS & PAID TRAFFIC', icon:'🎯', color:'#7c3aed', role:'Ad Strategist', level:17, stat:'ROAS', val:'4.2x', pct:79, desc:'Google, Meta, TikTok running. Paid traffic stable.', skinTone:'#4A2810', hairColor:'#000' },
 ];
 
-// ─── AGENT STATE ──────────────────────────────────────────────────────────────
-let agentNodes = [];
-let ants = [];
-let particles = [];
-let dataPackets = [];
-let frame = 0;
-let revenue = 0, listings = 47, orders = 0, tasksDone = 0;
-let selectedAgent = null;
-let weeklyData = [120,185,205,340,280,420,0];
+const CHAT = [
+  {agent:'Manager',msg:"Let's break this down.",color:'#d4af37'},
+  {agent:'SEO Agent',msg:'Checking ranking data...',color:'#00d4ff'},
+  {agent:'Analytics Agent',msg:'Traffic dropped from organic.',color:'#ff3a8c'},
+  {agent:'Marketing Agent',msg:'Campaigns are stable.',color:'#ff6a00'},
+  {agent:'Product Creator',msg:'Could this be content related?',color:'#a855f7'},
+  {agent:'Pricing Agent',msg:'No pricing changes on our end.',color:'#ffd700'},
+  {agent:'Customer Svc',msg:'No spike in negative feedback.',color:'#ff6347'},
+  {agent:'Trend Hunter',msg:'Competitors hit same drop.',color:'#00ff88'},
+  {agent:'SEO Agent',msg:'Core update confirmed by Google.',color:'#00d4ff'},
+  {agent:'Manager',msg:'Initiating recovery protocol.',color:'#d4af37'},
+];
 
-function initAgentPositions(){
-  agentNodes = AGENTS.map((a, i) => {
-    const angle = (i / AGENTS.length) * Math.PI * 2 - Math.PI/2;
-    const r = Math.min(W, H) * 0.32;
-    return {
-      ...a,
-      x: centerX + Math.cos(angle) * r,
-      y: centerY + Math.sin(angle) * r,
-      angle,
-      radius: r,
-      pulsePhase: Math.random() * Math.PI * 2,
-      activity: 0.5 + Math.random() * 0.5,
-      taskIndex: Math.floor(Math.random() * a.tasks.length),
-      taskProgress: Math.random(),
-      busy: true,
-    };
-  });
-  initAnts();
-}
+const AGENDA = [
+  {id:1,title:'IDENTIFY ROOT CAUSE',status:'done'},
+  {id:2,title:'DATA ANALYSIS',status:'active'},
+  {id:3,title:'STRATEGY BRAINSTORM',status:'next'},
+  {id:4,title:'ACTION PLAN',status:'pending'},
+  {id:5,title:'TASK ASSIGNMENT',status:'pending'},
+];
 
-// ─── ANT SYSTEM ───────────────────────────────────────────────────────────────
-function spawnAnt(fromIdx, toIdx){
-  const from = agentNodes[fromIdx];
-  const to = agentNodes[toIdx];
-  return {
-    id: Math.random(),
-    from: fromIdx, to: toIdx,
-    x: from.x, y: from.y,
-    tx: to.x, ty: to.y,
-    progress: 0,
-    speed: 0.004 + Math.random() * 0.006,
-    size: 2.5 + Math.random() * 2,
-    color: from.color,
-    trail: [],
-    payload: Math.random() > 0.4,
-    done: false,
+const DECISIONS = [
+  {title:'UPDATE CONTENT STRATEGY',desc:'Focus on intent & topical depth',impact:'+18% Potential',color:'#00ff88'},
+  {title:'TECHNICAL SEO AUDIT',desc:'Check indexing / crawl issues',impact:'+22% Potential',color:'#00d4ff'},
+  {title:'DIVERSIFY TRAFFIC SOURCES',desc:'Increase social & paid channels',impact:'+20% Potential',color:'#ffd700'},
+];
+
+const NICHES = [
+  {name:'Halloween SVG',pct:92,color:'#ff6a00'},
+  {name:'Dog Mom Gifts',pct:87,color:'#a855f7'},
+  {name:'Custom Portraits',pct:83,color:'#ff3a8c'},
+  {name:'Boho Wall Art',pct:79,color:'#7c3aed'},
+];
+
+let meetingActive = true;
+let votes = 6;
+let chatIdx = 4;
+let agendaIdx = 1;
+let selectedDecision = null;
+
+// ── CHARACTER SVG ─────────────────────────────────────────────────────────────
+function makeCharSVG(agent, width, height) {
+  const s = agent.skinTone;
+  const h = agent.hairColor;
+  const c = agent.color;
+  const cx = width/2;
+  const floor = height * 0.75;
+  const deskY = floor - 8;
+  
+  // Different poses per agent
+  const poses = {
+    1: `
+      <!-- Background glow -->
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="5" rx="2" fill="#1a1a2e" stroke="${c}44"/>
+      <rect x="${cx-40}" y="${deskY+5}" width="8" height="15" fill="#12122a"/>
+      <rect x="${cx+32}" y="${deskY+5}" width="8" height="15" fill="#12122a"/>
+      <!-- Monitor -->
+      <rect x="${cx-25}" y="${deskY-28}" width="50" height="30" rx="2" fill="#0a0a1e" stroke="${c}66"/>
+      <rect x="${cx-22}" y="${deskY-25}" width="44" height="24" rx="1" fill="#050515"/>
+      <!-- Screen content -->
+      <rect x="${cx-20}" y="${deskY-23}" width="40" height="3" rx="1" fill="${c}66"/>
+      <rect x="${cx-20}" y="${deskY-18}" width="25" height="2" rx="1" fill="${c}33"/>
+      <rect x="${cx-20}" y="${deskY-14}" width="35" height="2" rx="1" fill="${c}22"/>
+      <polyline points="${cx-18},${deskY-6} ${cx-12},${deskY-9} ${cx-6},${deskY-7} ${cx},${deskY-11} ${cx+6},${deskY-8} ${cx+12},${deskY-10} ${cx+18},${deskY-5}" fill="none" stroke="${c}88" stroke-width="1.5"/>
+      <!-- Monitor stand -->
+      <rect x="${cx-3}" y="${deskY-2}" width="6" height="4" fill="#1a1a2e"/>
+      <!-- Person body -->
+      <rect x="${cx-12}" y="${floor-32}" width="24" height="22" rx="4" fill="${s}" opacity="0.9"/>
+      <!-- Shirt -->
+      <rect x="${cx-12}" y="${floor-22}" width="24" height="14" rx="3" fill="#1a2a1a"/>
+      <line x1="${cx}" y1="${floor-22}" x2="${cx}" y2="${floor-8}" stroke="${c}44" stroke-width="1"/>
+      <!-- Arms -->
+      <ellipse cx="${cx-18}" cy="${floor-20}" rx="6" ry="4" fill="${s}" opacity="0.8" transform="rotate(-20,${cx-18},${floor-20})"/>
+      <ellipse cx="${cx+18}" cy="${floor-20}" rx="6" ry="4" fill="${s}" opacity="0.8" transform="rotate(20,${cx+18},${floor-20})"/>
+      <!-- Hands on desk -->
+      <ellipse cx="${cx-22}" cy="${deskY-1}" rx="4" ry="3" fill="${s}" opacity="0.85"/>
+      <ellipse cx="${cx+22}" cy="${deskY-1}" rx="4" ry="3" fill="${s}" opacity="0.85"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-40}" rx="13" ry="14" fill="${s}"/>
+      <!-- Hair -->
+      <path d="M${cx-12},${floor-50} Q${cx},${floor-58} ${cx+12},${floor-50} Q${cx+14},${floor-42} ${cx+13},${floor-38} Q${cx},${floor-55} ${cx-13},${floor-38} Q${cx-14},${floor-42} ${cx-12},${floor-50}" fill="${h}"/>
+      <!-- Face details -->
+      <ellipse cx="${cx-4}" cy="${floor-41}" rx="2" ry="2.5" fill="#0a0505" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-41}" rx="2" ry="2.5" fill="#0a0505" opacity="0.7"/>
+      <path d="M${cx-3},${floor-35} Q${cx},${floor-33} ${cx+3},${floor-35}" fill="none" stroke="#0a0505" stroke-width="1" opacity="0.5"/>
+      <!-- Headphones -->
+      <path d="M${cx-13},${floor-50} Q${cx},${floor-60} ${cx+13},${floor-50}" fill="none" stroke="#333" stroke-width="3"/>
+      <rect x="${cx-16}" y="${floor-52}" width="6" height="8" rx="2" fill="#222"/>
+      <rect x="${cx+10}" y="${floor-52}" width="6" height="8" rx="2" fill="#222"/>
+      <!-- Glow effect -->
+      <ellipse cx="${cx}" cy="${floor-40}" rx="16" ry="17" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    2: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- 3D printer / product station -->
+      <rect x="${cx-40}" y="${deskY-20}" width="35" height="25" rx="3" fill="#0a0820" stroke="${c}44"/>
+      <rect x="${cx-38}" y="${deskY-18}" width="31" height="20" rx="2" fill="#050510"/>
+      <ellipse cx="${cx-22}" cy="${deskY-8}" rx="10" ry="10" fill="none" stroke="${c}55" stroke-width="1" stroke-dasharray="3,3"/>
+      <ellipse cx="${cx-22}" cy="${deskY-8}" rx="5" ry="5" fill="${c}22"/>
+      <!-- Design tablet -->
+      <rect x="${cx+5}" y="${deskY-22}" width="38" height="28" rx="3" fill="#0a0820" stroke="${c}44"/>
+      <rect x="${cx+7}" y="${deskY-20}" width="34" height="22" rx="2" fill="#080818"/>
+      <path d="M${cx+10},${deskY-15} L${cx+20},${deskY-5} L${cx+35},${deskY-18}" fill="none" stroke="${c}88" stroke-width="1.5"/>
+      <circle cx="${cx+28}" cy="${deskY-12}" r="4" fill="${c}44"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person -->
+      <rect x="${cx-11}" y="${floor-30}" width="22" height="20" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-11}" y="${floor-20}" width="22" height="12" rx="3" fill="#2a1a3a"/>
+      <!-- Creative vest -->
+      <polygon points="${cx-6},${floor-20} ${cx+6},${floor-20} ${cx+4},${floor-8} ${cx-4},${floor-8}" fill="${c}33"/>
+      <!-- Arms reaching forward -->
+      <path d="M${cx-11},${floor-22} Q${cx-20},${floor-16} ${cx-28},${deskY+2}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M${cx+11},${floor-22} Q${cx+20},${floor-16} ${cx+28},${deskY+2}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <ellipse cx="${cx-28}" cy="${deskY+1}" rx="4" ry="3" fill="${s}"/>
+      <ellipse cx="${cx+28}" cy="${deskY+1}" rx="4" ry="3" fill="${s}"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-38}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-11},${floor-47} Q${cx-4},${floor-54} ${cx+4},${floor-52} Q${cx+12},${floor-50} ${cx+11},${floor-43}" fill="${h}"/>
+      <!-- Locs/braids -->
+      <path d="M${cx-8},${floor-36} Q${cx-10},${floor-28} ${cx-7},${floor-22}" fill="none" stroke="${h}" stroke-width="2" opacity="0.6"/>
+      <path d="M${cx-4},${floor-37} Q${cx-6},${floor-28} ${cx-4},${floor-22}" fill="none" stroke="${h}" stroke-width="2" opacity="0.5"/>
+      <ellipse cx="${cx-4}" cy="${floor-39}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-39}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <path d="M${cx-3},${floor-33} Q${cx},${floor-31} ${cx+3},${floor-33}" fill="none" stroke="#0a0505" stroke-width="1" opacity="0.5"/>
+      <ellipse cx="${cx}" cy="${floor-38}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    3: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Multi-monitor setup -->
+      <rect x="${cx-42}" y="${deskY-25}" width="30" height="20" rx="2" fill="#0a0810" stroke="${c}44"/>
+      <rect x="${cx+14}" y="${deskY-22}" width="28" height="18" rx="2" fill="#0a0810" stroke="${c}33"/>
+      <!-- Social media icons on screens -->
+      <circle cx="${cx-32}" cy="${deskY-15}" r="5" fill="none" stroke="#e1306c" stroke-width="1.5"/>
+      <rect x="${cx-10}" y="${deskY-19}" width="8" height="8" rx="2" fill="none" stroke="#1da1f2" stroke-width="1.5"/>
+      <path d="M${cx+18},${deskY-17} L${cx+38},${deskY-17}" stroke="${c}44" stroke-width="1"/>
+      <rect x="${cx+18}" y="${deskY-15}" width="20" height="3" rx="1" fill="${c}33"/>
+      <rect x="${cx+18}" y="${deskY-11}" width="14" height="3" rx="1" fill="${c}22"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person standing/leaning -->
+      <rect x="${cx-10}" y="${floor-32}" width="20" height="24" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-10}" y="${floor-20}" width="20" height="14" rx="3" fill="#2a1020"/>
+      <rect x="${cx-5}" y="${floor-28}" width="10" height="12" rx="2" fill="${c}33"/>
+      <!-- One arm up presenting -->
+      <path d="M${cx+10},${floor-25} Q${cx+22},${floor-30} ${cx+28},${floor-38}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <ellipse cx="${cx+28}" cy="${floor-40}" rx="4" ry="4" fill="${s}"/>
+      <path d="M${cx-10},${floor-25} Q${cx-18},${floor-20} ${cx-22},${deskY+1}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-40}" rx="11" ry="12" fill="${s}"/>
+      <path d="M${cx-10},${floor-50} Q${cx},${floor-57} ${cx+10},${floor-50} L${cx+10},${floor-43} Q${cx},${floor-48} ${cx-10},${floor-43} Z" fill="${h}"/>
+      <ellipse cx="${cx-3.5}" cy="${floor-41}" rx="1.8" ry="2.2" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+3.5}" cy="${floor-41}" rx="1.8" ry="2.2" fill="#080304" opacity="0.7"/>
+      <!-- Earpiece -->
+      <circle cx="${cx+11}" cy="${floor-40}" r="3" fill="#222" stroke="${c}66" stroke-width="1"/>
+      <ellipse cx="${cx}" cy="${floor-40}" rx="13" ry="14" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    4: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- SEO keyword grid on big screen -->
+      <rect x="${cx-40}" y="${deskY-30}" width="80" height="32" rx="3" fill="#050518" stroke="${c}66"/>
+      <rect x="${cx-38}" y="${deskY-28}" width="76" height="26" rx="2" fill="#030310"/>
+      <!-- Chart bars -->
+      ${[0,1,2,3,4,5,6].map((i)=>`<rect x="${cx-34+i*11}" y="${deskY-28+Math.floor(Math.random()*15+5)}" width="8" height="${20-Math.floor(Math.random()*15)}" rx="1" fill="${c}" opacity="${0.4+Math.random()*0.5}"/>`).join('')}
+      <!-- #1 badge on screen -->
+      <text x="${cx+28}" y="${deskY-12}" fill="${c}" font-size="11" font-family="'Orbitron',monospace" font-weight="900">#1</text>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person focused -->
+      <rect x="${cx-11}" y="${floor-28}" width="22" height="20" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-11}" y="${floor-18}" width="22" height="12" rx="3" fill="#0a1a2a"/>
+      <path d="M${cx-10},${floor-26} Q${cx-20},${floor-22} ${cx-26},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M${cx+10},${floor-26} Q${cx+20},${floor-22} ${cx+26},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <ellipse cx="${cx-26}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <ellipse cx="${cx+26}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <!-- Head leaning forward -->
+      <ellipse cx="${cx}" cy="${floor-36}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-11},${floor-47} Q${cx},${floor-52} ${cx+11},${floor-47} L${cx+11},${floor-42} Q${cx},${floor-46} ${cx-11},${floor-42} Z" fill="${h}"/>
+      <ellipse cx="${cx-4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <!-- Glasses -->
+      <rect x="${cx-9}" y="${floor-40}" width="7" height="5" rx="2" fill="none" stroke="#aac" stroke-width="1" opacity="0.7"/>
+      <rect x="${cx+2}" y="${floor-40}" width="7" height="5" rx="2" fill="none" stroke="#aac" stroke-width="1" opacity="0.7"/>
+      <line x1="${cx-2}" y1="${floor-37}" x2="${cx+2}" y2="${floor-37}" stroke="#aac" stroke-width="1" opacity="0.7"/>
+      <ellipse cx="${cx}" cy="${floor-36}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    5: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Content board -->
+      <rect x="${cx-38}" y="${deskY-28}" width="76" height="30" rx="3" fill="#100a00" stroke="${c}55"/>
+      <rect x="${cx-36}" y="${deskY-26}" width="72" height="24" rx="2" fill="#0a0800"/>
+      <!-- Content score -->
+      <text x="${cx-10}" y="${deskY-8}" fill="${c}" font-size="14" font-family="'Orbitron',monospace" font-weight="900">97%</text>
+      <text x="${cx+25}" y="${deskY-10}" fill="${c}" font-size="14">✅</text>
+      <rect x="${cx-34}" y="${deskY-24}" width="40" height="3" rx="1" fill="${c}55"/>
+      <rect x="${cx-34}" y="${deskY-19}" width="30" height="2" rx="1" fill="${c}33"/>
+      <rect x="${cx-34}" y="${deskY-15}" width="35" height="2" rx="1" fill="${c}22"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person with clipboard -->
+      <rect x="${cx-11}" y="${floor-30}" width="22" height="22" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-11}" y="${floor-18}" width="22" height="12" rx="3" fill="#1a1000"/>
+      <!-- Clipboard in hand -->
+      <path d="M${cx+10},${floor-24} Q${cx+22},${floor-20} ${cx+28},${floor-16}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <rect x="${cx+22}" y="${floor-24}" width="14" height="18" rx="2" fill="#2a2010" stroke="${c}55"/>
+      <rect x="${cx+24}" y="${floor-22}" width="10" height="2" rx="1" fill="${c}44"/>
+      <rect x="${cx+24}" y="${floor-18}" width="8" height="2" rx="1" fill="${c}33"/>
+      <rect x="${cx+24}" y="${floor-14}" width="9" height="2" rx="1" fill="${c}22"/>
+      <path d="M${cx-10},${floor-24} Q${cx-20},${floor-18} ${cx-24},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-38}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-11},${floor-48} Q${cx-2},${floor-54} ${cx+6},${floor-51} Q${cx+12},${floor-47} ${cx+11},${floor-42}" fill="${h}"/>
+      <!-- Ponytail -->
+      <path d="M${cx+8},${floor-47} Q${cx+16},${floor-42} ${cx+14},${floor-30}" fill="none" stroke="${h}" stroke-width="4"/>
+      <ellipse cx="${cx-4}" cy="${floor-38}" rx="2" ry="2.5" fill="#0a0505" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-38}" rx="2" ry="2.5" fill="#0a0505" opacity="0.7"/>
+      <path d="M${cx-3},${floor-33} Q${cx},${floor-31} ${cx+3},${floor-33}" fill="none" stroke="#0a0505" stroke-width="1" opacity="0.5"/>
+      <ellipse cx="${cx}" cy="${floor-38}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    6: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Dual monitors with data -->
+      <rect x="${cx-42}" y="${deskY-24}" width="36" height="22" rx="2" fill="#0a0510" stroke="${c}44"/>
+      <rect x="${cx+8}" y="${deskY-24}" width="36" height="22" rx="2" fill="#0a0510" stroke="${c}33"/>
+      <!-- Pie chart left -->
+      <circle cx="${cx-24}" cy="${deskY-13}" r="8" fill="none" stroke="${c}" stroke-width="4" stroke-dasharray="25,7" opacity="0.7"/>
+      <!-- Traffic numbers right -->
+      <text x="${cx+10}" y="${deskY-13}" fill="${c}" font-size="9" font-family="'Orbitron',monospace" font-weight="700">28.4K</text>
+      <text x="${cx+10}" y="${deskY-6}" fill="${c}88" font-size="7" font-family="'Share Tech Mono',monospace">+15.4%</text>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person analyzing -->
+      <rect x="${cx-11}" y="${floor-28}" width="22" height="20" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-11}" y="${floor-18}" width="22" height="12" rx="3" fill="#1a0010"/>
+      <path d="M${cx-11},${floor-22} Q${cx-24},${floor-18} ${cx-30},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M${cx+11},${floor-22} Q${cx+20},${floor-16} ${cx+24},${deskY-1}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <ellipse cx="${cx-30}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <ellipse cx="${cx+24}" cy="${deskY-2}" rx="4" ry="3" fill="${s}"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-36}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-11},${floor-46} Q${cx},${floor-52} ${cx+11},${floor-46} L${cx+11},${floor-40} Q${cx},${floor-44} ${cx-11},${floor-40} Z" fill="${h}"/>
+      <ellipse cx="${cx-4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <!-- VR-style glasses -->
+      <rect x="${cx-10}" y="${floor-40}" width="20" height="6" rx="3" fill="#111" stroke="${c}55" stroke-width="1" opacity="0.8"/>
+      <ellipse cx="${cx}" cy="${floor-36}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    7: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Finance dashboard -->
+      <rect x="${cx-42}" y="${deskY-28}" width="84" height="30" rx="3" fill="#0a0800" stroke="${c}55"/>
+      <rect x="${cx-40}" y="${deskY-26}" width="80" height="24" rx="2" fill="#050500"/>
+      <!-- P&L numbers -->
+      <text x="${cx-38}" y="${deskY-18}" fill="#a0a060" font-size="7" font-family="'Share Tech Mono',monospace">REVENUE</text>
+      <text x="${cx-8}" y="${deskY-18}" fill="${c}" font-size="8" font-family="'Orbitron',monospace" font-weight="700">$24,560</text>
+      <text x="${cx-38}" y="${deskY-10}" fill="#a0a060" font-size="7" font-family="'Share Tech Mono',monospace">PROFIT</text>
+      <text x="${cx-8}" y="${deskY-10}" fill="#00ff88" font-size="8" font-family="'Orbitron',monospace" font-weight="700">$16,140</text>
+      <!-- Trend line -->
+      <polyline points="${cx+28},${deskY-22} ${cx+34},${deskY-26} ${cx+40},${deskY-20} ${cx+38},${deskY-14}" fill="none" stroke="#00ff88" stroke-width="2"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person in suit -->
+      <rect x="${cx-11}" y="${floor-28}" width="22" height="20" rx="4" fill="${s}" opacity="0.9"/>
+      <!-- Suit -->
+      <rect x="${cx-11}" y="${floor-18}" width="22" height="12" rx="3" fill="#0a0a1a"/>
+      <polygon points="${cx-4},${floor-28} ${cx},${floor-18} ${cx+4},${floor-28}" fill="#fff" opacity="0.15"/>
+      <rect x="${cx-1}" y="${floor-26}" width="2" height="10" fill="${c}55"/>
+      <path d="M${cx-10},${floor-24} Q${cx-22},${floor-18} ${cx-26},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M${cx+10},${floor-24} Q${cx+22},${floor-18} ${cx+26},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <ellipse cx="${cx-26}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <ellipse cx="${cx+26}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-36}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-11},${floor-47} Q${cx},${floor-52} ${cx+11},${floor-47} L${cx+12},${floor-41} Q${cx},${floor-45} ${cx-12},${floor-41} Z" fill="${h}"/>
+      <ellipse cx="${cx-4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <!-- Smile -->
+      <path d="M${cx-3},${floor-32} Q${cx},${floor-30} ${cx+3},${floor-32}" fill="none" stroke="#0a0505" stroke-width="1" opacity="0.6"/>
+      <ellipse cx="${cx}" cy="${floor-36}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    8: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Customer service station -->
+      <rect x="${cx-40}" y="${deskY-26}" width="80" height="28" rx="3" fill="#0a0500" stroke="${c}44"/>
+      <rect x="${cx-38}" y="${deskY-24}" width="76" height="20" rx="2" fill="#050300"/>
+      <!-- CSAT display -->
+      <text x="${cx-14}" y="${deskY-12}" fill="${c}" font-size="14" font-family="'Orbitron',monospace" font-weight="900">98%</text>
+      <text x="${cx+22}" y="${deskY-8}" fill="#ffd700" font-size="10">⭐⭐</text>
+      <!-- Chat bubbles -->
+      <rect x="${cx-36}" y="${deskY-22}" width="18" height="8" rx="3" fill="${c}22"/>
+      <rect x="${cx-36}" y="${deskY-12}" width="14" height="7" rx="3" fill="${c}15"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person with headset -->
+      <rect x="${cx-11}" y="${floor-28}" width="22" height="20" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-11}" y="${floor-18}" width="22" height="12" rx="3" fill="#2a0a08"/>
+      <path d="M${cx-10},${floor-24} Q${cx-22},${floor-20} ${cx-26},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M${cx+10},${floor-24} Q${cx+22},${floor-20} ${cx+26},${deskY}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <ellipse cx="${cx-26}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <ellipse cx="${cx+26}" cy="${deskY-1}" rx="4" ry="3" fill="${s}"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-37}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-10},${floor-47} Q${cx+2},${floor-54} ${cx+10},${floor-49} Q${cx+12},${floor-43} ${cx+11},${floor-40}" fill="${h}"/>
+      <path d="M${cx-10},${floor-47} Q${cx-12},${floor-43} ${cx-11},${floor-40}" fill="${h}"/>
+      <ellipse cx="${cx-4}" cy="${floor-38}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-38}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <path d="M${cx-3},${floor-33} Q${cx},${floor-31} ${cx+3},${floor-33}" fill="none" stroke="#0a0505" stroke-width="1" opacity="0.5"/>
+      <!-- Headset -->
+      <path d="M${cx-12},${floor-48} Q${cx},${floor-58} ${cx+12},${floor-48}" fill="none" stroke="#333" stroke-width="2.5"/>
+      <rect x="${cx-14}" y="${floor-49}" width="5" height="7" rx="2" fill="#222" stroke="${c}55"/>
+      <rect x="${cx+9}" y="${floor-49}" width="5" height="7" rx="2" fill="#222" stroke="${c}55"/>
+      <path d="M${cx+9},${floor-46} Q${cx+16},${floor-44} ${cx+18},${floor-40}" fill="none" stroke="#333" stroke-width="1.5"/>
+      <circle cx="${cx+18}" cy="${floor-40}" r="2" fill="#333"/>
+      <ellipse cx="${cx}" cy="${floor-37}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
+    9: `
+      <ellipse cx="${cx}" cy="${height*0.85}" rx="55" ry="8" fill="${c}15"/>
+      <!-- Ads dashboard -->
+      <rect x="${cx-42}" y="${deskY-28}" width="84" height="30" rx="3" fill="#0a0015" stroke="${c}44"/>
+      <rect x="${cx-40}" y="${deskY-26}" width="80" height="22" rx="2" fill="#060010"/>
+      <!-- Google/Meta/TikTok logos -->
+      <circle cx="${cx-28}" cy="${deskY-18}" r="5" fill="none" stroke="#4285f4" stroke-width="1.5"/>
+      <text x="${cx-30}" y="${deskY-15}" fill="#4285f4" font-size="6" font-weight="700">G</text>
+      <rect x="${cx-14}" y="${deskY-22}" width="8" height="8" rx="1" fill="none" stroke="#1877f2" stroke-width="1.5"/>
+      <text x="${cx-13}" y="${deskY-15}" fill="#1877f2" font-size="6" font-weight="700">f</text>
+      <rect x="${cx}" y="${deskY-22}" width="8" height="8" rx="1" fill="none" stroke="#ff0050" stroke-width="1.5"/>
+      <text x="${cx+1}" y="${deskY-15}" fill="#ff0050" font-size="6" font-weight="700">T</text>
+      <!-- ROAS -->
+      <text x="${cx+12}" y="${deskY-14}" fill="${c}" font-size="11" font-family="'Orbitron',monospace" font-weight="900">4.2x</text>
+      <!-- Mini bar chart -->
+      <rect x="${cx-38}" y="${deskY-11}" width="8" height="7" rx="1" fill="#4285f4" opacity="0.7"/>
+      <rect x="${cx-28}" y="${deskY-9}" width="8" height="5" rx="1" fill="#1877f2" opacity="0.7"/>
+      <rect x="${cx-18}" y="${deskY-13}" width="8" height="9" rx="1" fill="#ff0050" opacity="0.7"/>
+      <!-- Desk -->
+      <rect x="${cx-45}" y="${deskY}" width="90" height="4" rx="2" fill="#1a1a2e" stroke="${c}33"/>
+      <!-- Person strategic pose -->
+      <rect x="${cx-11}" y="${floor-28}" width="22" height="20" rx="4" fill="${s}" opacity="0.9"/>
+      <rect x="${cx-11}" y="${floor-18}" width="22" height="12" rx="3" fill="#1a0a25"/>
+      <!-- Crossed arms -->
+      <path d="M${cx-11},${floor-22} Q${cx-5},${floor-18} ${cx+8},${floor-18}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M${cx+11},${floor-22} Q${cx+5},${floor-18} ${cx-8},${floor-18}" fill="none" stroke="${s}" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <!-- Head -->
+      <ellipse cx="${cx}" cy="${floor-36}" rx="12" ry="13" fill="${s}"/>
+      <path d="M${cx-11},${floor-46} Q${cx},${floor-52} ${cx+11},${floor-46} L${cx+12},${floor-40} Q${cx},${floor-44} ${cx-12},${floor-40} Z" fill="${h}"/>
+      <ellipse cx="${cx-4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <ellipse cx="${cx+4}" cy="${floor-37}" rx="2" ry="2.5" fill="#080304" opacity="0.7"/>
+      <!-- Determined look -->
+      <path d="M${cx-6},${floor-41} L${cx-2},${floor-40}" stroke="#0a0304" stroke-width="1" opacity="0.5"/>
+      <path d="M${cx+2},${floor-40} L${cx+6},${floor-41}" stroke="#0a0304" stroke-width="1" opacity="0.5"/>
+      <path d="M${cx-2},${floor-33} Q${cx},${floor-32} ${cx+2},${floor-33}" fill="none" stroke="#0a0505" stroke-width="1" opacity="0.4"/>
+      <ellipse cx="${cx}" cy="${floor-36}" rx="14" ry="15" fill="none" stroke="${c}22" stroke-width="2"/>
+    `,
   };
+  
+  return `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+    <defs>
+      <radialGradient id="bg${agent.id}" cx="50%" cy="80%" r="50%">
+        <stop offset="0%" stop-color="${agent.color}" stop-opacity="0.08"/>
+        <stop offset="100%" stop-color="#030508" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#bg${agent.id})"/>
+    ${poses[agent.id] || poses[1]}
+  </svg>`;
 }
 
-function initAnts(){
-  ants = [];
-  for(let i=0;i<25;i++){
-    const from = Math.floor(Math.random()*AGENTS.length);
-    let to = Math.floor(Math.random()*AGENTS.length);
-    while(to===from) to = Math.floor(Math.random()*AGENTS.length);
-    const ant = spawnAnt(from, to);
-    ant.progress = Math.random();
-    ants.push(ant);
-  }
-}
-
-function updateAnts(){
-  ants.forEach(ant => {
-    ant.progress += ant.speed;
-    const t = ant.progress;
-    // Bezier curve path through center
-    const cx = centerX + (Math.random()-0.5)*40;
-    const cy = centerY + (Math.random()-0.5)*40;
-    ant.x = (1-t)*(1-t)*agentNodes[ant.from].x + 2*(1-t)*t*cx + t*t*agentNodes[ant.to].x;
-    ant.y = (1-t)*(1-t)*agentNodes[ant.from].y + 2*(1-t)*t*cy + t*t*agentNodes[ant.to].y;
-    ant.trail.push({x:ant.x,y:ant.y});
-    if(ant.trail.length>15) ant.trail.shift();
-    if(ant.progress>=1){
-      ant.done = true;
-      // Spawn new ant
-      const from = ant.to;
-      let to = Math.floor(Math.random()*AGENTS.length);
-      while(to===from) to = Math.floor(Math.random()*AGENTS.length);
-      ants.push(spawnAnt(from, to));
-      tasksDone++;
-    }
-  });
-  ants = ants.filter(a => !a.done);
-  // Keep population
-  while(ants.length < 20){
-    const from = Math.floor(Math.random()*AGENTS.length);
-    let to = Math.floor(Math.random()*AGENTS.length);
-    while(to===from) to = Math.floor(Math.random()*AGENTS.length);
-    ants.push(spawnAnt(from, to));
-  }
-}
-
-// ─── PARTICLES ────────────────────────────────────────────────────────────────
-function spawnParticle(x, y, color){
-  for(let i=0;i<4;i++){
-    const angle = Math.random()*Math.PI*2;
-    const speed = 0.5+Math.random()*2;
-    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:1,color,r:1.5+Math.random()*2});
-  }
-}
-
-// ─── DRAW ─────────────────────────────────────────────────────────────────────
-function draw(){
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = '#030508';
-  ctx.fillRect(0,0,W,H);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(212,175,55,0.025)';
-  ctx.lineWidth = 0.5;
-  for(let x=0;x<W;x+=35){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
-  for(let y=0;y<H;y+=35){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
-
-  // Center hub glow
-  const hubGrad = ctx.createRadialGradient(centerX,centerY,0,centerX,centerY,80);
-  hubGrad.addColorStop(0,'rgba(212,175,55,0.12)');
-  hubGrad.addColorStop(0.5,'rgba(212,175,55,0.04)');
-  hubGrad.addColorStop(1,'transparent');
-  ctx.fillStyle = hubGrad;
-  ctx.beginPath();ctx.arc(centerX,centerY,80,0,Math.PI*2);ctx.fill();
-
-  // Rotating rings around center
-  [60,80,100].forEach((r,i) => {
-    ctx.save();
-    ctx.translate(centerX,centerY);
-    ctx.rotate(frame*0.002*(i%2===0?1:-1));
-    ctx.beginPath();
-    ctx.arc(0,0,r,0,Math.PI*2);
-    ctx.strokeStyle = `rgba(212,175,55,${0.06-i*0.01})`;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4,8]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  });
-
-  // Center crown
-  ctx.font = '28px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#d4af37';
-  ctx.shadowColor = '#d4af37';
-  ctx.shadowBlur = 20;
-  ctx.fillText('👑', centerX, centerY);
-  ctx.shadowBlur = 0;
-
-  // Connection lines between agents
-  agentNodes.forEach((a, i) => {
-    agentNodes.forEach((b, j) => {
-      if(j<=i) return;
-      const dist = Math.hypot(a.x-b.x,a.y-b.y);
-      if(dist > Math.min(W,H)*0.55) return;
-      ctx.beginPath();
-      ctx.moveTo(a.x,a.y);
-      ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle = a.color+'11';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    });
-    // Line to center
-    ctx.beginPath();
-    ctx.moveTo(a.x,a.y);
-    ctx.lineTo(centerX,centerY);
-    ctx.strokeStyle = a.color+'22';
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([3,6]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  });
-
-  // Ant trails
-  ants.forEach(ant => {
-    if(ant.trail.length<2) return;
-    ctx.beginPath();
-    ctx.moveTo(ant.trail[0].x,ant.trail[0].y);
-    ant.trail.forEach(p=>ctx.lineTo(p.x,p.y));
-    ctx.strokeStyle = ant.color+'33';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  });
-
-  // Ants (agents in motion)
-  ants.forEach(ant => {
-    const pulse = Math.sin(frame*0.1+ant.id*10)*0.3+0.7;
-    // Glow
-    const g = ctx.createRadialGradient(ant.x,ant.y,0,ant.x,ant.y,ant.size*3);
-    g.addColorStop(0,ant.color+'55');g.addColorStop(1,'transparent');
-    ctx.fillStyle=g;ctx.beginPath();ctx.arc(ant.x,ant.y,ant.size*3,0,Math.PI*2);ctx.fill();
-    // Body
-    ctx.beginPath();ctx.arc(ant.x,ant.y,ant.size*pulse,0,Math.PI*2);
-    ctx.fillStyle=ant.color;ctx.fill();
-    // Payload
-    if(ant.payload){
-      ctx.beginPath();ctx.arc(ant.x,ant.y-ant.size-2,1.5,0,Math.PI*2);
-      ctx.fillStyle='#fff';ctx.fill();
-    }
-  });
-
-  // Particles
-  particles.forEach(p => {
-    p.x+=p.vx;p.y+=p.vy;p.life-=0.02;p.vy+=0.05;
-    ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);
-    ctx.fillStyle=p.color+(Math.floor(p.life*255).toString(16).padStart(2,'0'));
-    ctx.fill();
-  });
-  particles=particles.filter(p=>p.life>0);
-
-  // Agent nodes
-  agentNodes.forEach((a,i) => {
-    const pulse = Math.sin(frame*0.05+a.pulsePhase)*0.15+0.85;
-    const isSelected = selectedAgent===i;
-    const r = isSelected?28:22;
-
-    // Orbit ring
-    ctx.save();
-    ctx.translate(a.x,a.y);
-    ctx.rotate(frame*0.01*(i%2===0?1:-1));
-    ctx.beginPath();ctx.arc(0,0,r+8,0,Math.PI*1.5);
-    ctx.strokeStyle=a.color+'44';ctx.lineWidth=1;ctx.stroke();
-    ctx.restore();
-
-    // Pulse ring
-    if(isSelected){
-      ctx.beginPath();ctx.arc(a.x,a.y,r+14,0,Math.PI*2);
-      ctx.strokeStyle=a.color+'66';ctx.lineWidth=1.5;ctx.stroke();
-    }
-
-    // Main circle
-    const grad=ctx.createRadialGradient(a.x-4,a.y-4,0,a.x,a.y,r*pulse);
-    grad.addColorStop(0,a.color+'33');grad.addColorStop(1,'#030508');
-    ctx.beginPath();ctx.arc(a.x,a.y,r*pulse,0,Math.PI*2);
-    ctx.fillStyle=grad;ctx.fill();
-    ctx.strokeStyle=isSelected?a.color:a.color+'88';
-    ctx.lineWidth=isSelected?2:1;
-    ctx.stroke();
-    ctx.shadowColor=a.color;ctx.shadowBlur=isSelected?20:8;
-
-    // Task progress arc
-    ctx.beginPath();
-    ctx.arc(a.x,a.y,r*pulse+3,-Math.PI/2,-Math.PI/2+a.taskProgress*Math.PI*2);
-    ctx.strokeStyle=a.color+'88';ctx.lineWidth=2;ctx.stroke();
-    ctx.shadowBlur=0;
-
-    // Icon
-    ctx.font=`${isSelected?18:14}px serif`;
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(a.icon,a.x,a.y);
-
-    // Activity dot
-    const dotX=a.x+r*Math.cos(-Math.PI/4),dotY=a.y+r*Math.sin(-Math.PI/4);
-    ctx.beginPath();ctx.arc(dotX,dotY,3,0,Math.PI*2);
-    ctx.fillStyle=a.color;
-    ctx.shadowColor=a.color;ctx.shadowBlur=6;
-    ctx.fill();ctx.shadowBlur=0;
-
-    // Label below
-    ctx.font=`700 8px 'Share Tech Mono', monospace`;
-    ctx.textAlign='center';ctx.textBaseline='top';
-    ctx.fillStyle=isSelected?a.color:a.color+'cc';
-    ctx.fillText(a.name, a.x, a.y+r*pulse+6);
-  });
-
-  // Click hitboxes invisible — handled in click listener
-}
-
-// ─── ANIMATION LOOP ───────────────────────────────────────────────────────────
-let revenueTarget=0,ordersTarget=0;
-
-function update(){
-  frame++;
-  updateAnts();
-
-  // Drift agent positions slightly
-  agentNodes.forEach(a => {
-    a.pulsePhase+=0.02;
-    a.taskProgress+=0.003;
-    if(a.taskProgress>1){
-      a.taskProgress=0;
-      a.taskIndex=(a.taskIndex+1)%a.tasks.length;
-    }
-    a.activity=0.5+Math.sin(frame*0.01+a.id)*0.5;
-  });
-
-  // Simulate revenue
-  if(frame%60===0) revenueTarget+=Math.random()*8.5+1;
-  revenue+=(revenueTarget-revenue)*0.05;
-  if(frame%180===0) ordersTarget+=Math.floor(Math.random()*2);
-  orders+=(ordersTarget-orders)*0.1;
-
-  // Weekly bar grow
-  weeklyData[6]=Math.min(revenue,500);
-
-  // Update stats
-  const fmt=v=>'$'+v.toFixed(2);
-  document.getElementById('h-revenue').textContent=fmt(revenue);
-  document.getElementById('h-listings').textContent=listings;
-  document.getElementById('h-orders').textContent=Math.floor(orders);
-  document.getElementById('h-conversion').textContent=(2.3+Math.sin(frame*0.005)*0.8).toFixed(1)+'%';
-  document.getElementById('h-tasks').textContent=tasksDone;
-  document.getElementById('h-time').textContent=new Date().toLocaleTimeString();
-  document.getElementById('rev-today').textContent=fmt(revenue);
-  document.getElementById('rev-bar').style.width=Math.min(revenue/5,100)+'%';
-  document.getElementById('rev-week').textContent=fmt(revenue+weeklyData.slice(0,6).reduce((a,b)=>a+b,0));
-  document.getElementById('rev-margin').textContent=Math.round(62+Math.sin(frame*0.01)*5)+'%';
-
-  // Weekly chart
-  const maxW=Math.max(...weeklyData,1);
-  document.getElementById('weekly-chart').innerHTML=weeklyData.map((v,i)=>
-    `<div class="weekly-bar" style="height:${Math.round((v/maxW)*100)}%;opacity:${i===6?0.9:0.5};background:${i===6?'var(--gold2)':'var(--gold)'}" title="${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]}: $${v.toFixed(0)}"></div>`
-  ).join('');
-
-  // System health
-  document.getElementById('sys-health').innerHTML=`
-    CPU LOAD: ${Math.round(55+Math.sin(frame*0.02)*30)}%<br>
-    MEMORY: ${Math.round(62+Math.sin(frame*0.015)*15)}%<br>
-    API CALLS: ${tasksDone*3}<br>
-    VECTOR DB: ONLINE<br>
-    SUPABASE: ONLINE<br>
-    ETSY API: LIVE<br>
-    PRINTIFY: READY<br>
-    UPTIME: ${Math.floor(frame/60)}s
+// ── BUILD ROOMS ───────────────────────────────────────────────────────────────
+function buildRoom(agent) {
+  const div = document.createElement('div');
+  div.className = 'room';
+  div.style.background = agent.bg || `rgba(${hexToRgb(agent.color)},0.04)`;
+  div.style.border = `1px solid ${agent.color}44`;
+  div.style.setProperty('border-top-color', agent.color + '88');
+  div.style.setProperty('border-left-color', agent.color + '88');
+  
+  // Corner colors
+  div.style.cssText += `--corner-color:${agent.color};`;
+  
+  div.innerHTML = `
+    <div class="room-inner">
+      <div class="room-header">
+        <div>
+          <span style="font-size:10px;margin-right:4px">${agent.icon}</span>
+          <span class="room-name" style="color:${agent.color}">${agent.id}. ${agent.name}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="room-level">Lv.${agent.level}</span>
+          <div class="active-dot" style="background:${agent.color};box-shadow:0 0 6px ${agent.color};position:relative;top:0;right:0;width:6px;height:6px;border-radius:50%;animation:blink ${1+agent.id*0.2}s infinite"></div>
+        </div>
+      </div>
+      <div class="char-area">${makeCharSVG(agent, 160, 90)}</div>
+      <div>
+        <div class="stat-label">${agent.stat}</div>
+        <div class="room-stat" style="color:${agent.color}">${agent.val}</div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${agent.pct}%;background:${agent.color};box-shadow:0 0 6px ${agent.color}" data-width="${agent.pct}"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:2px">
+          <span class="room-role">${agent.role}</span>
+          <span style="font-size:7px;color:${agent.color};font-family:'Share Tech Mono',monospace">${agent.pct}%</span>
+        </div>
+      </div>
+    </div>
   `;
+  
+  // Corner decoration
+  div.style.setProperty('--cc', agent.color);
+  const bStyle = `2px solid ${agent.color}88`;
+  div.style.borderTop = bStyle;
+  div.style.borderLeft = bStyle;
+  div.style.borderRight = `1px solid ${agent.color}33`;
+  div.style.borderBottom = `1px solid ${agent.color}33`;
+  
+  div.addEventListener('click', () => showModal(agent));
+  return div;
+}
+
+function buildCenterRoom() {
+  const div = document.createElement('div');
+  div.className = 'center-room';
+  div.style.cssText = `border-radius:8px;border:1px solid #d4af3744;background:rgba(6,8,20,0.95);display:flex;flex-direction:column;padding:10px;position:relative;overflow:hidden;`;
+  
+  div.innerHTML = `
+    <div style="background:rgba(255,58,58,0.08);border:1px solid #ff3a3a55;border-radius:5px;padding:7px 10px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+        <span style="font-size:12px;animation:blink 1s infinite">⚠️</span>
+        <span style="font-size:8px;color:#ff3a3a;font-family:'Share Tech Mono',monospace;letter-spacing:2px;font-weight:700">PROBLEM ARRIVED</span>
+      </div>
+      <div style="font-size:13px;font-weight:900;color:#ff3a3a;font-family:'Orbitron',monospace;line-height:1.2">ORGANIC TRAFFIC DROP -32%</div>
+      <div style="font-size:8px;color:#7a3030;font-family:'Share Tech Mono',monospace;margin-top:2px">CAUSE: Algorithm Update (Google Core)</div>
+      <div style="font-size:7px;color:#5a2020;font-family:'Share Tech Mono',monospace">IMPACT: Rankings Falling • Fewer Visitors • Revenue At Risk</div>
+    </div>
+    <div id="meeting-label" style="text-align:center;font-size:8px;color:#d4af37;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:4px">⚡ SWARM MEETING IN PROGRESS...</div>
+    
+    <!-- MEETING TABLE with SVG characters -->
+    <div style="flex:1;position:relative;display:flex;align-items:center;justify-content:center;">
+      <svg id="meeting-svg" viewBox="0 0 220 130" style="width:100%;height:100%">
+        <defs>
+          <radialGradient id="tableGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#d4af37" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="#d4af37" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <!-- Table glow -->
+        <ellipse cx="110" cy="75" rx="60" ry="35" fill="url(#tableGlow)"/>
+        <ellipse cx="110" cy="75" rx="58" ry="33" fill="none" stroke="#d4af3755" stroke-width="1.5"/>
+        <ellipse cx="110" cy="75" rx="40" ry="22" fill="rgba(212,175,55,0.06)" stroke="#d4af3733" stroke-width="1"/>
+        <!-- J hologram -->
+        <text x="110" y="82" text-anchor="middle" fill="#d4af37" font-size="22" font-family="'Orbitron',monospace" font-weight="900" opacity="0.9" style="text-shadow:0 0 10px #d4af37">J</text>
+        <!-- Hologram ring -->
+        <ellipse cx="110" cy="78" rx="18" ry="10" fill="none" stroke="#d4af3766" stroke-width="1" stroke-dasharray="3,3"/>
+        
+        <!-- Characters around table - simplified but person-like -->
+        <!-- Position 1: Top center -->
+        <g transform="translate(110,18)">
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="#5C2E00"/>
+          <path d="M-7,-8 Q0,-15 7,-8 L7,-3 Q0,-10 -7,-3 Z" fill="#0a0500"/>
+          <ellipse cx="-3" cy="1" rx="1.5" ry="2" fill="#080304" opacity="0.7"/>
+          <ellipse cx="3" cy="1" rx="1.5" ry="2" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="9" ry="10" fill="none" stroke="#00ff8844" stroke-width="1"/>
+          <rect x="-8" y="9" width="16" height="10" rx="3" fill="#1a2a1a"/>
+        </g>
+        <!-- Position 2: Top right -->
+        <g transform="translate(165,35)">
+          <ellipse cx="0" cy="0" rx="7" ry="8" fill="#8B4513"/>
+          <path d="M-6,-7 Q0,-13 6,-7 L6,-3 Q0,-9 -6,-3 Z" fill="#000"/>
+          <ellipse cx="-2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="none" stroke="#a855f744" stroke-width="1"/>
+          <rect x="-7" y="8" width="14" height="9" rx="3" fill="#2a1a3a"/>
+        </g>
+        <!-- Position 3: Right -->
+        <g transform="translate(190,72)">
+          <ellipse cx="0" cy="0" rx="7" ry="8" fill="#3E1A00"/>
+          <path d="M-6,-7 Q0,-12 6,-7 L6,-2 Q0,-8 -6,-2 Z" fill="#1a0800"/>
+          <ellipse cx="-2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="none" stroke="#ff6a0044" stroke-width="1"/>
+          <rect x="-7" y="8" width="14" height="9" rx="3" fill="#2a1020"/>
+        </g>
+        <!-- Position 4: Bottom right -->
+        <g transform="translate(165,112)">
+          <ellipse cx="0" cy="0" rx="7" ry="8" fill="#6B3A2A"/>
+          <path d="M-6,-7 Q0,-13 6,-7 L6,-3 Q0,-9 -6,-3 Z" fill="#0a0500"/>
+          <ellipse cx="-2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="none" stroke="#ffd70044" stroke-width="1"/>
+          <rect x="-7" y="8" width="14" height="9" rx="3" fill="#0a1a0a"/>
+        </g>
+        <!-- Position 5: Bottom center -->
+        <g transform="translate(110,128)">
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="#4A2010"/>
+          <path d="M-7,-8 Q0,-14 7,-8 L8,-4 Q4,-11 -4,-11 Q-8,-4 -7,-8 Z" fill="#000"/>
+          <ellipse cx="-3" cy="1" rx="1.5" ry="2" fill="#080304" opacity="0.7"/>
+          <ellipse cx="3" cy="1" rx="1.5" ry="2" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="9" ry="10" fill="none" stroke="#ffd70044" stroke-width="1"/>
+          <rect x="-8" y="9" width="16" height="10" rx="3" fill="#1a1000"/>
+        </g>
+        <!-- Position 6: Bottom left -->
+        <g transform="translate(55,112)">
+          <ellipse cx="0" cy="0" rx="7" ry="8" fill="#5C3010"/>
+          <path d="M-6,-7 Q0,-12 6,-7 L6,-2 Q0,-8 -6,-2 Z" fill="#080300"/>
+          <ellipse cx="-2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="none" stroke="#ff3a8c44" stroke-width="1"/>
+          <rect x="-7" y="8" width="14" height="9" rx="3" fill="#1a0010"/>
+        </g>
+        <!-- Position 7: Left -->
+        <g transform="translate(30,72)">
+          <ellipse cx="0" cy="0" rx="7" ry="8" fill="#3E1800"/>
+          <path d="M-6,-7 Q0,-13 6,-7 L6,-3 Q0,-9 -6,-3 Z" fill="#0a0400"/>
+          <ellipse cx="-2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="none" stroke="#ff634744" stroke-width="1"/>
+          <rect x="-7" y="8" width="14" height="9" rx="3" fill="#2a0a08"/>
+        </g>
+        <!-- Position 8: Top left -->
+        <g transform="translate(55,35)">
+          <ellipse cx="0" cy="0" rx="7" ry="8" fill="#7B4A30"/>
+          <path d="M-6,-7 Q0,-13 6,-7 L6,-3 Q2,-10 -2,-10 Q-6,-3 -6,-7 Z" fill="#1a0800"/>
+          <path d="M6,-4 Q10,-2 10,6 Q6,4 6,4" fill="#1a0800"/>
+          <ellipse cx="-2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="2.5" cy="1" rx="1.3" ry="1.8" fill="#080304" opacity="0.7"/>
+          <ellipse cx="0" cy="0" rx="8" ry="9" fill="none" stroke="#7c3aed44" stroke-width="1"/>
+          <rect x="-7" y="8" width="14" height="9" rx="3" fill="#1a0a25"/>
+        </g>
+        
+        <!-- Speech bubble - active speaker -->
+        <rect x="75" y="8" width="40" height="14" rx="4" fill="#0a1020" stroke="#d4af3755"/>
+        <text x="95" y="19" text-anchor="middle" fill="#d4af37" font-size="6" font-family="'Share Tech Mono',monospace" id="speech-text">Analyzing...</text>
+        <polygon points="95,22 90,28 100,28" fill="#0a1020"/>
+      </svg>
+    </div>
+    
+    <!-- Connected badge -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0">
+      <div style="text-align:center;padding:4px 10px;border:1px solid #00ff8833;border-radius:3px;background:rgba(0,255,136,0.04)">
+        <div style="font-size:7px;color:#00ff88;font-family:'Share Tech Mono',monospace;letter-spacing:1px">📡 ALL AGENTS CONNECTED</div>
+        <div style="font-size:11px;font-weight:700;color:#00ff88;font-family:'Orbitron',monospace">9/9</div>
+      </div>
+    </div>
+    
+    <button class="meeting-btn" id="meeting-btn" onclick="toggleMeeting()">⏹ END MEETING</button>
+  `;
+  return div;
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `${r},${g},${b}`;
+}
+
+function render() {
+  const grid = document.getElementById('agent-grid');
+  // Row 1: agents 0,1,2
+  grid.appendChild(buildRoom(AGENTS[0]));
+  grid.appendChild(buildRoom(AGENTS[1]));
+  grid.appendChild(buildRoom(AGENTS[2]));
+  // Row 2: agent 3, center, agent 4
+  grid.appendChild(buildRoom(AGENTS[3]));
+  grid.appendChild(buildCenterRoom());
+  grid.appendChild(buildRoom(AGENTS[4]));
+  // Row 3: agents 5,6,7 (agent 8 overlaid)
+  grid.appendChild(buildRoom(AGENTS[5]));
+  grid.appendChild(buildRoom(AGENTS[6]));
+  grid.appendChild(buildRoom(AGENTS[7]));
+
+  // Floating agent 9 is positioned in a small overlay bottom-left
+  // Actually put agent 9 in the grid too
+  // Wait, we have 9 agents and a 3x3 grid with center replaced = 8 spots
+  // Let me just put agent 9 as a floating card
+  const a9 = buildRoom(AGENTS[8]);
+  a9.style.cssText += 'position:fixed;bottom:88px;left:10px;width:150px;z-index:20;';
+  document.body.appendChild(a9);
+
+  // Severity bars
+  const sevBars = document.getElementById('sev-bars');
+  for(let i=0;i<5;i++){
+    const b = document.createElement('div');
+    b.style.cssText = `width:12px;height:8px;background:#ff3a3a;border-radius:1px;animation:glow-pulse 0.8s ${i*0.1}s infinite;`;
+    sevBars.appendChild(b);
+  }
+
+  // Agenda
+  const al = document.getElementById('agenda-list');
+  AGENDA.forEach((item,i) => {
+    const d = document.createElement('div');
+    d.className = 'agenda-item';
+    d.id = 'agenda-'+item.id;
+    const isDone = i < agendaIdx;
+    const isActive = i === agendaIdx;
+    d.innerHTML = `
+      <div class="agenda-num" style="border:1px solid ${isActive?'#d4af37':isDone?'#00ff88':'#1a2040'};background:${isDone?'rgba(0,255,136,0.1)':isActive?'rgba(212,175,55,0.1)':'transparent'};color:${isDone?'#00ff88':isActive?'#d4af37':'#4a5060'}">${isDone?'✓':item.id}</div>
+      <div>
+        <div class="agenda-text" style="color:${isActive?'#d4af37':isDone?'#00ff88':'#5a6070'}">${item.title}</div>
+        <div class="agenda-status" style="color:${isActive?'#d4af3788':'#2a3040'}">${isDone?'Complete':isActive?'In Progress':'Pending'}</div>
+      </div>
+      ${isActive?'<div style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#d4af37;animation:blink 1s infinite"></div>':''}
+    `;
+    al.appendChild(d);
+  });
+
+  // Chat
+  renderChat();
+
+  // Decisions
+  const dc = document.getElementById('decisions');
+  DECISIONS.forEach((d,i) => {
+    const el = document.createElement('div');
+    el.className = 'decision-card';
+    el.style.cssText = `border-color:${d.color}33;background:${d.color}06;`;
+    el.innerHTML = `<div class="dec-title" style="color:${d.color}">${d.title}</div><div class="dec-desc">${d.desc}</div><div class="dec-impact" style="color:${d.color}">${d.impact}</div>`;
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.decision-card').forEach(c => { c.style.background = c.dataset.baseColor + '06'; c.style.borderColor = c.dataset.baseColor + '33'; });
+      el.style.background = d.color + '18';
+      el.style.borderColor = d.color + '88';
+    });
+    el.dataset.baseColor = d.color;
+    dc.appendChild(el);
+  });
 
   // Niches
-  document.getElementById('niches').innerHTML=[
-    ['Halloween Svg','#ff6a00',92],
-    ['Dog Mom Gifts','#ff8c00',87],
-    ['Custom Portraits','#da70d6',83],
-    ['Boho Wall Art','#7b68ee',79],
-    ['Baby Shower','#00d4ff',74],
-  ].map(([n,c,s])=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-      <span style="font-size:9px;color:#a0b0c0">${n}</span>
-      <span style="font-size:9px;font-family:'Share Tech Mono',monospace;color:${c}">${s}%</span>
-    </div>
-    <div style="height:2px;background:#0a1020;border-radius:1px;margin-bottom:6px">
-      <div style="height:100%;width:${s}%;background:${c};border-radius:1px"></div>
-    </div>
-  `).join('');
+  const nl = document.getElementById('niche-list');
+  NICHES.forEach(n => {
+    const d = document.createElement('div');
+    d.style.marginBottom = '5px';
+    d.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:9px;color:#a0b0c0">${n.name}</span><span style="font-size:9px;color:${n.color};font-family:'Share Tech Mono',monospace">${n.pct}%</span></div><div style="height:2px;background:#0a1020;border-radius:1px"><div style="height:100%;width:${n.pct}%;background:${n.color};border-radius:1px"></div></div>`;
+    nl.appendChild(d);
+  });
 
-  // Trends
-  document.getElementById('trends').innerHTML=[
-    ['#FallVibes','#ff6a00'],['#CustomGifts','#00ff88'],['#BohoHome','#da70d6'],
-    ['#DogMom2026','#00d4ff'],['#SVGBundle','#ffd700'],['#WallArt','#7b68ee'],
-  ].map(([t,c])=>`<span class="trend-tag" style="color:${c};border-color:${c}33;background:${c}08">${t}</span>`).join('');
-
-  // Opt status
-  document.getElementById('opt-status').innerHTML=`
-    KILLED LOSERS: ${Math.floor(tasksDone/20)}<br>
-    SCALED WINNERS: ${Math.floor(tasksDone/30)}<br>
-    NEXT OPT: ${new Date(Date.now()+3600000).toLocaleTimeString()}<br>
-    WEEKLY RPT: SUNDAY<br>
-    LISTINGS LIVE: ${listings}
-  `;
-
-  draw();
-  requestAnimationFrame(update);
+  // Vote avatars
+  const va = document.getElementById('vote-avatars');
+  AGENTS.slice(0,votes).forEach(a => {
+    const d = document.createElement('div');
+    d.className = 'avatar-dot';
+    d.style.cssText = `border-color:${a.color}66;background:${a.color}15;`;
+    d.textContent = a.icon;
+    va.appendChild(d);
+  });
 }
 
-// ─── SIDEBAR AGENT LIST ───────────────────────────────────────────────────────
-function updateAgentList(){
-  document.getElementById('agent-list').innerHTML=AGENTS.map((a,i)=>`
-    <div class="agent-item${selectedAgent===i?' sel':''}" onclick="selectAgent(${i})">
-      <div class="agent-icon">${a.icon}</div>
-      <div class="agent-meta">
-        <div class="agent-nm" style="color:${a.color}">${a.name}</div>
-        <div class="agent-st">${agentNodes[i]?agentNodes[i].tasks[agentNodes[i].taskIndex]:'...'}</div>
-        <div class="agent-minibar"><div class="agent-minifill" style="width:${agentNodes[i]?Math.round(agentNodes[i].taskProgress*100):0}%;background:${a.color}"></div></div>
+function renderChat() {
+  const cl = document.getElementById('chat-log');
+  cl.innerHTML = '';
+  const visible = CHAT.slice(Math.max(0,chatIdx-4), chatIdx+1);
+  visible.forEach(msg => {
+    const d = document.createElement('div');
+    d.className = 'chat-entry';
+    d.innerHTML = `<span class="chat-agent" style="color:${msg.color}">${msg.agent}: </span><span class="chat-msg">${msg.msg}</span>`;
+    cl.appendChild(d);
+  });
+}
+
+// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+function toggleMeeting() {
+  meetingActive = !meetingActive;
+  const btn = document.getElementById('meeting-btn');
+  const lbl = document.getElementById('meeting-label');
+  if (meetingActive) {
+    btn.textContent = '⏹ END MEETING';
+    lbl.textContent = '⚡ SWARM MEETING IN PROGRESS...';
+  } else {
+    btn.textContent = '▶ DISCUSS ISSUE';
+    lbl.textContent = 'SWARM MEETING ROOM';
+  }
+}
+
+function showModal(agent) {
+  const modal = document.getElementById('modal');
+  const box = document.getElementById('modal-box');
+  box.style.border = `2px solid ${agent.color}`;
+  box.style.boxShadow = `0 0 40px ${agent.color}44`;
+  document.getElementById('modal-content').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="font-size:32px">${agent.icon}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:${agent.color};font-family:'Share Tech Mono',monospace;letter-spacing:2px">${agent.name}</div>
+        <div style="font-size:9px;color:#4a5060;font-family:'Share Tech Mono',monospace">${agent.role} · Level ${agent.level}</div>
       </div>
-      <div class="agent-dot" style="background:${a.color};box-shadow:0 0 6px ${a.color};animation:blink ${1+i*0.15}s infinite"></div>
     </div>
-  `).join('');
-}
-setInterval(updateAgentList, 500);
-
-// ─── AGENT SELECT ─────────────────────────────────────────────────────────────
-function selectAgent(i){
-  selectedAgent = selectedAgent===i ? null : i;
-  const d = document.getElementById('detail');
-  if(selectedAgent===null){ d.classList.remove('show'); return; }
-  const a = AGENTS[i];
-  const node = agentNodes[i];
-  d.classList.add('show');
-  document.getElementById('detail-icon').textContent=a.icon;
-  document.getElementById('detail-name').style.color=a.color;
-  document.getElementById('detail-name').textContent=a.name;
-  document.getElementById('detail-role').textContent=a.role+' · ACTIVE';
-  document.getElementById('detail-task').textContent='▶ '+node.tasks[node.taskIndex];
-  document.getElementById('detail-stats').innerHTML=`
-    <span style="color:${a.color}">LOAD: ${Math.round(node.activity*100)}%</span>
-    <span style="color:#404060">|</span>
-    <span style="color:#a0b0c0">TASKS: ${Math.floor(tasksDone/AGENTS.length)}</span>
+    <div style="background:rgba(255,255,255,0.02);border:1px solid #1a2040;border-left:2px solid ${agent.color};border-radius:4px;padding:10px;margin-bottom:12px;font-size:11px;color:#8090a0;line-height:1.6">${agent.desc}</div>
+    <div style="font-size:8px;color:#4a5060;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:8px">STAT: ${agent.stat}</div>
+    <div style="font-size:24px;font-weight:900;color:${agent.color};font-family:'Orbitron',monospace;margin-bottom:12px">${agent.val}</div>
+    <div style="margin-bottom:6px;display:flex;justify-content:space-between">
+      <div style="font-size:8px;color:#4a5060;font-family:'Share Tech Mono',monospace">EFFICIENCY</div>
+      <div style="font-size:8px;color:${agent.color};font-family:'Share Tech Mono',monospace">${agent.pct}%</div>
+    </div>
+    <div style="height:8px;background:#0a1020;border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${agent.pct}%;background:${agent.color};border-radius:4px;box-shadow:0 0 8px ${agent.color}"></div>
+    </div>
   `;
+  modal.classList.add('open');
 }
 
-canvas.addEventListener('click', e => {
-  const rect = canvas.getBoundingClientRect();
-  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
-  let hit=null;
-  agentNodes.forEach((a,i)=>{ if(Math.hypot(mx-a.x,my-a.y)<30) hit=i; });
-  selectAgent(hit);
+function closeModal(e) {
+  if(e.target === document.getElementById('modal')) document.getElementById('modal').classList.remove('open');
+}
+
+function setNav(el) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── TIMERS ────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  if(!meetingActive) return;
+  chatIdx = (chatIdx + 1) % CHAT.length;
+  renderChat();
+  // Update speech bubble
+  const st = document.getElementById('speech-text');
+  if(st) st.textContent = CHAT[chatIdx].msg.slice(0,18)+'...';
+}, 2500);
+
+setInterval(() => {
+  if(!meetingActive) return;
+  if(votes < 9) {
+    votes++;
+    document.getElementById('vote-count').textContent = `${votes}/9 VOTED`;
+    document.getElementById('vote-bar').style.width = `${(votes/9)*100}%`;
+    const va = document.getElementById('vote-avatars');
+    const a = AGENTS[votes-1];
+    const d = document.createElement('div');
+    d.className = 'avatar-dot';
+    d.style.cssText = `border-color:${a.color}66;background:${a.color}15;`;
+    d.textContent = a.icon;
+    va.appendChild(d);
+  }
+}, 3000);
+
+setInterval(() => {
+  if(!meetingActive) return;
+  if(agendaIdx < AGENDA.length - 1) {
+    agendaIdx++;
+    const al = document.getElementById('agenda-list');
+    al.innerHTML = '';
+    AGENDA.forEach((item,i) => {
+      const d = document.createElement('div');
+      d.className = 'agenda-item';
+      const isDone = i < agendaIdx;
+      const isActive = i === agendaIdx;
+      d.innerHTML = `
+        <div class="agenda-num" style="border:1px solid ${isActive?'#d4af37':isDone?'#00ff88':'#1a2040'};background:${isDone?'rgba(0,255,136,0.1)':isActive?'rgba(212,175,55,0.1)':'transparent'};color:${isDone?'#00ff88':isActive?'#d4af37':'#4a5060'}">${isDone?'✓':item.id}</div>
+        <div>
+          <div class="agenda-text" style="color:${isActive?'#d4af37':isDone?'#00ff88':'#5a6070'}">${item.title}</div>
+          <div class="agenda-status" style="color:${isActive?'#d4af3788':'#2a3040'}">${isDone?'Complete':isActive?'In Progress':'Pending'}</div>
+        </div>
+        ${isActive?'<div style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#d4af37;animation:blink 1s infinite"></div>':''}
+      `;
+      al.appendChild(d);
+    });
+  }
+}, 8000);
+
+// Clock
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+render();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LIVE API CONNECTION — HOUSE OF JREYM BACKEND
+// ══════════════════════════════════════════════════════════════════════════════
+
+const API_BASE = window.location.origin; // Uses same server
+
+const AGENT_ENDPOINTS = {
+  1: 'trends',    // Trend Hunter
+  2: 'products',  // Product Creator
+  3: 'prime',     // Marketing -> use prime for strategy
+  4: 'seo',       // SEO
+  5: 'listing',   // Listing & Content
+  6: 'analytics', // Analytics
+  7: 'prime',     // Pricing -> use prime
+  8: 'customer',  // Customer Service
+  9: 'prime',     // Ads -> use prime
+};
+
+// Override showModal to call real API
+const _origShowModal = showModal;
+showModal = async function(agent) {
+  // Show modal immediately with loading state
+  const modal = document.getElementById('modal');
+  const box = document.getElementById('modal-box');
+  box.style.border = '2px solid ' + agent.color;
+  box.style.boxShadow = '0 0 40px ' + agent.color + '44';
+  document.getElementById('modal-content').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="font-size:32px">${agent.icon}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:${agent.color};font-family:'Share Tech Mono',monospace;letter-spacing:2px">${agent.name}</div>
+        <div style="font-size:9px;color:#4a5060;font-family:'Share Tech Mono',monospace">${agent.role} · Level ${agent.level}</div>
+      </div>
+    </div>
+    <div style="background:rgba(255,255,255,0.02);border:1px solid #1a2040;border-left:2px solid ${agent.color};border-radius:4px;padding:10px;margin-bottom:12px;font-size:11px;color:#8090a0;line-height:1.6">${agent.desc}</div>
+    <div style="font-size:8px;color:#4a5060;letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:8px">STAT: ${agent.stat}</div>
+    <div style="font-size:24px;font-weight:900;color:${agent.color};font-family:'Orbitron',monospace;margin-bottom:12px">${agent.val}</div>
+    <div style="margin-top:12px;border-top:1px solid #1a2040;padding-top:12px">
+      <div style="font-size:8px;color:${agent.color};letter-spacing:3px;font-family:'Share Tech Mono',monospace;margin-bottom:8px">⚡ LIVE AGENT OUTPUT</div>
+      <div id="agent-live-output" style="background:#050510;border:1px solid ${agent.color}22;border-radius:4px;padding:10px;font-size:10px;color:#6080a0;font-family:'Share Tech Mono',monospace;min-height:60px;max-height:180px;overflow-y:auto;line-height:1.6">
+        <div style="animation:blink 1s infinite;color:${agent.color}">⏳ Deploying ${agent.name} agent via Claude AI...</div>
+      </div>
+    </div>
+    <button id="agent-run-btn" onclick="runAgentLive(${agent.id})" style="width:100%;margin-top:10px;padding:8px;background:${agent.color}15;border:1px solid ${agent.color}55;border-radius:4px;color:${agent.color};font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;cursor:pointer">⚡ RUN AGENT NOW</button>
+  `;
+  modal.classList.add('open');
+
+  // Auto-run the agent
+  await runAgentLive(agent.id);
+};
+
+async function runAgentLive(agentId) {
+  const agent = AGENTS.find(a => a.id === agentId);
+  const endpoint = AGENT_ENDPOINTS[agentId] || 'prime';
+  const output = document.getElementById('agent-live-output');
+  if (!output) return;
+  
+  output.innerHTML = '<div style="animation:blink 1s infinite;color:' + agent.color + '">⏳ Claude is analyzing via ' + agent.name + '...</div>';
+  
+  try {
+    const body = {};
+    if (endpoint === 'trends') body.category = 'all niches';
+    else if (endpoint === 'products') body.niche = 'trending Etsy niches';
+    else if (endpoint === 'seo') { body.product = 'top Etsy listing'; body.niche = 'gifts'; }
+    else if (endpoint === 'listing') body.product = 'trending product';
+    else if (endpoint === 'analytics') body.timeframe = '7 days';
+    else if (endpoint === 'customer') body.message = 'How long does shipping take?';
+    else body.mission = 'Analyze current performance and suggest improvements for HOUSE OF JREYM Etsy empire';
+    
+    const res = await fetch(API_BASE + '/api/agents/' + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    
+    if (data.error) {
+      output.innerHTML = '<div style="color:#ff3a3a">❌ Error: ' + data.error + '</div>';
+      addLiveChat(agent.name, 'Error encountered: ' + data.error.slice(0, 40), agent.color);
+      return;
+    }
+    
+    const result = data.result;
+    let html = '';
+    
+    if (result.raw) {
+      // Raw text response
+      html = '<div style="color:#a0b0c0;white-space:pre-wrap">' + result.raw.slice(0, 500) + '</div>';
+    } else {
+      // JSON response — render nicely
+      html = '<div style="color:#00ff88;margin-bottom:4px">✅ Agent responded successfully</div>';
+      Object.entries(result).forEach(([key, val]) => {
+        if (Array.isArray(val)) {
+          html += '<div style="color:' + agent.color + ';margin-top:6px;font-weight:700">' + key.toUpperCase() + ':</div>';
+          val.forEach(item => {
+            if (typeof item === 'object') {
+              html += '<div style="margin-left:8px;margin-top:3px;padding:4px 6px;border-left:2px solid ' + agent.color + '33">';
+              Object.entries(item).forEach(([k, v]) => {
+                html += '<div><span style="color:#4a5060">' + k + ':</span> <span style="color:#a0b0c0">' + v + '</span></div>';
+              });
+              html += '</div>';
+            } else {
+              html += '<div style="margin-left:8px;color:#a0b0c0">• ' + item + '</div>';
+            }
+          });
+        } else {
+          html += '<div style="margin-top:3px"><span style="color:' + agent.color + '">' + key.toUpperCase() + ':</span> <span style="color:#a0b0c0">' + val + '</span></div>';
+        }
+      });
+    }
+    
+    output.innerHTML = html;
+    
+    // Add to live chat
+    const summary = result.raw ? result.raw.slice(0, 50) : JSON.stringify(result).slice(0, 50);
+    addLiveChat(agent.name, 'Analysis complete: ' + summary + '...', agent.color);
+    
+  } catch (err) {
+    output.innerHTML = '<div style="color:#ff3a3a">❌ Connection failed: ' + err.message + '</div><div style="color:#4a5060;margin-top:4px;font-size:9px">Make sure Render is deployed and running.</div>';
+  }
+}
+
+// Override toggleMeeting to run full pipeline
+const _origToggleMeeting = toggleMeeting;
+toggleMeeting = async function() {
+  meetingActive = !meetingActive;
+  const btn = document.getElementById('meeting-btn');
+  const lbl = document.getElementById('meeting-label');
+  
+  if (meetingActive) {
+    btn.textContent = '⏹ END MEETING';
+    lbl.textContent = '⚡ SWARM MEETING IN PROGRESS...';
+    
+    addLiveChat('SWARMX PRIME', '🚨 Initiating full swarm pipeline...', '#d4af37');
+    
+    // Run full pipeline
+    try {
+      const res = await fetch(API_BASE + '/api/pipeline/full', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: 'trending Etsy products' }),
+      });
+      const data = await res.json();
+      
+      if (data.success && data.pipeline) {
+        const p = data.pipeline;
+        if (p.trends) addLiveChat('Trend Hunter', 'Top niche: ' + (p.trends.topNiche || 'analyzing...'), '#00ff88');
+        if (p.products?.products?.[0]) addLiveChat('Product Forge', 'Created: ' + p.products.products[0].title, '#a855f7');
+        if (p.seo?.title) addLiveChat('SEO Agent', 'Optimized: ' + p.seo.title.slice(0, 40), '#00d4ff');
+        if (p.design?.midjourneyPrompt) addLiveChat('Design Agent', 'Prompt ready: ' + p.design.midjourneyPrompt.slice(0, 40) + '...', '#ff3a8c');
+        if (p.listing?.listingData?.title) addLiveChat('Listing Agent', 'Listing: ' + p.listing.listingData.title.slice(0, 40), '#ffd700');
+        if (p.prime) addLiveChat('SWARMX PRIME', '✅ Pipeline complete. All agents reported.', '#d4af37');
+      } else if (data.error) {
+        addLiveChat('SYSTEM', '❌ Pipeline error: ' + data.error.slice(0, 60), '#ff3a3a');
+      }
+    } catch (err) {
+      addLiveChat('SYSTEM', '❌ Connection failed: ' + err.message, '#ff3a3a');
+    }
+  } else {
+    btn.textContent = '▶ DISCUSS ISSUE';
+    lbl.textContent = 'SWARM MEETING ROOM';
+    addLiveChat('SWARMX PRIME', 'Meeting ended. Resuming autonomous operations.', '#d4af37');
+  }
+};
+
+// Live chat injection
+function addLiveChat(agent, msg, color) {
+  const cl = document.getElementById('chat-log');
+  const d = document.createElement('div');
+  d.className = 'chat-entry';
+  d.innerHTML = '<span class="chat-agent" style="color:' + color + '">' + agent + ': </span><span class="chat-msg">' + msg + '</span>';
+  cl.appendChild(d);
+  cl.scrollTop = cl.scrollHeight;
+  // Keep only last 12
+  while (cl.children.length > 12) cl.removeChild(cl.firstChild);
+  
+  // Also update speech bubble
+  const st = document.getElementById('speech-text');
+  if (st) st.textContent = msg.slice(0, 18) + '...';
+}
+
+// Wire the chat input to send missions to PRIME
+document.querySelector('.chat-send')?.addEventListener('click', sendChatMission);
+document.querySelector('.chat-field')?.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') sendChatMission();
 });
 
-// ─── COMM FEED ────────────────────────────────────────────────────────────────
-const COMMS=[
-  (a,b)=>`<span style="color:${a.color}">[${a.name}]</span> → <span style="color:${b.color}">[${b.name}]</span> <span style="color:#4a6a4a">Sending trend data for review</span>`,
-  (a,b)=>`<span style="color:${b.color}">[${b.name}]</span>: <span style="color:#4a6a4a">Confirmed. Processing ${Math.floor(Math.random()*50)+10} data points</span>`,
-  (a,b)=>`<span style="color:${a.color}">[${a.name}]</span>: <span style="color:#4a6a4a">Edge detected in ${['Halloween','Dog Mom','Custom Portrait','Boho'][Math.floor(Math.random()*4)]} niche</span>`,
-  (a,b)=>`<span style="color:${AGENTS[9].color}">[SWARMX PRIME]</span>: <span style="color:#d4af3788">Authorizing scale operation on listing #${Math.floor(Math.random()*1000)+100}</span>`,
-  (a,b)=>`<span style="color:${a.color}">[${a.name}]</span> → <span style="color:${b.color}">[${b.name}]</span> <span style="color:#4a6a4a">Task complete. Revenue impact: +$${(Math.random()*50+5).toFixed(2)}</span>`,
-];
-setInterval(()=>{
-  const a=AGENTS[Math.floor(Math.random()*AGENTS.length)];
-  let b=AGENTS[Math.floor(Math.random()*AGENTS.length)];
-  while(b===a)b=AGENTS[Math.floor(Math.random()*AGENTS.length)];
-  const tmpl=COMMS[Math.floor(Math.random()*COMMS.length)];
-  const feed=document.getElementById('comm-feed');
-  const entry=document.createElement('div');
-  entry.className='comm-entry';entry.innerHTML=tmpl(a,b);
-  feed.appendChild(entry);
-  while(feed.children.length>4)feed.removeChild(feed.firstChild);
-  // Also add to right log
-  const rlog=document.getElementById('right-log');
-  const re=document.createElement('div');re.className='log-entry';re.innerHTML=entry.innerHTML;
-  rlog.appendChild(re);while(rlog.children.length>8)rlog.removeChild(rlog.firstChild);
-  // Spawn particles at agents
-  if(agentNodes.length){ spawnParticle(agentNodes[AGENTS.indexOf(a)].x,agentNodes[AGENTS.indexOf(a)].y,a.color); }
-},1400);
-
-// ─── APPROVAL LAYER ───────────────────────────────────────────────────────────
-const APPROVALS=[
-  {title:'New Listing: "Fall Pumpkin SVG Bundle"',sub:'PRODUCT FORGE · $4.99 · Est. revenue: $180/mo'},
-  {title:'Scale Budget: Dog Mom Niche +$50 ads',sub:'ANALYTICS AGENT · ROI projection: 340%'},
-  {title:'Kill listing #4821 — 0 sales in 30d',sub:'EVOLUTION AGENT · Frees up slot for winner'},
-  {title:'New design batch: 15 Holiday items',sub:'DESIGN AGENT · Midjourney v6 · Review needed'},
-];
-let approvalIdx=0;
-function addApproval(){
-  const a=APPROVALS[approvalIdx%APPROVALS.length];approvalIdx++;
-  const list=document.getElementById('approval-list');
-  const el=document.createElement('div');el.className='approval-item';
-  el.innerHTML=`<div class="approval-title">${a.title}</div><div class="approval-sub">${a.sub}</div>
-    <div class="approval-btns">
-      <button class="btn-approve" onclick="this.closest('.approval-item').remove();listings++;revenue+=Math.random()*20;">✓ APPROVE</button>
-      <button class="btn-reject" onclick="this.closest('.approval-item').remove()">✗ REJECT</button>
-    </div>`;
-  list.insertBefore(el,list.firstChild);
-  while(list.children.length>3)list.removeChild(list.lastChild);
-}
-setInterval(addApproval,8000);
-addApproval();
-
-// ─── MISSION DEPLOY ───────────────────────────────────────────────────────────
-function deployMission(){
-  const input=document.getElementById('mission-input');
-  const val=input.value.trim();if(!val)return;
-  input.value='';
-  // Activate all agents
-  agentNodes.forEach(a=>{a.taskProgress=0;});
-  // Add to comms
-  const feed=document.getElementById('comm-feed');
-  const entry=document.createElement('div');entry.className='comm-entry';
-  entry.innerHTML=`<span style="color:var(--gold)">[MISSION DEPLOYED]</span> <span style="color:var(--gold2)">"${val}"</span>`;
-  feed.appendChild(entry);while(feed.children.length>4)feed.removeChild(feed.firstChild);
-  // Spawn burst
-  agentNodes.forEach(a=>spawnParticle(a.x,a.y,a.color));
-  // Add approval
-  setTimeout(()=>{
-    const list=document.getElementById('approval-list');
-    const el=document.createElement('div');el.className='approval-item';
-    el.innerHTML=`<div class="approval-title">Mission Result: "${val.slice(0,30)}..."</div>
-      <div class="approval-sub">SWARMX PRIME · ${AGENTS.length} agents deployed · Review output</div>
-      <div class="approval-btns">
-        <button class="btn-approve" onclick="this.closest('.approval-item').remove();revenue+=Math.random()*50+10;listings+=2;">✓ EXECUTE</button>
-        <button class="btn-reject" onclick="this.closest('.approval-item').remove()">✗ CANCEL</button>
-      </div>`;
-    list.insertBefore(el,list.firstChild);
-  },3000);
+async function sendChatMission() {
+  const input = document.querySelector('.chat-field');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  
+  addLiveChat('You', msg, '#ffffff');
+  addLiveChat('SWARMX PRIME', '⏳ Processing mission...', '#d4af37');
+  
+  try {
+    const res = await fetch(API_BASE + '/api/swarm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: msg }),
+    });
+    const data = await res.json();
+    
+    if (data.reply) {
+      // Break into chunks for chat
+      const reply = data.reply.slice(0, 200);
+      addLiveChat('SWARMX PRIME', reply, '#d4af37');
+    } else if (data.error) {
+      addLiveChat('SYSTEM', '❌ ' + data.error.slice(0, 60), '#ff3a3a');
+    }
+  } catch (err) {
+    addLiveChat('SYSTEM', '❌ ' + err.message, '#ff3a3a');
+  }
 }
 
-// ─── BOOT ─────────────────────────────────────────────────────────────────────
-resize();
-setTimeout(()=>{ initAgentPositions(); update(); }, 100);
+// Health check on load
+(async function() {
+  try {
+    const res = await fetch(API_BASE + '/health');
+    const data = await res.json();
+    if (data.status) {
+      addLiveChat('SYSTEM', '✅ ' + data.status + ' · ' + data.agents + ' agents armed', '#00ff88');
+    }
+  } catch {
+    addLiveChat('SYSTEM', '⚠️ Backend not connected. Deploy to Render first.', '#ffd700');
+  }
+})();
+
+console.log('👑 HOUSE OF JREYM — Live API connected');
+
 </script>
 </body>
 </html>
