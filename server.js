@@ -9,8 +9,6 @@ import WebSocket from "ws";
 global.WebSocket = WebSocket;
 
 const __filename = fileURLToPath(import.meta.url);
-// ... rest of code
-const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
