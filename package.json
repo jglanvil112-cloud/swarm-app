@@ -20,7 +20,8 @@
     "node-cron": "^4.2.1",
     "openai": "^6.34.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
