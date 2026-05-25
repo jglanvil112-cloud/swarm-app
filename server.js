@@ -5,7 +5,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
+global.WebSocket = WebSocket;
 
+const __filename = fileURLToPath(import.meta.url);
+// ... rest of code
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
