@@ -282,7 +282,16 @@ export default function SwarmBase({ onAnalyze, loading }) {
       {/* MAIN CONTENT */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", flex: 1, overflow: "hidden" }}>
 
-        {/* BASE MAP */}
+        
+      <div style={{ display: 'flex', gap: 20, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,255,100,0.05)', borderBottom: '1px solid #00ff6422', padding: '4px 20px', fontSize: 11 }}>
+        <span style={{ color: '#00ff64', fontWeight: 700 }}>💰 LIVE REVENUE: {salesData.revenue > 0 ? '$' + salesData.revenue.toLocaleString() : '—'}</span>
+        <span style={{ color: '#555' }}>·</span>
+        <span style={{ color: '#aaa' }}>📦 {salesData.orders} ORDERS</span>
+        <span style={{ color: '#555' }}>·</span>
+        <span style={{ color: '#aaa' }}>🛒 {salesData.products} PRODUCTS</span>
+        {salesData.lastUpdated && <span style={{ color: '#444', fontSize: 9 }}>· updated {salesData.lastUpdated}</span>}
+      </div>
+      {/* BASE MAP */}
         <div style={{ position: "relative", overflow: "hidden" }}>
 
           {/* SVG CONNECTION LINES */}
@@ -345,13 +354,6 @@ export default function SwarmBase({ onAnalyze, loading }) {
             }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: selected.color, letterSpacing: 2 }}>{selected.icon} {selected.name}</div>
               <div style={{ fontSize: 9, color: "#6080a0", letterSpacing: 1, marginTop: 3 }}>{selected.role} · ACTIVE</div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: 'rgba(0,255,100,0.07)', border: '1px solid #00ff6433', borderRadius: 6, padding: '3px 10px', fontSize: 10, marginLeft: 8 }}>
-              <span style={{ color: '#00ff64' }}>💰 {salesData.revenue > 0 ? '$' + salesData.revenue.toLocaleString() : '—'}</span>
-              <span style={{ color: '#555' }}>|</span>
-              <span style={{ color: '#aaa' }}>📦 {salesData.orders} orders</span>
-              <span style={{ color: '#555' }}>|</span>
-              <span style={{ color: '#aaa' }}>🛒 {salesData.products} products</span>
-            </div>
             </div>
           )}
 
