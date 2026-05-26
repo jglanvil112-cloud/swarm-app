@@ -227,6 +227,14 @@ async function runAutonomousPipeline() {
   }
 }
 
+
+// ── LOAD SHOPIFY TOKEN FROM SUPABASE ON STARTUP ───────────────────────────────
+async function loadShopifyToken() {
+  const { data } = await supabase.from('agent_memory').select('data').eq('agent', 'shopify_token').single();
+  if (data?.data?.token) { SHOPIFY_TOKEN = data.data.token; console.log('[Shopify] Token loaded from memory'); }
+}
+loadShopifyToken();
+
 // ── CRON JOBS ──────────────────────────────────────────────────────────────────
 // Every hour — sales snapshot
 cron.schedule("0 * * * *", () => {
