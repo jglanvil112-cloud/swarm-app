@@ -1,23 +1,23 @@
 import { useState, useEffect, useRef } from "react";
 
 const AGENTS = [
-  { id: 1, name: "TREND HUNTER", role: "Market Intelligence", icon: "🔍", color: "#A855F7", glow: "#A855F766", x: 20, y: 15, size: 64 },
-  { id: 2, name: "PRODUCT CREATOR", role: "Innovation Lab", icon: "🎨", color: "#3B82F6", glow: "#3B82F666", x: 50, y: 10, size: 64 },
-  { id: 3, name: "MARKETING", role: "Brand Strategy", icon: "📢", color: "#EC4899", glow: "#EC489966", x: 80, y: 15, size: 64 },
-  { id: 4, name: "SEO OPTIMIZATION", role: "Search Dominance", icon: "🎯", color: "#10B981", glow: "#10B98166", x: 90, y: 40, size: 64 },
-  { id: 5, name: "LISTINGS & CONTENT", role: "Content Engine", icon: "📝", color: "#F59E0B", glow: "#F59E0B66", x: 80, y: 65, size: 64 },
-  { id: 6, name: "ANALYTICS & ADS", role: "Data Intelligence", icon: "📊", color: "#06B6D4", glow: "#06B6D466", x: 50, y: 75, size: 64 },
-  { id: 7, name: "PRICING & PROFIT", role: "Revenue Optimizer", icon: "💰", color: "#EAB308", glow: "#EAB30866", x: 20, y: 65, size: 64 },
-  { id: 8, name: "CUSTOMER SERVICE", role: "Support Champion", icon: "🤝", color: "#F472B6", glow: "#F472B666", x: 10, y: 40, size: 64 },
-  { id: 9, name: "SUPPLIER SCOUT", role: "Supply Chain", icon: "🔗", color: "#8B5CF6", glow: "#8B5CF666", x: 35, y: 30, size: 64 },
-  { id: 10, name: "AUTOMATION ENGINEER", role: "Efficiency Master", icon: "⚙️", color: "#6366F1", glow: "#6366F166", x: 65, y: 30, size: 64 },
-  { id: 11, name: "STRATEGY LEAD", role: "Prime Director", icon: "👑", color: "#F59E0B", glow: "#F59E0B66", x: 50, y: 45, size: 72 },
+  { id: 1, name: "COMMANDER", role: "Strategic Overseer", icon: "⚔", color: "#ff6a00", glow: "#ff6a0066", x: 42, y: 22, size: 72 },
+  { id: 2, name: "RESEARCHER", role: "Intel & Analysis", icon: "🔬", color: "#00d4ff", glow: "#00d4ff66", x: 18, y: 15, size: 58 },
+  { id: 3, name: "BUILDER", role: "Code & Deploy", icon: "⚙", color: "#ff8c00", glow: "#ff8c0066", x: 68, y: 12, size: 58 },
+  { id: 4, name: "ANALYST", role: "Patterns & KPIs", icon: "📊", color: "#00ff88", glow: "#00ff8866", x: 78, y: 38, size: 58 },
+  { id: 5, name: "MEMORY CORE", role: "Context & History", icon: "💾", color: "#da70d6", glow: "#da70d666", x: 14, y: 48, size: 58 },
+  { id: 6, name: "AUTOMATION", role: "Scripts & Chains", icon: "🤖", color: "#ff3a3a", glow: "#ff3a3a66", x: 55, y: 62, size: 58 },
+  { id: 7, name: "VISIONARY", role: "Strategy & Scale", icon: "🔮", color: "#7b68ee", glow: "#7b68ee66", x: 28, y: 68, size: 58 },
+  { id: 8, name: "TRAP DETECTOR", role: "Risk & Alerts", icon: "⚠", color: "#ffd700", glow: "#ffd70066", x: 72, y: 72, size: 58 },
+  { id: 9, name: "QUANTUM EDGE", role: "Bet Analysis", icon: "⚡", color: "#00ffff", glow: "#00ffff66", x: 42, y: 82, size: 58 },
 ];
 
 const CONNECTIONS = [
-  [11, 1], [11, 2], [11, 3], [11, 4], [11, 5], [11, 6], [11, 7], [11, 8], [11, 9], [11, 10],
-  [1, 9], [2, 10], [3, 4], [5, 6], [7, 8], [1, 2], [3, 5], [4, 6], [7, 9], [8, 10],
+  [1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8], [1, 9],
+  [2, 5], [3, 4], [6, 9], [7, 8], [2, 7], [3, 8], [4, 6],
 ];
+
+function AgentNode({ agent, selected, onClick, pulse }) {
   const isSelected = selected?.id === agent.id;
   return (
     <div
@@ -111,27 +111,6 @@ const CONNECTIONS = [
   );
 }
 
-
-  // Fetch real Shopify sales data every 6 hours
-  useEffect(() => {
-    const fetchSales = async () => {
-      try {
-        const [ordersRes, productsRes] = await Promise.all([
-          fetch('/api/shopify/orders'),
-          fetch('/api/shopify/products')
-        ]);
-        const ordersData = await ordersRes.json();
-        const productsData = await productsRes.json();
-        const orders = ordersData.orders || [];
-        const revenue = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-        setSalesData({ revenue: parseFloat(revenue.toFixed(2)), orders: orders.length, products: (productsData.products || []).length, lastUpdated: new Date().toLocaleTimeString() });
-      } catch(e) { console.error('[Sales]', e); }
-    };
-    fetchSales();
-    const interval = setInterval(fetchSales, 6 * 60 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
 export default function SwarmBase({ onAnalyze, loading }) {
   const [selected, setSelected] = useState(null);
   const [dataPackets, setDataPackets] = useState([]);
@@ -142,7 +121,6 @@ export default function SwarmBase({ onAnalyze, loading }) {
     { text: "> Awaiting mission directive...", color: "#6080a0" },
   ]);
   const [input, setInput] = useState("");
-  const [salesData, setSalesData] = useState({ revenue: 0, orders: 0, products: 0, lastUpdated: null });
   const [bankroll, setBankroll] = useState("1000");
   const svgRef = useRef();
   const logRef = useRef();
@@ -282,16 +260,7 @@ export default function SwarmBase({ onAnalyze, loading }) {
       {/* MAIN CONTENT */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", flex: 1, overflow: "hidden" }}>
 
-        
-      <div style={{ display: 'flex', gap: 20, alignItems: 'center', justifyContent: 'center', background: 'rgba(0,255,100,0.05)', borderBottom: '1px solid #00ff6422', padding: '4px 20px', fontSize: 11 }}>
-        <span style={{ color: '#00ff64', fontWeight: 700 }}>💰 LIVE REVENUE: {salesData.revenue > 0 ? '$' + salesData.revenue.toLocaleString() : '—'}</span>
-        <span style={{ color: '#555' }}>·</span>
-        <span style={{ color: '#aaa' }}>📦 {salesData.orders} ORDERS</span>
-        <span style={{ color: '#555' }}>·</span>
-        <span style={{ color: '#aaa' }}>🛒 {salesData.products} PRODUCTS</span>
-        {salesData.lastUpdated && <span style={{ color: '#444', fontSize: 9 }}>· updated {salesData.lastUpdated}</span>}
-      </div>
-      {/* BASE MAP */}
+        {/* BASE MAP */}
         <div style={{ position: "relative", overflow: "hidden" }}>
 
           {/* SVG CONNECTION LINES */}
