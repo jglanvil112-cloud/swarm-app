@@ -25,9 +25,11 @@ const supabase = createClient(
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 const MODEL = "claude-sonnet-4-5-20250929";
-const SHOPIFY_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || "houseofjreym.myshopify.com";
-const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const PRINTIFY_KEY = process.env.PRINTIFY_API_KEY;
+const SHOPIFY_DOMAIN = process.env.SHOPIFY_DOMAIN;
+let SHOPIFY_TOKEN = process.env.SHOPIFY_TOKEN || null;
+const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_CLIENT_ID;
+const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const ETSY_KEY = process.env.ETSY_API_KEY;
 const SHOP_NAME = "HOUSEOFJREYM";
 
@@ -488,3 +490,37 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () =>
   console.log(`🚀 HOUSE OF JREYM v5.0 · ${Object.keys(PROMPTS).length} agents · AUTONOMOUS · port ${PORT}`)
 );
+// ── SHOPIFY OAUTH ─────────────────────────────────────────────────────────────
+app.get("/auth/shopify", (req, res) => {
+  const scopes = "read_orders,read_products,write_products,read_analytics,read_inventory";
+  const redirectUri = `${process.env.APP_URL || "https://swarm-app-3nch.onrender.com"}/auth/shopify/callback`;
+  const authUrl = `https://${SHOPIFY_DOMAIN}/admin/oauth/authorize?client_id=${SHOPIFY_CLIENT_ID}&scope=${scopes}&redirect_uri=${redirectUri}`;
+  res.redirect(authUrl);
+});
+
+app.get("/auth/shopify/callback", async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.status(400).send("No code provided");
+  try {
+    const r = await fetch(`https://${SHOPIFY_DOMAIN}/admin/oauth/access_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: SHOPIFY_CLIENT_ID, client_secret: SHOPIFY_CLIENT_SECRET, code }),
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      SHOPIFY_TOKEN = data.access_token;
+      await supabase.from("agent_memory").upsert({ agent: "shopify_token", data: { token: data.access_token }, updated_at: new Date().toISOString() }, { onConflict: "agent" });
+      console.log("[Shopify OAuth] Token saved:", data.access_token.slice(0, 10) + "...");
+      res.send("<h1>✅ Shopify Connected!</h1><p>Token saved. You can close this tab.</p>");
+    } else {
+      res.status(400).send("OAuth failed: " + JSON.stringify(data));
+    }
+  } catch (e) {
+    res.status(500).send("OAuth error: " + e.message);
+  }
+});
+
+app.get("/api/shopify/status", (req, res) => {
+  res.json({ connected: !!SHOPIFY_TOKEN, domain: SHOPIFY_DOMAIN });
+});
