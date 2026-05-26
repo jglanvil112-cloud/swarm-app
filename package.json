@@ -21,6 +21,7 @@
     "openai": "^6.34.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "recharts": "^3.8.1",
     "ws": "^8.21.0"
   },
   "devDependencies": {
@@ -38,4 +39,3 @@
     "node": "20.x"
   }
 }
-
