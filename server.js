@@ -482,14 +482,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
-
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () =>
-  console.log(`🚀 HOUSE OF JREYM v5.0 · ${Object.keys(PROMPTS).length} agents · AUTONOMOUS · port ${PORT}`)
-);
 // ── SHOPIFY OAUTH ─────────────────────────────────────────────────────────────
 app.get("/auth/shopify", (req, res) => {
   const scopes = "read_orders,read_products,write_products,read_analytics,read_inventory";
@@ -524,3 +516,13 @@ app.get("/auth/shopify/callback", async (req, res) => {
 app.get("/api/shopify/status", (req, res) => {
   res.json({ connected: !!SHOPIFY_TOKEN, domain: SHOPIFY_DOMAIN });
 });
+
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () =>
+  console.log(`🚀 HOUSE OF JREYM v5.0 · ${Object.keys(PROMPTS).length} agents · AUTONOMOUS · port ${PORT}`)
+);
