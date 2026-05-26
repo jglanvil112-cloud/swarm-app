@@ -1,6 +1,5 @@
-import SwarmXHybrid from "./SwarmXHybrid";
+import SwarmBase from "./SwarmBase";
 
 export default function App() {
-  return <SwarmXHybrid />;
+  return <SwarmBase />;
 }
-// force rebuild
