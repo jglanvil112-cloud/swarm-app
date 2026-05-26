@@ -111,6 +111,27 @@ const CONNECTIONS = [
   );
 }
 
+
+  // Fetch real Shopify sales data every 6 hours
+  useEffect(() => {
+    const fetchSales = async () => {
+      try {
+        const [ordersRes, productsRes] = await Promise.all([
+          fetch('/api/shopify/orders'),
+          fetch('/api/shopify/products')
+        ]);
+        const ordersData = await ordersRes.json();
+        const productsData = await productsRes.json();
+        const orders = ordersData.orders || [];
+        const revenue = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+        setSalesData({ revenue: parseFloat(revenue.toFixed(2)), orders: orders.length, products: (productsData.products || []).length, lastUpdated: new Date().toLocaleTimeString() });
+      } catch(e) { console.error('[Sales]', e); }
+    };
+    fetchSales();
+    const interval = setInterval(fetchSales, 6 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
 export default function SwarmBase({ onAnalyze, loading }) {
   const [selected, setSelected] = useState(null);
   const [dataPackets, setDataPackets] = useState([]);
@@ -121,6 +142,7 @@ export default function SwarmBase({ onAnalyze, loading }) {
     { text: "> Awaiting mission directive...", color: "#6080a0" },
   ]);
   const [input, setInput] = useState("");
+  const [salesData, setSalesData] = useState({ revenue: 0, orders: 0, products: 0, lastUpdated: null });
   const [bankroll, setBankroll] = useState("1000");
   const svgRef = useRef();
   const logRef = useRef();
@@ -323,6 +345,13 @@ export default function SwarmBase({ onAnalyze, loading }) {
             }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: selected.color, letterSpacing: 2 }}>{selected.icon} {selected.name}</div>
               <div style={{ fontSize: 9, color: "#6080a0", letterSpacing: 1, marginTop: 3 }}>{selected.role} · ACTIVE</div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: 'rgba(0,255,100,0.07)', border: '1px solid #00ff6433', borderRadius: 6, padding: '3px 10px', fontSize: 10, marginLeft: 8 }}>
+              <span style={{ color: '#00ff64' }}>💰 {salesData.revenue > 0 ? '$' + salesData.revenue.toLocaleString() : '—'}</span>
+              <span style={{ color: '#555' }}>|</span>
+              <span style={{ color: '#aaa' }}>📦 {salesData.orders} orders</span>
+              <span style={{ color: '#555' }}>|</span>
+              <span style={{ color: '#aaa' }}>🛒 {salesData.products} products</span>
+            </div>
             </div>
           )}
 
