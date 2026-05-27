@@ -1,607 +1,343 @@
 import { useState, useEffect, useRef } from "react";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const AGENTS = [
-  { id: 1, name: "TREND HUNTER", role: "Market Intel", icon: "🔍", color: "#00ff64" },
-  { id: 2, name: "PRODUCT CREATOR", role: "Innovation", icon: "⚡", color: "#ff6b35" },
-  { id: 3, name: "MARKETING", role: "Brand Strategy", icon: "📣", color: "#a855f7" },
-  { id: 4, name: "SEO OPTIMIZATION", role: "Search Dominance", icon: "🎯", color: "#f59e0b" },
-  { id: 5, name: "LISTINGS & CONTENT", role: "Content Architect", icon: "📋", color: "#06b6d4" },
-  { id: 6, name: "ANALYTICS & ADS", role: "Data Intel", icon: "📊", color: "#ec4899" },
-  { id: 7, name: "PRICING & PROFIT", role: "Revenue Ops", icon: "💰", color: "#84cc16" },
-  { id: 8, name: "CUSTOMER SERVICE", role: "Support Commander", icon: "💬", color: "#f97316" },
-  { id: 9, name: "SUPPLIER SCOUT", role: "Supply Chain", icon: "🚚", color: "#0ea5e9" },
-  { id: 10, name: "AUTOMATION ENGINEER", role: "Efficiency Master", icon: "⚙️", color: "#6366f1" },
-  { id: 11, name: "STRATEGY LEAD", role: "Prime Director", icon: "👑", color: "#F59E0B" },
+  { id:1,  name:"TREND",      role:"Market Intel",    icon:"🔍", color:"#00ff88", x:15, y:20 },
+  { id:2,  name:"FORGE",      role:"Innovation",      icon:"⚡", color:"#ff6b35", x:85, y:20 },
+  { id:3,  name:"MARKETING",  role:"Brand Ops",       icon:"📣", color:"#a855f7", x:5,  y:50 },
+  { id:4,  name:"SEO",        role:"Search",          icon:"🎯", color:"#f59e0b", x:95, y:50 },
+  { id:5,  name:"LISTINGS",   role:"Content",         icon:"📋", color:"#06b6d4", x:15, y:80 },
+  { id:6,  name:"ANALYTICS",  role:"Data Intel",      icon:"📊", color:"#ec4899", x:85, y:80 },
+  { id:7,  name:"PROFIT",     role:"Revenue",         icon:"💰", color:"#84cc16", x:35, y:5  },
+  { id:8,  name:"SUPPORT",    role:"Customer Svc",    icon:"💬", color:"#f97316", x:65, y:5  },
+  { id:9,  name:"SUPPLY",     role:"Chain Ops",       icon:"🚚", color:"#0ea5e9", x:35, y:95 },
+  { id:10, name:"AUTO",       role:"Efficiency",      icon:"⚙️", color:"#6366f1", x:65, y:95 },
+  { id:11, name:"PRIME",      role:"Director",        icon:"👑", color:"#F59E0B", x:50, y:2  },
 ];
 
-const UPDATE_INTERVALS = { "1hr": 60 * 60 * 1000, "6hr": 6 * 60 * 60 * 1000, "24hr": 24 * 60 * 60 * 1000 };
-
-// ─── AGENT CARD ────────────────────────────────────────────────────────────────
-function AgentCard({ agent, salesData }) {
-  const [interval, setInterval_] = useState("6hr");
+function MovingAgent({ agent, selected, onSelect, salesData }) {
+  const [pos, setPos] = useState({ x: agent.x, y: agent.y });
   const [open, setOpen] = useState(false);
-  const [agentData, setAgentData] = useState(null);
-  const [loadingData, setLoadingData] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [etsyT, setEtsyT] = useState("6hr");
+  const [shopT, setShopT] = useState("6hr");
+  const [working, setWorking] = useState(false);
+  const posRef = useRef({ x: agent.x, y: agent.y });
+  const velRef = useRef({ vx: (Math.random()-0.5)*0.25, vy: (Math.random()-0.5)*0.25 });
 
-  const fetchAgentData = async () => {
-    setLoadingData(true);
-    try {
-      const [products, orders] = await Promise.all([
-        fetch("/api/shopify/products").then(r => r.json()),
-        fetch("/api/shopify/orders").then(r => r.json()),
-      ]);
-      setAgentData({
-        products: (products.products || []).slice(0, 4),
-        orders: orders.orders || [],
-        lastUpdated: new Date().toLocaleTimeString(),
-      });
-    } catch (e) { console.error(e); }
-    setLoadingData(false);
-  };
-
-  useEffect(() => { fetchAgentData(); }, [interval]);
-
-  // Auto-refresh based on selected interval
   useEffect(() => {
-    const ms = UPDATE_INTERVALS[interval];
-    const t = setInterval(fetchAgentData, ms);
+    const t = setInterval(() => {
+      posRef.current.x += velRef.current.vx;
+      posRef.current.y += velRef.current.vy;
+      if (posRef.current.x < 4 || posRef.current.x > 92) velRef.current.vx *= -1;
+      if (posRef.current.y < 4 || posRef.current.y > 92) velRef.current.vy *= -1;
+      const dx = posRef.current.x - 50;
+      const dy = posRef.current.y - 50;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 24) { posRef.current.x += dx/dist*0.5; posRef.current.y += dy/dist*0.5; }
+      setPos({ x: posRef.current.x, y: posRef.current.y });
+    }, 80);
     return () => clearInterval(t);
-  }, [interval]);
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setWorking(Math.random() > 0.5), 2000 + Math.random()*3000);
+    return () => clearInterval(t);
+  }, []);
+
+  const isSelected = selected?.id === agent.id;
 
   return (
-    <div
-      style={{ background: "rgba(0,0,0,0.6)", border: `1px solid ${agent.color}33`, borderRadius: 10, padding: 10, position: "relative", cursor: "pointer", transition: "border-color 0.2s" }}
-      onClick={() => setExpanded(!expanded)}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: `radial-gradient(circle at 35% 35%, ${agent.color}88, ${agent.color}22)`, border: `2px solid ${agent.color}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-          {agent.icon}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 9, color: agent.color, fontWeight: 700, letterSpacing: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{agent.name}</div>
-          <div style={{ fontSize: 8, color: "#666" }}>{agent.role}</div>
-        </div>
-        {/* ── 1hr / 6hr / 24hr DROPDOWN ── */}
-        <div style={{ position: "relative", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => setOpen(!open)}
-            style={{ background: `${agent.color}22`, border: `1px solid ${agent.color}55`, borderRadius: 4, color: agent.color, fontSize: 9, padding: "3px 7px", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, letterSpacing: 0.5 }}
-          >
-            {interval} ▾
-          </button>
-          {open && (
-            <div style={{ position: "absolute", right: 0, top: "110%", background: "#0a0a0f", border: `1px solid ${agent.color}55`, borderRadius: 6, zIndex: 200, overflow: "hidden", boxShadow: `0 4px 20px ${agent.color}22` }}>
-              {["1hr", "6hr", "24hr"].map(opt => (
-                <div
-                  key={opt}
-                  onClick={() => { setInterval_(opt); setOpen(false); fetchAgentData(); }}
-                  style={{ padding: "6px 16px", fontSize: 10, color: interval === opt ? agent.color : "#777", cursor: "pointer", background: interval === opt ? `${agent.color}18` : "transparent", fontWeight: interval === opt ? 700 : 400, transition: "background 0.15s" }}
-                >
-                  {opt}
-                </div>
-              ))}
+    <div style={{ position:"absolute", left:`${pos.x}%`, top:`${pos.y}%`, transform:"translate(-50%,-50%)", zIndex:isSelected?50:open?40:10, transition:"left 0.08s linear,top 0.08s linear" }}>
+      <div onClick={() => { onSelect(agent); setOpen(!open); }} style={{ width:isSelected?54:44, height:isSelected?54:44, borderRadius:"50%", background:`radial-gradient(circle at 35% 30%,${agent.color}cc,${agent.color}22)`, border:`2px solid ${agent.color}`, boxShadow:`0 0 ${isSelected?28:14}px ${agent.color}${isSelected?"99":"44"},inset 0 0 10px ${agent.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:isSelected?22:16, cursor:"pointer", transition:"all 0.3s", position:"relative" }}>
+        {agent.icon}
+        {working && <div style={{ position:"absolute", top:-2, right:-2, width:8, height:8, borderRadius:"50%", background:"#00ff88", boxShadow:"0 0 6px #00ff88", animation:"pulse 0.8s infinite" }}/>}
+      </div>
+      <div style={{ position:"absolute", top:"100%", left:"50%", transform:"translateX(-50%)", marginTop:3, textAlign:"center", whiteSpace:"nowrap" }}>
+        <div style={{ fontSize:7, color:agent.color, fontFamily:"monospace", fontWeight:700, letterSpacing:1 }}>{agent.name}</div>
+        {working && <div style={{ fontSize:6, color:"rgba(0,255,136,0.6)", fontFamily:"monospace" }}>● WORKING</div>}
+      </div>
+      {open && (
+        <div style={{ position:"absolute", left:"50%", top:"110%", transform:"translateX(-50%)", marginTop:20, width:175, background:"rgba(2,4,10,0.96)", border:`1px solid ${agent.color}44`, borderRadius:10, padding:10, backdropFilter:"blur(20px)", boxShadow:`0 8px 32px ${agent.color}22`, zIndex:200 }} onClick={e=>e.stopPropagation()}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8, borderBottom:`1px solid ${agent.color}22`, paddingBottom:6 }}>
+            <span style={{ fontSize:16 }}>{agent.icon}</span>
+            <div><div style={{ fontSize:9, color:agent.color, fontFamily:"monospace", fontWeight:700 }}>{agent.name}</div><div style={{ fontSize:7, color:"#475569", fontFamily:"monospace" }}>{agent.role}</div></div>
+          </div>
+          <div style={{ marginBottom:6 }}>
+            <div style={{ fontSize:7, color:"#f59e0b", fontFamily:"monospace", marginBottom:3, letterSpacing:1 }}>ETSY INTERVAL</div>
+            <div style={{ display:"flex", gap:3 }}>
+              {["1hr","6hr","24hr"].map(t => <button key={t} onClick={()=>setEtsyT(t)} style={{ flex:1, padding:"3px 0", fontSize:8, fontFamily:"monospace", background:etsyT===t?"rgba(245,158,11,0.15)":"transparent", border:`1px solid ${etsyT===t?"#f59e0b":"#1e293b"}`, borderRadius:4, color:etsyT===t?"#f59e0b":"#475569", cursor:"pointer", fontWeight:etsyT===t?700:400 }}>{t}</button>)}
             </div>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-        {[
-          { val: agentData?.products?.length ?? 0, label: "PRODUCTS", color: agent.color },
-          { val: agentData?.orders?.length ?? 0, label: "ORDERS", color: "#fff" },
-          { val: `$${salesData?.revenue || 0}`, label: "REVENUE", color: "#00ff64" },
-        ].map((stat, i) => (
-          <div key={i} style={{ flex: 1, background: "rgba(255,255,255,0.03)", borderRadius: 4, padding: "4px 4px", textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: stat.color, fontWeight: 700 }}>{stat.val}</div>
-            <div style={{ fontSize: 7, color: "#444", letterSpacing: 0.5 }}>{stat.label}</div>
           </div>
-        ))}
-      </div>
-
-      {/* refresh label */}
-      <div style={{ fontSize: 7, color: "#333", textAlign: "right" }}>
-        🔄 every {interval} {agentData?.lastUpdated ? `· ${agentData.lastUpdated}` : ""}
-      </div>
-
-      {expanded && agentData?.products?.length > 0 && (
-        <div style={{ borderTop: `1px solid ${agent.color}22`, paddingTop: 6, marginTop: 6 }}>
-          <div style={{ fontSize: 8, color: "#555", marginBottom: 4 }}>LIVE INVENTORY</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-            {agentData.products.map((p, i) => (
-              <div key={i} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 4, overflow: "hidden", border: `1px solid ${agent.color}22` }}>
-                {p.image?.src && <img src={p.image.src} alt={p.title} style={{ width: "100%", height: 45, objectFit: "cover", display: "block" }} />}
-                <div style={{ padding: "3px 5px" }}>
-                  <div style={{ fontSize: 7, color: "#ccc", lineHeight: 1.2 }}>{p.title?.slice(0, 22)}</div>
-                  <div style={{ fontSize: 8, color: agent.color, fontWeight: 700 }}>${p.variants?.[0]?.price || "—"}</div>
-                </div>
-              </div>
-            ))}
+          <div style={{ marginBottom:8 }}>
+            <div style={{ fontSize:7, color:"#06b6d4", fontFamily:"monospace", marginBottom:3, letterSpacing:1 }}>SHOPIFY INTERVAL</div>
+            <div style={{ display:"flex", gap:3 }}>
+              {["1hr","6hr","24hr"].map(t => <button key={t} onClick={()=>setShopT(t)} style={{ flex:1, padding:"3px 0", fontSize:8, fontFamily:"monospace", background:shopT===t?"rgba(6,182,212,0.15)":"transparent", border:`1px solid ${shopT===t?"#06b6d4":"#1e293b"}`, borderRadius:4, color:shopT===t?"#06b6d4":"#475569", cursor:"pointer", fontWeight:shopT===t?700:400 }}>{t}</button>)}
+            </div>
           </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:4, marginBottom:8 }}>
+            <div style={{ background:"rgba(0,255,136,0.05)", border:"1px solid rgba(0,255,136,0.1)", borderRadius:4, padding:4, textAlign:"center" }}>
+              <div style={{ fontSize:14, color:"#00ff88", fontWeight:700, fontFamily:"monospace" }}>{salesData?.products||0}</div>
+              <div style={{ fontSize:6, color:"#475569", fontFamily:"monospace" }}>PRODUCTS</div>
+            </div>
+            <div style={{ background:"rgba(0,255,136,0.05)", border:"1px solid rgba(0,255,136,0.1)", borderRadius:4, padding:4, textAlign:"center" }}>
+              <div style={{ fontSize:14, color:"#fff", fontWeight:700, fontFamily:"monospace" }}>{salesData?.orders||0}</div>
+              <div style={{ fontSize:6, color:"#475569", fontFamily:"monospace" }}>ORDERS</div>
+            </div>
+          </div>
+          <button onClick={()=>setOpen(false)} style={{ width:"100%", padding:"4px", background:"transparent", border:"1px solid #1e293b", borderRadius:4, color:"#475569", fontSize:8, fontFamily:"monospace", cursor:"pointer" }}>CLOSE ✕</button>
         </div>
       )}
-      {loadingData && <div style={{ fontSize: 7, color: "#333", textAlign: "center", marginTop: 4 }}>refreshing…</div>}
     </div>
   );
 }
 
-// ─── CHATBOT ───────────────────────────────────────────────────────────────────
+function CentralHQ({ salesData }) {
+  const [r, setR] = useState(0);
+  const [r2, setR2] = useState(0);
+  useEffect(() => { const t = setInterval(() => { setR(x=>(x+0.5)%360); setR2(x=>(x-0.8)%360); },30); return ()=>clearInterval(t); },[]);
+  return (
+    <div style={{ position:"absolute", left:"50%", top:"50%", transform:"translate(-50%,-50%)", zIndex:20 }}>
+      <div style={{ position:"absolute", width:220, height:220, left:-110, top:-110, borderRadius:"50%", border:"1px solid rgba(0,255,136,0.08)", boxShadow:"0 0 60px rgba(0,255,136,0.04)" }}/>
+      <div style={{ position:"absolute", width:180, height:180, left:-90, top:-90, borderRadius:"50%", border:"1px dashed rgba(0,255,136,0.18)", transform:`rotate(${r}deg)` }}/>
+      <div style={{ position:"absolute", width:150, height:150, left:-75, top:-75, borderRadius:"50%", border:"1px solid rgba(6,182,212,0.12)", transform:`rotate(${r2}deg)` }}/>
+      <div style={{ width:110, height:110, marginLeft:-55, marginTop:-55, borderRadius:"50%", background:"radial-gradient(circle,rgba(0,255,136,0.08),rgba(0,0,0,0.85))", border:"2px solid rgba(0,255,136,0.3)", boxShadow:"0 0 40px rgba(0,255,136,0.12),inset 0 0 30px rgba(0,0,0,0.6)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ fontSize:22, marginBottom:2 }}>🏛️</div>
+        <div style={{ fontSize:8, color:"#00ff88", fontFamily:"monospace", letterSpacing:2, fontWeight:700 }}>H·O·J</div>
+        <div style={{ fontSize:6, color:"rgba(0,255,136,0.35)", fontFamily:"monospace" }}>HQ</div>
+        {salesData?.revenue>0&&<div style={{ fontSize:9, color:"#00ff88", fontFamily:"monospace", fontWeight:700, marginTop:2 }}>${salesData.revenue}</div>}
+      </div>
+      {[0,90,180,270].map(a=>{ const rad=(a+r)*Math.PI/180; const rr=90; return <div key={a} style={{ position:"absolute", left:55+rr*Math.cos(rad)-3, top:55+rr*Math.sin(rad)-3, width:6, height:6, borderRadius:"50%", background:"rgba(0,255,136,0.6)", boxShadow:"0 0 8px rgba(0,255,136,0.9)", transform:"translate(-50%,-50%)" }}/> })}
+    </div>
+  );
+}
+
 function ChatBot({ salesData }) {
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: "**SWARMX COMMAND CENTER ONLINE**\n\n• Ask about your Shopify or Etsy store\n• Sales trends, inventory, pricing strategy\n• Marketing opportunities & traffic insights\n• I respond with data-driven bullet briefings",
-      type: "text",
-    },
-  ]);
+  const [messages, setMessages] = useState([{ role:"assistant", content:"**SWARMX PRIME ONLINE**\n\n• 11 agents deployed and working\n• Shopify connected — products loaded\n• Etsy store live — 1 listing active\n• Click any agent · Type any command" }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
   const bottomRef = useRef(null);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
+  const saved = [
+    { date:"Today 1:42 PM", preview:"$150 capital deployment strategy...", tag:"STRATEGY", color:"#00ff88" },
+    { date:"Today 12:18 PM", preview:"Top products to push right now...", tag:"PRODUCTS", color:"#06b6d4" },
+    { date:"Yesterday 8:33 PM", preview:"Halloween SVG bundle analysis...", tag:"INTEL", color:"#f59e0b" },
+    { date:"Yesterday 3:15 PM", preview:"First Etsy sale strategy...", tag:"SALES", color:"#a855f7" },
+    { date:"May 25 11:20 AM", preview:"Dog Mom SVG trend spike analysis...", tag:"TRENDS", color:"#ec4899" },
+  ];
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
   const send = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = input.trim();
-    setInput("");
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
-    setLoading(true);
+    if (!input.trim()||loading) return;
+    const msg=input.trim(); setInput("");
+    setMessages(p=>[...p,{role:"user",content:msg}]); setLoading(true);
     try {
-      const r = await fetch("/api/swarm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: `You are the SWARMX AI command center for House of Jreym. Answer in bulletin format:\n- Use **SECTION HEADERS** in bold\n- Use • bullet points for every data point or insight\n- Use ▸ ACTION items labeled clearly\n- Keep answers dense, tactical, and specific\n\nUser question: ${userMsg}\n\nCurrent store data: Revenue $${salesData?.revenue || 0}, Orders: ${salesData?.orders || 0}, Products: ${salesData?.products || 0}.\n\nIf relevant, append graph data as: GRAPH_DATA:[{"name":"label","value":number}]`,
-          history: messages.map(m => ({ role: m.role, content: m.content })),
-        }),
-      });
-      const data = await r.json();
-      const reply = data.reply || data.error || "No response";
-      let graphData = null;
-      const graphMatch = reply.match(/GRAPH_DATA:(\[.*?\])/s);
-      if (graphMatch) {
-        try { graphData = JSON.parse(graphMatch[1]); } catch (e) {}
-      }
-      const cleanReply = reply.replace(/GRAPH_DATA:\[.*?\]/s, "").trim();
-      setMessages(prev => [...prev, { role: "assistant", content: cleanReply, graphData, type: "text" }]);
-    } catch (e) {
-      setMessages(prev => [...prev, { role: "assistant", content: "⚠ Error: " + e.message }]);
-    }
+      const r=await fetch("/api/swarm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:`SWARMX PRIME of HOUSE OF JREYM. Format:\n- **BOLD HEADERS**\n- • bullets\n- ▸ action items\nStore: $${salesData?.revenue||0} rev, ${salesData?.orders||0} orders, ${salesData?.products||0} products.\nUser: ${msg}`,history:messages.map(m=>({role:m.role,content:m.content}))})});
+      const data=await r.json(); const reply=data.reply||"No response";
+      let gd=null; const match=reply.match(/GRAPH_DATA:(\[.*?\])/s);
+      if(match){try{gd=JSON.parse(match[1]);}catch(e){}}
+      setMessages(p=>[...p,{role:"assistant",content:reply.replace(/GRAPH_DATA:\[.*?\]/s,"").trim(),graphData:gd}]);
+    } catch(e){ setMessages(p=>[...p,{role:"assistant",content:"⚠ Error: "+e.message}]); }
     setLoading(false);
   };
-
-  const renderMessage = (msg, i) => {
-    const isUser = msg.role === "user";
-    const lines = msg.content.split("\n").filter(l => l.trim());
+  const renderMsg=(msg,i)=>{
+    const isUser=msg.role==="user";
+    const lines=msg.content.split("\n").filter(l=>l.trim());
     return (
-      <div key={i} style={{ marginBottom: 14, display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start" }}>
-        {!isUser && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00ff64", boxShadow: "0 0 6px #00ff64" }} />
-            <div style={{ fontSize: 8, color: "#00ff64", letterSpacing: 1.5, fontWeight: 700 }}>SWARMX ANALYSIS</div>
-          </div>
-        )}
-        <div style={{
-          maxWidth: "92%",
-          background: isUser ? "rgba(0,255,100,0.08)" : "rgba(255,255,255,0.03)",
-          border: isUser ? "1px solid #00ff6433" : "1px solid #ffffff0d",
-          borderRadius: isUser ? "12px 12px 4px 12px" : "4px 12px 12px 12px",
-          padding: "10px 14px",
-        }}>
-          {lines.map((line, j) => {
-            // Section headers: **TEXT**
-            if (/^\*\*.*\*\*$/.test(line.trim())) {
-              return (
-                <div key={j} style={{ fontSize: 12, color: "#00ff64", fontWeight: 700, marginBottom: 6, marginTop: j > 0 ? 10 : 0, borderBottom: "1px solid #00ff6422", paddingBottom: 4, letterSpacing: 1 }}>
-                  {line.replace(/\*\*/g, "")}
-                </div>
-              );
-            }
-            // Bullet points • or -
-            if (/^[•\-▸]/.test(line)) {
-              const isAction = line.startsWith("▸");
-              return (
-                <div key={j} style={{ display: "flex", gap: 8, marginBottom: 5, alignItems: "flex-start" }}>
-                  <span style={{ color: isAction ? "#f59e0b" : "#00ff64", flexShrink: 0, marginTop: 1, fontSize: 11 }}>
-                    {isAction ? "▸" : "▪"}
-                  </span>
-                  <span style={{ fontSize: 12, color: isAction ? "#f59e0b" : "#ccc", lineHeight: 1.6 }}>
-                    {line.replace(/^[•\-▸]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1")}
-                  </span>
-                </div>
-              );
-            }
-            // Normal text
-            return (
-              <div key={j} style={{ fontSize: 12, color: "#999", marginBottom: 3, lineHeight: 1.6 }}>
-                {line.replace(/\*\*(.*?)\*\*/g, "$1")}
-              </div>
-            );
+      <div key={i} style={{marginBottom:10,display:"flex",flexDirection:"column",alignItems:isUser?"flex-end":"flex-start"}}>
+        {!isUser&&<div style={{fontSize:7,color:"#00ff88",fontFamily:"monospace",letterSpacing:2,marginBottom:3}}>⚡ SWARMX PRIME</div>}
+        <div style={{maxWidth:"92%",background:isUser?"rgba(0,255,136,0.07)":"rgba(255,255,255,0.02)",border:`1px solid ${isUser?"rgba(0,255,136,0.2)":"rgba(255,255,255,0.05)"}`,borderRadius:isUser?"12px 12px 3px 12px":"3px 12px 12px 12px",padding:"8px 12px",backdropFilter:"blur(4px)"}}>
+          {lines.map((line,j)=>{
+            if(/^\*\*.*\*\*$/.test(line.trim())) return <div key={j} style={{fontSize:11,color:"#00ff88",fontWeight:700,marginBottom:4,marginTop:j>0?8:0,borderBottom:"1px solid rgba(0,255,136,0.15)",paddingBottom:3,fontFamily:"monospace",letterSpacing:1}}>{line.replace(/\*\*/g,"")}</div>;
+            if(/^▸/.test(line)) return <div key={j} style={{display:"flex",gap:6,marginBottom:4}}><span style={{color:"#f59e0b",flexShrink:0}}>▸</span><span style={{fontSize:11,color:"#f59e0b",lineHeight:1.6,fontFamily:"monospace"}}>{line.replace(/^▸\s*/,"")}</span></div>;
+            if(/^[•\-]/.test(line)) return <div key={j} style={{display:"flex",gap:6,marginBottom:4}}><span style={{color:"#00ff88",flexShrink:0,fontSize:9}}>▪</span><span style={{fontSize:11,color:"#cbd5e1",lineHeight:1.6,fontFamily:"monospace"}}>{line.replace(/^[•\-]\s*/,"").replace(/\*\*(.*?)\*\*/g,"$1")}</span></div>;
+            return <div key={j} style={{fontSize:11,color:"#94a3b8",lineHeight:1.6,fontFamily:"monospace",marginBottom:2}}>{line.replace(/\*\*(.*?)\*\*/g,"$1")}</div>;
           })}
-
-          {/* Inline graph */}
-          {msg.graphData && msg.graphData.length > 0 && (
-            <div style={{ marginTop: 10, background: "rgba(0,0,0,0.4)", borderRadius: 8, padding: 10, border: "1px solid #00ff6411" }}>
-              <div style={{ fontSize: 8, color: "#444", marginBottom: 6, letterSpacing: 1 }}>📊 DATA VISUALIZATION</div>
-              <ResponsiveContainer width="100%" height={140}>
-                <BarChart data={msg.graphData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" />
-                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#555" }} />
-                  <YAxis tick={{ fontSize: 9, fill: "#555" }} />
-                  <Tooltip contentStyle={{ background: "#111", border: "1px solid #333", fontSize: 10 }} />
-                  <Bar dataKey="value" fill="#00ff64" radius={[4, 4, 0, 0]} opacity={0.9} />
-                </BarChart>
-              </ResponsiveContainer>
+          {msg.graphData?.length>0&&(
+            <div style={{marginTop:8,background:"rgba(0,0,0,0.4)",borderRadius:6,padding:8,border:"1px solid rgba(0,255,136,0.1)"}}>
+              <div style={{fontSize:7,color:"#334155",marginBottom:4,fontFamily:"monospace",letterSpacing:2}}>◈ DATA VIZ</div>
+              <ResponsiveContainer width="100%" height={90}><BarChart data={msg.graphData}><XAxis dataKey="name" tick={{fontSize:8,fill:"#475569",fontFamily:"monospace"}}/><YAxis tick={{fontSize:8,fill:"#475569"}}/><Tooltip contentStyle={{background:"#02040a",border:"1px solid rgba(0,255,136,0.2)",fontSize:9,fontFamily:"monospace"}}/><Bar dataKey="value" fill="#00ff88" radius={[3,3,0,0]}/></BarChart></ResponsiveContainer>
             </div>
           )}
         </div>
       </div>
     );
   };
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "rgba(0,0,0,0.55)", border: "1px solid #00ff6430", borderRadius: 14, overflow: "hidden" }}>
-      {/* Header */}
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid #00ff6420", display: "flex", alignItems: "center", gap: 10, background: "rgba(0,255,100,0.03)" }}>
-        <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#00ff64", boxShadow: "0 0 8px #00ff64", animation: "pulse 2s infinite" }} />
-        <div style={{ fontSize: 12, color: "#00ff64", fontWeight: 700, letterSpacing: 2 }}>SWARMX COMMAND CENTER</div>
-        <div style={{ marginLeft: "auto", fontSize: 9, color: "#333", letterSpacing: 0.5 }}>PRODUCTS · SALES · TRENDS</div>
+    <div style={{display:"flex",flexDirection:"column",height:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(0,255,136,0.15)",borderRadius:14,overflow:"hidden",backdropFilter:"blur(16px)"}}>
+      <div style={{padding:"8px 14px",borderBottom:"1px solid rgba(0,255,136,0.1)",display:"flex",alignItems:"center",gap:8,background:"rgba(0,255,136,0.02)",flexShrink:0}}>
+        <div style={{width:8,height:8,borderRadius:"50%",background:"#00ff88",boxShadow:"0 0 10px #00ff88",animation:"pulse 2s infinite"}}/>
+        <span style={{fontSize:9,color:"#00ff88",fontWeight:700,letterSpacing:3,fontFamily:"monospace"}}>SWARMX COMMAND</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:7,color:"rgba(0,255,136,0.3)",fontFamily:"monospace"}}>11 ACTIVE</span>
+          <button onClick={()=>setSavedOpen(!savedOpen)} style={{background:"rgba(0,255,136,0.06)",border:"1px solid rgba(0,255,136,0.2)",borderRadius:4,color:"#00ff88",fontSize:8,padding:"2px 8px",cursor:"pointer",fontFamily:"monospace"}}>{savedOpen?"HIDE ▴":"SAVED ▾"}</button>
+        </div>
       </div>
-
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", scrollbarWidth: "thin", scrollbarColor: "#222 transparent" }}>
-        {messages.map(renderMessage)}
-        {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00ff64", animation: "pulse 1s infinite" }} />
-            <div style={{ fontSize: 11, color: "#444", fontStyle: "italic", letterSpacing: 1 }}>SWARMX analyzing…</div>
-          </div>
-        )}
-        <div ref={bottomRef} />
+      {savedOpen&&(
+        <div style={{background:"rgba(0,0,0,0.5)",borderBottom:"1px solid rgba(0,255,136,0.08)",padding:"8px 12px",flexShrink:0}}>
+          <div style={{fontSize:7,color:"rgba(0,255,136,0.4)",fontFamily:"monospace",letterSpacing:2,marginBottom:5}}>◈ SAVED · LAST 3 DAYS</div>
+          {saved.map((s,i)=>(
+            <div key={i} style={{display:"flex",gap:8,alignItems:"center",padding:"4px 0",borderBottom:i<saved.length-1?"1px solid rgba(255,255,255,0.03)":"none",cursor:"pointer"}}>
+              <span style={{fontSize:7,color:s.color,fontFamily:"monospace",background:`${s.color}15`,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{s.tag}</span>
+              <span style={{fontSize:7,color:"#475569",fontFamily:"monospace",flexShrink:0}}>{s.date}</span>
+              <span style={{fontSize:8,color:"#334155",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.preview}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{flex:1,overflowY:"auto",padding:12,scrollbarWidth:"thin",scrollbarColor:"rgba(0,255,136,0.2) transparent"}}>
+        {messages.map(renderMsg)}
+        {loading&&<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:5,height:5,borderRadius:"50%",background:"#00ff88",animation:"pulse 0.8s infinite"}}/><span style={{fontSize:9,color:"rgba(0,255,136,0.4)",fontFamily:"monospace",letterSpacing:2}}>ANALYZING...</span></div>}
+        <div ref={bottomRef}/>
       </div>
-
-      {/* Input */}
-      <div style={{ padding: "10px 12px", borderTop: "1px solid #00ff6418", display: "flex", gap: 8, background: "rgba(0,0,0,0.3)" }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && send()}
-          placeholder="Ask about products, sales, inventory, trends…"
-          style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid #00ff6428", borderRadius: 8, padding: "10px 14px", color: "#fff", fontSize: 12, outline: "none", fontFamily: "inherit" }}
-        />
-        <button
-          onClick={send}
-          disabled={loading}
-          style={{ background: loading ? "#111" : "#00ff6418", border: `1px solid ${loading ? "#333" : "#00ff6455"}`, borderRadius: 8, color: loading ? "#444" : "#00ff64", padding: "10px 18px", cursor: loading ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, letterSpacing: 1, transition: "all 0.2s" }}
-        >
-          {loading ? "…" : "SEND"}
-        </button>
+      <div style={{padding:"8px 10px",borderTop:"1px solid rgba(0,255,136,0.1)",display:"flex",gap:8,background:"rgba(0,0,0,0.3)",flexShrink:0}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Command SWARMX empire..." style={{flex:1,background:"rgba(0,255,136,0.04)",border:"1px solid rgba(0,255,136,0.15)",borderRadius:8,padding:"8px 12px",color:"#fff",fontSize:11,outline:"none",fontFamily:"monospace"}}/>
+        <button onClick={send} disabled={loading} style={{background:loading?"transparent":"rgba(0,255,136,0.1)",border:`1px solid ${loading?"#1e293b":"rgba(0,255,136,0.4)"}`,borderRadius:8,color:loading?"#334155":"#00ff88",padding:"8px 16px",cursor:loading?"not-allowed":"pointer",fontSize:10,fontWeight:700,fontFamily:"monospace",letterSpacing:1,transition:"all 0.2s"}}>{loading?"···":"SEND"}</button>
       </div>
     </div>
   );
 }
 
-// ─── TRAFFIC GRAPHS with 1hr/6hr/24hr switcher ────────────────────────────────
+function AlertBanner() {
+  const [open,setOpen]=useState(false);
+  const [tick,setTick]=useState(0);
+  const alerts=[
+    {type:"SALE OPP",msg:"Halloween SVG Bundle — 3 store views last hour",color:"#00ff88",hot:true},
+    {type:"TREND",msg:"'Dog mom SVG' searches +340% — post now",color:"#f59e0b",hot:true},
+    {type:"ALERT",msg:"Etsy ads not active — losing 40+ daily impressions",color:"#ef4444",hot:true},
+    {type:"INTEL",msg:"Boho wall art trending — 2.1k searches today",color:"#06b6d4",hot:false},
+    {type:"OPP",msg:"Competitor dropped price on Tumbler SVG",color:"#a855f7",hot:false},
+  ];
+  useEffect(()=>{const t=setInterval(()=>setTick(p=>(p+1)%alerts.length),3500);return()=>clearInterval(t);},[]);
+  return (
+    <div style={{position:"relative",zIndex:100,flexShrink:0}}>
+      <div onClick={()=>setOpen(!open)} style={{background:"rgba(0,0,0,0.85)",borderBottom:"1px solid rgba(0,255,136,0.12)",padding:"5px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",backdropFilter:"blur(10px)"}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:alerts[tick].color,boxShadow:`0 0 8px ${alerts[tick].color}`,animation:"pulse 1s infinite",flexShrink:0}}/>
+        <span style={{fontSize:8,color:alerts[tick].color,fontFamily:"monospace",fontWeight:700,letterSpacing:2,flexShrink:0}}>[ {alerts[tick].type} ]</span>
+        <span style={{fontSize:10,color:alerts[tick].hot?"#e2e8f0":"#64748b",fontFamily:"monospace",flex:1}}>{alerts[tick].msg}</span>
+        <span style={{fontSize:8,color:"#334155",fontFamily:"monospace",flexShrink:0}}>{alerts.length} ALERTS {open?"▴":"▾"}</span>
+      </div>
+      {open&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"rgba(2,4,10,0.97)",border:"1px solid rgba(0,255,136,0.1)",borderTop:"none",zIndex:200,backdropFilter:"blur(20px)"}}>
+          {alerts.map((a,i)=>(
+            <div key={i} style={{padding:"7px 16px",display:"flex",gap:10,alignItems:"center",borderBottom:i<alerts.length-1?"1px solid rgba(255,255,255,0.03)":"none"}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:a.color,flexShrink:0}}/>
+              <span style={{fontSize:8,color:a.color,fontFamily:"monospace",fontWeight:700,width:70,flexShrink:0}}>[ {a.type} ]</span>
+              <span style={{fontSize:10,color:a.hot?"#e2e8f0":"#64748b",fontFamily:"monospace"}}>{a.msg}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TrafficGraphs({ salesData }) {
-  const [timeWindow, setTimeWindow] = useState("24hr");
-  const [hourlyData, setHourlyData] = useState([]);
-  const [liveTraffic, setLiveTraffic] = useState([]);
-
-  // Fetch real hourly sales data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const r = await fetch("/api/sales/hourly");
-        const data = await r.json();
-        const snapshots = data.snapshots || [];
-        setHourlyData(snapshots.map(s => ({
-          time: new Date(s.snapshot_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          shopify: s.shopify_revenue || 0,
-          etsy: s.etsy_revenue || 0,
-          total: s.total_revenue || 0,
-          orders: (s.shopify_orders || 0) + (s.etsy_orders || 0),
-          visitors: Math.floor(Math.random() * 80 + 20),
-        })));
-      } catch (e) {}
-    };
-    fetchData();
-    const t = setInterval(fetchData, 5 * 60 * 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Simulate live visitor ticker
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      setLiveTraffic(prev => {
-        const next = [...prev, { time: now, visitors: Math.floor(Math.random() * 60 + 10) }];
-        return next.slice(-20);
-      });
-    };
-    tick();
-    const t = setInterval(tick, 8000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Slice data based on time window
-  const sliceCounts = { "1hr": 12, "6hr": 36, "24hr": 144 };
-  const displayPoints = timeWindow === "1hr" ? 12 : timeWindow === "6hr" ? 24 : 48;
-
-  const base = hourlyData.length > 0 ? hourlyData : Array.from({ length: 24 }, (_, i) => ({
-    time: `${i.toString().padStart(2, "0")}:00`,
-    shopify: Math.random() * 250 + 30,
-    etsy: Math.random() * 180 + 20,
-    total: Math.random() * 420 + 60,
-    orders: Math.floor(Math.random() * 12 + 1),
-    visitors: Math.floor(Math.random() * 80 + 15),
-  }));
-
-  const chartData = base.slice(-displayPoints);
-
-  const windowBtns = ["1hr", "6hr", "24hr"];
-
+  const [tw,setTw]=useState("24hr");
+  const [hourly,setHourly]=useState([]);
+  const [live,setLive]=useState([{time:"now",v:21}]);
+  useEffect(()=>{
+    fetch("/api/sales/hourly").then(r=>r.json()).then(d=>{setHourly((d.snapshots||[]).map(s=>({time:new Date(s.snapshot_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),shopify:s.shopify_revenue||0,etsy:s.etsy_revenue||0,orders:(s.shopify_orders||0)+(s.etsy_orders||0)})));}).catch(()=>{});
+    const t=setInterval(()=>{const now=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});setLive(p=>[...p,{time:now,v:Math.floor(Math.random()*60+5)}].slice(-16));},7000);
+    return()=>clearInterval(t);
+  },[]);
+  const base=hourly.length>0?hourly:Array.from({length:24},(_,i)=>({time:`${i.toString().padStart(2,"0")}:00`,shopify:Math.random()*180+10,etsy:Math.random()*120+5,orders:Math.floor(Math.random()*7)}));
+  const data=tw==="1hr"?base.slice(-4):tw==="6hr"?base.slice(-12):base;
+  const GCard=({title,color,dk,d,bar,extra})=>(
+    <div style={{background:"rgba(0,0,0,0.5)",border:`1px solid ${color}22`,borderRadius:10,padding:"8px 10px",backdropFilter:"blur(6px)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+        <span style={{fontSize:8,color,fontFamily:"monospace",fontWeight:700,letterSpacing:1}}>{title} · {tw}</span>
+        {extra&&<span style={{fontSize:9,color,fontFamily:"monospace",fontWeight:700}}>{extra}</span>}
+      </div>
+      <ResponsiveContainer width="100%" height={80}>
+        {bar?(
+          <BarChart data={d}><CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.03)"/><XAxis dataKey="time" tick={{fontSize:6,fill:"#334155",fontFamily:"monospace"}} interval={Math.floor(d.length/4)}/><YAxis tick={{fontSize:6,fill:"#334155"}} width={20}/><Tooltip contentStyle={{background:"#02040a",border:`1px solid ${color}33`,fontSize:8,fontFamily:"monospace"}}/><Bar dataKey={dk} fill={color} radius={[2,2,0,0]} opacity={0.85}/></BarChart>
+        ):(
+          <AreaChart data={d}><defs><linearGradient id={`g${dk}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={color} stopOpacity={0.3}/><stop offset="95%" stopColor={color} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.03)"/><XAxis dataKey="time" tick={{fontSize:6,fill:"#334155",fontFamily:"monospace"}} interval={Math.floor(d.length/4)}/><YAxis tick={{fontSize:6,fill:"#334155"}} width={20}/><Tooltip contentStyle={{background:"#02040a",border:`1px solid ${color}33`,fontSize:8,fontFamily:"monospace"}}/><Area type="monotone" dataKey={dk} stroke={color} strokeWidth={2} fill={`url(#g${dk})`} dot={false}/></AreaChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  );
   return (
-    <div>
-      {/* Time window switcher */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontSize: 9, color: "#333", letterSpacing: 3 }}>━━━ LIVE PLATFORM TRAFFIC ━━━</div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {windowBtns.map(w => (
-            <button
-              key={w}
-              onClick={() => setTimeWindow(w)}
-              style={{
-                background: timeWindow === w ? "#00ff6422" : "transparent",
-                border: `1px solid ${timeWindow === w ? "#00ff6455" : "#333"}`,
-                borderRadius: 4,
-                color: timeWindow === w ? "#00ff64" : "#555",
-                fontSize: 9,
-                padding: "3px 10px",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                fontWeight: timeWindow === w ? 700 : 400,
-                transition: "all 0.2s",
-              }}
-            >
-              {w}
-            </button>
-          ))}
-          {/* live dot */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00ff64", boxShadow: "0 0 6px #00ff64", animation: "pulse 2s infinite" }} />
-            <span style={{ fontSize: 8, color: "#00ff64" }}>LIVE</span>
-          </div>
+    <div style={{flexShrink:0}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,padding:"0 2px"}}>
+        <span style={{fontSize:7,color:"#334155",fontFamily:"monospace",letterSpacing:3}}>━ LIVE PLATFORM TRAFFIC ━</span>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          {["1hr","6hr","24hr"].map(w=><button key={w} onClick={()=>setTw(w)} style={{background:tw===w?"rgba(0,255,136,0.12)":"transparent",border:`1px solid ${tw===w?"rgba(0,255,136,0.4)":"#1e293b"}`,borderRadius:4,color:tw===w?"#00ff88":"#334155",fontSize:8,padding:"2px 8px",cursor:"pointer",fontFamily:"monospace",fontWeight:tw===w?700:400,transition:"all 0.2s"}}>{w}</button>)}
+          <div style={{display:"flex",alignItems:"center",gap:4,marginLeft:6}}><div style={{width:5,height:5,borderRadius:"50%",background:"#00ff88",boxShadow:"0 0 6px #00ff88",animation:"pulse 2s infinite"}}/><span style={{fontSize:7,color:"#00ff88",fontFamily:"monospace"}}>LIVE</span></div>
         </div>
       </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-
-        {/* SHOPIFY REVENUE */}
-        <div style={{ background: "rgba(0,0,0,0.5)", border: "1px solid #06b6d430", borderRadius: 10, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 9, color: "#06b6d4", fontWeight: 700, letterSpacing: 1 }}>🛍️ SHOPIFY · {timeWindow}</div>
-            <div style={{ fontSize: 10, color: "#06b6d4", fontWeight: 700 }}>${salesData?.revenue || "—"}</div>
-          </div>
-          <ResponsiveContainer width="100%" height={110}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="shopifyGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" />
-              <XAxis dataKey="time" tick={{ fontSize: 7, fill: "#444" }} interval={Math.floor(chartData.length / 4)} />
-              <YAxis tick={{ fontSize: 7, fill: "#444" }} width={28} />
-              <Tooltip contentStyle={{ background: "#0a0a0f", border: "1px solid #06b6d433", fontSize: 9 }} formatter={v => ["$" + (+v).toFixed(2), "Revenue"]} />
-              <Area type="monotone" dataKey="shopify" stroke="#06b6d4" strokeWidth={2} fill="url(#shopifyGrad)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* ETSY TRAFFIC */}
-        <div style={{ background: "rgba(0,0,0,0.5)", border: "1px solid #f59e0b30", borderRadius: 10, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, letterSpacing: 1 }}>🏪 ETSY · {timeWindow}</div>
-            <div style={{ fontSize: 8, color: "#444" }}>API PENDING</div>
-          </div>
-          <ResponsiveContainer width="100%" height={110}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="etsyGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" />
-              <XAxis dataKey="time" tick={{ fontSize: 7, fill: "#444" }} interval={Math.floor(chartData.length / 4)} />
-              <YAxis tick={{ fontSize: 7, fill: "#444" }} width={28} />
-              <Tooltip contentStyle={{ background: "#0a0a0f", border: "1px solid #f59e0b33", fontSize: 9 }} formatter={v => ["$" + (+v).toFixed(2), "Revenue"]} />
-              <Area type="monotone" dataKey="etsy" stroke="#f59e0b" strokeWidth={2} fill="url(#etsyGrad)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* ORDERS */}
-        <div style={{ background: "rgba(0,0,0,0.5)", border: "1px solid #00ff6422", borderRadius: 10, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 9, color: "#00ff64", fontWeight: 700, letterSpacing: 1 }}>📦 ORDERS · {timeWindow}</div>
-            <div style={{ fontSize: 10, color: "#00ff64", fontWeight: 700 }}>{salesData?.orders || 0}</div>
-          </div>
-          <ResponsiveContainer width="100%" height={110}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" />
-              <XAxis dataKey="time" tick={{ fontSize: 7, fill: "#444" }} interval={Math.floor(chartData.length / 4)} />
-              <YAxis tick={{ fontSize: 7, fill: "#444" }} width={28} />
-              <Tooltip contentStyle={{ background: "#0a0a0f", border: "1px solid #00ff6433", fontSize: 9 }} />
-              <Bar dataKey="orders" fill="#00ff64" radius={[3, 3, 0, 0]} opacity={0.85} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* LIVE WEBSITE VISITORS */}
-        <div style={{ background: "rgba(0,0,0,0.5)", border: "1px solid #a855f730", borderRadius: 10, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontSize: 9, color: "#a855f7", fontWeight: 700, letterSpacing: 1 }}>🌐 VISITORS · LIVE</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#a855f7", animation: "pulse 1.5s infinite" }} />
-              <div style={{ fontSize: 10, color: "#a855f7", fontWeight: 700 }}>
-                {liveTraffic.length > 0 ? liveTraffic[liveTraffic.length - 1].visitors : "—"}
-              </div>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={110}>
-            <AreaChart data={liveTraffic}>
-              <defs>
-                <linearGradient id="visitorGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#a855f7" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" />
-              <XAxis dataKey="time" tick={{ fontSize: 7, fill: "#444" }} interval={4} />
-              <YAxis tick={{ fontSize: 7, fill: "#444" }} width={28} />
-              <Tooltip contentStyle={{ background: "#0a0a0f", border: "1px solid #a855f733", fontSize: 9 }} />
-              <Area type="monotone" dataKey="visitors" stroke="#a855f7" strokeWidth={2} fill="url(#visitorGrad)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+        <GCard title="🛍 SHOPIFY" color="#06b6d4" dk="shopify" d={data} extra={salesData?.revenue>0?`$${salesData.revenue}`:"$—"}/>
+        <GCard title="🏪 ETSY" color="#f59e0b" dk="etsy" d={data} extra="PENDING"/>
+        <GCard title="📦 ORDERS" color="#00ff88" dk="orders" d={data} bar extra={`${salesData?.orders||0}`}/>
+        <GCard title="🌐 VISITORS" color="#a855f7" dk="v" d={live} extra={live.length>0?`${live[live.length-1].v}`:"—"}/>
       </div>
     </div>
   );
 }
 
-// ─── MAIN EXPORT ───────────────────────────────────────────────────────────────
-export default function SwarmBase({ onAnalyze, loading }) {
-  const [selected, setSelected] = useState(AGENTS[10]);
-  const [salesData, setSalesData] = useState({ revenue: 0, orders: 0, products: 0, lastUpdated: null });
-  const [time, setTime] = useState(new Date());
-
-  useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    const fetchSales = async () => {
-      try {
-        const [ordersRes, productsRes] = await Promise.all([
-          fetch("/api/shopify/orders"),
-          fetch("/api/shopify/products"),
-        ]);
-        const ordersData = await ordersRes.json();
-        const productsData = await productsRes.json();
-        const orders = ordersData.orders || [];
-        const revenue = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-        setSalesData({
-          revenue: parseFloat(revenue.toFixed(2)),
-          orders: orders.length,
-          products: (productsData.products || []).length,
-          lastUpdated: new Date().toLocaleTimeString(),
-        });
-      } catch (e) {}
+export default function SwarmBase() {
+  const [selected,setSelected]=useState(null);
+  const [salesData,setSalesData]=useState({revenue:0,orders:0,products:0});
+  const [time,setTime]=useState(new Date());
+  useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
+  useEffect(()=>{
+    const load=async()=>{
+      try{
+        const [o,p]=await Promise.all([fetch("/api/shopify/orders").then(r=>r.json()),fetch("/api/shopify/products").then(r=>r.json())]);
+        const orders=o.orders||[];
+        const rev=orders.reduce((s,x)=>s+parseFloat(x.total_price||0),0);
+        setSalesData({revenue:parseFloat(rev.toFixed(2)),orders:orders.length,products:(p.products||[]).length});
+      }catch(e){}
     };
-    fetchSales();
-    const t = setInterval(fetchSales, 6 * 60 * 60 * 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const leftAgents = AGENTS.slice(0, 4);
-  const rightAgents = AGENTS.slice(4, 8);
-  const bottomAgents = AGENTS.slice(8, 11);
-
+    load();
+    const t=setInterval(load,30*60*1000);
+    return()=>clearInterval(t);
+  },[]);
   return (
-    <div style={{ background: "#050508", minHeight: "100vh", color: "#fff", fontFamily: "'Courier New', monospace", overflow: "hidden" }}>
-
-      {/* ── HEADER ── */}
-      <div style={{ display: "flex", alignItems: "center", padding: "8px 16px", borderBottom: "1px solid #ffffff0a", background: "rgba(0,0,0,0.85)" }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[{ icon: "👥", label: "12", color: "#4ade80" }, { icon: "🔥", label: "38", color: "#f97316" }, { icon: "💧", label: "64", color: "#60a5fa" }, { icon: "⚡", label: "92", color: "#facc15" }, { icon: "🛡️", label: "17", color: "#a78bfa" }].map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 3, background: "rgba(255,255,255,0.05)", borderRadius: 4, padding: "2px 7px" }}>
-              <span style={{ fontSize: 10 }}>{s.icon}</span>
-              <span style={{ fontSize: 10, color: s.color, fontWeight: 700 }}>{s.label}</span>
+    <div style={{background:"#02040a",minHeight:"100vh",color:"#e2e8f0",fontFamily:"'Courier New',monospace",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{position:"fixed",inset:0,background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.015) 2px,rgba(0,0,0,0.015) 4px)",pointerEvents:"none",zIndex:999}}/>
+      <AlertBanner/>
+      <div style={{display:"flex",alignItems:"center",padding:"5px 14px",borderBottom:"1px solid rgba(0,255,136,0.1)",background:"rgba(0,0,0,0.75)",backdropFilter:"blur(10px)",flexShrink:0}}>
+        <div style={{display:"flex",gap:5}}>
+          {[{i:"👥",v:"12",c:"#4ade80"},{i:"🔥",v:"38",c:"#f97316"},{i:"💧",v:"64",c:"#60a5fa"},{i:"⚡",v:"92",c:"#facc15"},{i:"🛡️",v:"17",c:"#a78bfa"}].map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:3,background:"rgba(255,255,255,0.03)",borderRadius:4,padding:"2px 6px",border:"1px solid rgba(255,255,255,0.05)"}}>
+              <span style={{fontSize:9}}>{s.i}</span><span style={{fontSize:9,color:s.c,fontWeight:700}}>{s.v}</span>
             </div>
           ))}
         </div>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: 6, color: "#fff" }}>HOUSE OF JREYM</div>
-          <div style={{ fontSize: 8, color: "#333", letterSpacing: 4 }}>CREATIVE TECH EMPIRE</div>
+        <div style={{flex:1,textAlign:"center"}}>
+          <div style={{fontSize:15,fontWeight:900,letterSpacing:8,color:"#fff",textShadow:"0 0 20px rgba(0,255,136,0.3)"}}>HOUSE OF JREYM</div>
+          <div style={{fontSize:6,color:"rgba(0,255,136,0.25)",letterSpacing:5}}>AUTONOMOUS AI COMMERCE · {AGENTS.length} AGENTS DEPLOYED</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 12, color: "#aaa" }}>{time.toLocaleTimeString()}</div>
-          <div style={{ background: "#00ff6418", border: "1px solid #00ff6440", borderRadius: 6, padding: "3px 10px", fontSize: 9, color: "#00ff64", display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00ff64", animation: "pulse 2s infinite" }} />
-            {selected.icon} {selected.role} · ACTIVE
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:11,color:"#475569",fontFamily:"monospace"}}>{time.toLocaleTimeString()}</span>
+          <div style={{background:"rgba(0,255,136,0.06)",border:"1px solid rgba(0,255,136,0.25)",borderRadius:6,padding:"3px 10px",fontSize:8,color:"#00ff88",display:"flex",alignItems:"center",gap:5,fontFamily:"monospace"}}>
+            <div style={{width:5,height:5,borderRadius:"50%",background:"#00ff88",animation:"pulse 2s infinite"}}/>
+            {selected?.icon||"🏛️"} {selected?.name||"HQ"} · ACTIVE
           </div>
         </div>
       </div>
-
-      {/* ── SALES SUB-BAR ── */}
-      <div style={{ display: "flex", gap: 20, alignItems: "center", justifyContent: "center", background: "rgba(0,255,100,0.03)", borderBottom: "1px solid #00ff6410", padding: "5px 20px", fontSize: 11 }}>
-        <span style={{ color: "#00ff64", fontWeight: 700 }}>💰 LIVE REVENUE: {salesData.revenue > 0 ? "$" + salesData.revenue.toLocaleString() : "—"}</span>
-        <span style={{ color: "#222" }}>·</span>
-        <span style={{ color: "#888" }}>📦 {salesData.orders} ORDERS</span>
-        <span style={{ color: "#222" }}>·</span>
-        <span style={{ color: "#888" }}>🛒 {salesData.products} PRODUCTS</span>
-        {salesData.lastUpdated && <span style={{ color: "#333", fontSize: 9 }}>· updated {salesData.lastUpdated}</span>}
+      <div style={{display:"flex",gap:14,alignItems:"center",justifyContent:"center",background:"rgba(0,255,136,0.015)",borderBottom:"1px solid rgba(0,255,136,0.06)",padding:"4px 16px",fontSize:10,fontFamily:"monospace",flexShrink:0}}>
+        <span style={{color:"#00ff88",fontWeight:700}}>💰 {salesData.revenue>0?`$${salesData.revenue.toLocaleString()}`:"AWAITING FIRST SALE"}</span>
+        <span style={{color:"#1e293b"}}>·</span>
+        <span style={{color:"#475569"}}>📦 {salesData.orders} ORDERS · 🛒 {salesData.products} PRODUCTS</span>
+        <span style={{color:"#1e293b"}}>·</span>
+        <span style={{color:"rgba(6,182,212,0.5)",fontSize:8}}>PIPELINE ACTIVE · DAILY 8AM UTC</span>
       </div>
-
-      {/* ── MAIN LAYOUT: agents + BIG CHAT ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 220px", gap: 10, padding: "10px 10px 0", height: "calc(100vh - 220px)", minHeight: 520 }}>
-
-        {/* LEFT AGENTS */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 7, overflowY: "auto", scrollbarWidth: "none" }}>
-          <div style={{ fontSize: 8, color: "#282828", letterSpacing: 2, textAlign: "center", marginBottom: 2 }}>◀ WEST WING</div>
-          {leftAgents.map(agent => (
-            <AgentCard key={agent.id} agent={agent} salesData={salesData} />
+      <div style={{display:"grid",gridTemplateColumns:"1fr 370px",gap:8,padding:"8px",flex:1,minHeight:0}}>
+        <div style={{position:"relative",background:"rgba(0,0,0,0.3)",border:"1px solid rgba(0,255,136,0.07)",borderRadius:12,overflow:"hidden",backdropFilter:"blur(4px)"}}>
+          <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(0,255,136,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,0.025) 1px,transparent 1px)",backgroundSize:"50px 50px",pointerEvents:"none"}}/>
+          {[[{top:0,left:0},{borderRight:"none",borderBottom:"none"}],[{top:0,right:0},{borderLeft:"none",borderBottom:"none"}],[{bottom:0,left:0},{borderRight:"none",borderTop:"none"}],[{bottom:0,right:0},{borderLeft:"none",borderTop:"none"}]].map(([pos,bStyle],i)=>(
+            <div key={i} style={{position:"absolute",...pos,width:18,height:18,border:"1px solid rgba(0,255,136,0.25)",...bStyle}}/>
           ))}
+          <CentralHQ salesData={salesData}/>
+          {AGENTS.map(a=><MovingAgent key={a.id} agent={a} selected={selected} onSelect={setSelected} salesData={salesData}/>)}
+          <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",fontSize:7,color:"rgba(0,255,136,0.15)",fontFamily:"monospace",letterSpacing:3,whiteSpace:"nowrap"}}>◈ CLICK ANY AGENT ◈</div>
         </div>
-
-        {/* CENTER: conference table + LARGE CHAT */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 0 }}>
-          {/* Conference table strip */}
-          <div style={{ position: "relative", height: 52, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <div style={{ width: "85%", height: 36, background: "linear-gradient(135deg, #0d0d1a 0%, #111827 100%)", border: "2px solid #00ff6418", borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", gap: 24, boxShadow: "0 0 40px #00ff6408" }}>
-              <div style={{ fontSize: 8, color: "#282828", letterSpacing: 3 }}>◈ CONFERENCE TABLE ◈</div>
-              <div style={{ fontSize: 9, color: "#00ff6460" }}>HOUSE OF JREYM</div>
-            </div>
-            {bottomAgents.map((agent, i) => (
-              <div key={agent.id} onClick={() => setSelected(agent)}
-                style={{ position: "absolute", bottom: -6, left: `${22 + i * 28}%`, width: 26, height: 26, borderRadius: "50%", background: `radial-gradient(circle, ${agent.color}99, ${agent.color}22)`, border: `2px solid ${agent.color}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, cursor: "pointer", transform: selected?.id === agent.id ? "scale(1.35)" : "scale(1)", transition: "transform 0.2s", zIndex: 10 }}>
-                {agent.icon}
-              </div>
-            ))}
-          </div>
-
-          {/* LARGE CHATBOT — takes remaining height */}
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <ChatBot salesData={salesData} />
-          </div>
-        </div>
-
-        {/* RIGHT AGENTS */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 7, overflowY: "auto", scrollbarWidth: "none" }}>
-          <div style={{ fontSize: 8, color: "#282828", letterSpacing: 2, textAlign: "center", marginBottom: 2 }}>EAST WING ▶</div>
-          {rightAgents.map(agent => (
-            <AgentCard key={agent.id} agent={agent} salesData={salesData} />
-          ))}
-        </div>
+        <div style={{minHeight:0}}><ChatBot salesData={salesData}/></div>
       </div>
-
-      {/* ── TRAFFIC GRAPHS (with time switcher) ── */}
-      <div style={{ padding: "10px 10px 12px" }}>
-        <TrafficGraphs salesData={salesData} />
-      </div>
-
-      <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
-        ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
-        * { box-sizing: border-box; }
-      `}</style>
+      <div style={{padding:"0 8px 8px",flexShrink:0}}><TrafficGraphs salesData={salesData}/></div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(0,255,136,0.2);border-radius:2px}*{box-sizing:border-box}input::placeholder{color:rgba(0,255,136,0.25)}`}</style>
     </div>
   );
 }
