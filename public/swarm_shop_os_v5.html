@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HOUSE OF JREYM — SWARM SHOP OS v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g:#00ff88;--c:#00d4ff;--a:#ffb300;--p:#bf5fff;--r:#ff3d6e;
+  --bg:#010a05;--t:#b8ffd0;--mu:#1e3d2a;--bd:#0a1f12;
+  --glass:rgba(0,255,136,.04);--glassc:rgba(0,212,255,.04);
+}
+html,body{height:100%;background:var(--bg);color:var(--t);font-family:'Share Tech Mono',monospace;overflow:hidden}
+body{display:flex;flex-direction:column;min-height:100vh}
+
+.hdr{background:rgba(1,8,4,.98);border-bottom:1px solid #0c2a16;padding:6px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:20}
+.logo{display:flex;align-items:center;gap:10px}
+.hex{width:36px;height:36px;clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:var(--g);display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace;font-weight:900;font-size:11px;color:#000}
+.brand{font-family:'Orbitron',monospace;font-size:13px;font-weight:600;color:var(--g);letter-spacing:.1em}
+.sub{font-size:8px;color:var(--mu);letter-spacing:.2em;margin-top:2px}
+.hstats{display:flex;gap:14px}
+.hs{text-align:center}
+.hs-val{font-family:'Orbitron',monospace;font-size:13px;color:var(--g);font-weight:600}
+.hs-lbl{font-size:8px;color:var(--mu);letter-spacing:.1em}
+.hclk{font-family:'Orbitron',monospace;font-size:11px;color:var(--mu)}
+.sep{color:#0c2a16;font-size:20px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--g);display:inline-block;animation:bl 1.5s ease-in-out infinite;margin-right:5px}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:.2}}
+
+.mid{flex:1;display:grid;grid-template-columns:1fr 200px;overflow:hidden;position:relative;min-height:0}
+
+.board{position:relative;overflow:hidden;background:var(--bg)}
+#cv{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+
+.sidebar{border-left:1px solid #0c2a16;display:flex;flex-direction:column;background:rgba(1,6,3,.92);overflow:hidden}
+.sblock{flex:1;padding:9px 10px;overflow:hidden;border-bottom:1px solid #0c2a16;display:flex;flex-direction:column;gap:4px}
+.sblock-hdr{font-family:'Orbitron',monospace;font-size:8px;letter-spacing:.15em;color:var(--g);display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.sblock-hdr.etsy{color:var(--a)}
+.srow{display:flex;justify-content:space-between;font-size:9px}
+.sk{color:var(--mu)}
+.sv{color:var(--t)}
+.sv.live{color:var(--g)}
+.sv.warn{color:var(--a)}
+.sps{flex:1;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.spk-wrap{height:32px;margin-top:4px}
+.spk-wrap canvas{width:100%;height:32px;display:block}
+.pitem{font-size:8px;color:#1e4030;border-bottom:1px solid #071508;padding:2px 0;display:flex;justify-content:space-between}
+.pitem span:last-child{color:var(--t)}
+
+.agents-bar{height:148px;border-top:1px solid #0c2a16;display:flex;flex-direction:column;flex-shrink:0;background:rgba(1,6,3,.95)}
+.agents-bar-hdr{padding:5px 12px;border-bottom:1px solid #0c2a16;font-size:8px;letter-spacing:.18em;color:var(--mu);display:flex;align-items:center;gap:6px}
+.agents-scroll{flex:1;overflow-x:auto;overflow-y:hidden;display:flex;gap:8px;padding:8px 10px;scrollbar-width:thin;scrollbar-color:#0c2a16 transparent}
+.agents-scroll::-webkit-scrollbar{height:3px}
+.agents-scroll::-webkit-scrollbar-track{background:transparent}
+.agents-scroll::-webkit-scrollbar-thumb{background:#0c2a16}
+.acard{min-width:108px;border:1px solid;border-radius:4px;padding:6px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:border-color .2s}
+.acard:hover{background:rgba(255,255,255,.03)}
+.ac-top{display:flex;align-items:center;gap:5px}
+.ac-dot{width:8px;height:8px;border-radius:50%}
+.ac-name{font-family:'Orbitron',monospace;font-size:9px;font-weight:600}
+.ac-role{font-size:7px;color:var(--mu);letter-spacing:.05em}
+.ac-status{font-size:7px;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac-bottom{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-top:2px}
+.ac-run{font-size:7px;padding:2px 5px;border:1px solid;border-radius:2px;cursor:pointer;background:transparent;font-family:'Share Tech Mono',monospace;letter-spacing:.05em}
+.ac-run:hover{opacity:.7}
+.ac-sel{font-size:7px;background:rgba(0,0,0,.5);border:1px solid #1a3a22;color:var(--t);padding:2px 3px;border-radius:2px;font-family:'Share Tech Mono',monospace;cursor:pointer;outline:none}
+.ac-sel option{background:#010a05}
+.ac-last{font-size:6px;color:var(--mu);margin-top:1px}
+
+.bot{height:200px;display:grid;grid-template-columns:1fr 320px;border-top:1px solid #0c2a16;flex-shrink:0}
+
+.chat-panel{display:flex;flex-direction:column;background:rgba(0,255,136,.025);border-right:1px solid rgba(0,255,136,.07);backdrop-filter:blur(12px)}
+.chat-hdr{padding:6px 12px;border-bottom:1px solid rgba(0,255,136,.07);font-size:8px;letter-spacing:.2em;color:var(--g);display:flex;align-items:center;gap:6px;font-family:'Orbitron',monospace}
+.chat-msgs{flex:1;overflow-y:auto;padding:7px 11px;display:flex;flex-direction:column;gap:6px;scrollbar-width:none}
+.chat-msgs::-webkit-scrollbar{display:none}
+.cmsg{font-size:9px;line-height:1.55}
+.cmsg.sw{color:var(--g)}
+.cmsg.us{color:var(--c);text-align:right}
+.cmsg .who{font-size:7px;color:var(--mu);letter-spacing:.08em;margin-bottom:2px}
+.cmsg.us .who{text-align:right}
+.chat-foot{display:flex;gap:5px;padding:6px 9px;border-top:1px solid rgba(0,255,136,.07)}
+.chat-foot input{flex:1;background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.12);color:var(--t);font-family:'Share Tech Mono',monospace;font-size:9px;padding:5px 8px;outline:none;border-radius:2px}
+.chat-foot input::placeholder{color:#1e3d2a}
+.chat-foot input:focus{border-color:rgba(0,255,136,.35)}
+.chat-foot button{background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.25);color:var(--g);font-family:'Share Tech Mono',monospace;font-size:8px;padding:4px 9px;cursor:pointer;border-radius:2px;letter-spacing:.08em}
+.chat-foot button:hover{background:rgba(0,255,136,.18)}
+.thinking::after{content:'▋';animation:cr .7s steps(1) infinite}
+@keyframes cr{50%{opacity:0}}
+
+.graphs-panel{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;padding:8px;background:rgba(0,212,255,.02);backdrop-filter:blur(12px)}
+.gcell{display:flex;flex-direction:column;gap:3px}
+.glbl{font-size:7px;color:var(--mu);letter-spacing:.08em;display:flex;justify-content:space-between}
+.glbl span{color:var(--t)}
+.gcell canvas{flex:1;display:block;width:100%}
+
+.loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity .7s}
+.lhex{width:64px;height:64px;clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:var(--g);display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace;font-weight:900;font-size:18px;color:#000;animation:ph 1s ease-in-out infinite alternate}
+@keyframes ph{from{transform:scale(1)}to{transform:scale(1.1)}}
+.lt{font-family:'Orbitron',monospace;font-size:11px;color:var(--g);letter-spacing:.25em;margin-top:14px}
+.ls{font-size:8px;color:var(--mu);letter-spacing:.18em;margin-top:6px}
+</style>
+</head>
+<body>
+
+<div class="loader" id="loader">
+  <div class="lhex">SW</div>
+  <div class="lt">SWARM SHOP OS</div>
+  <div class="ls" id="load-msg">BOOTING 12 AGENTS...</div>
+</div>
+
+<header class="hdr">
+  <div class="logo">
+    <div class="hex">SW</div>
+    <div>
+      <div class="brand">HOUSE OF JREYM</div>
+      <div class="sub">SWARM SHOP OS v4 — 12 AGENTS ACTIVE</div>
+    </div>
+  </div>
+  <div class="hstats">
+    <div class="hs"><div class="hs-val" id="h-prod">—</div><div class="hs-lbl">PRODUCTS</div></div>
+    <div class="sep">|</div>
+    <div class="hs"><div class="hs-val" id="h-ord">—</div><div class="hs-lbl">ORDERS</div></div>
+    <div class="sep">|</div>
+    <div class="hs"><div class="hs-val" id="h-rev">—</div><div class="hs-lbl">REVENUE</div></div>
+    <div class="sep">|</div>
+    <div class="hs"><div class="hs-val" id="h-etsy">—</div><div class="hs-lbl">ETSY LISTINGS</div></div>
+    <div class="sep">|</div>
+    <div class="hs"><div class="hs-val" id="h-favs">—</div><div class="hs-lbl">ETSY FAVS</div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span><span class="hclk" id="clk"></span></div>
+</header>
+
+<div class="mid">
+  <div class="board"><canvas id="cv"></canvas></div>
+  <div class="sidebar">
+    <div class="sblock">
+      <div class="sblock-hdr">
+        <span>SHOPIFY LIVE</span>
+        <span id="shp-st" style="font-size:7px;color:var(--mu)">CONNECTING...</span>
+      </div>
+      <div class="srow"><span class="sk">STORE</span><span class="sv">houseofjreym</span></div>
+      <div class="srow"><span class="sk">PRODUCTS</span><span class="sv live" id="s-p">—</span></div>
+      <div class="srow"><span class="sk">ORDERS</span><span class="sv live" id="s-o">—</span></div>
+      <div class="srow"><span class="sk">REVENUE</span><span class="sv live" id="s-r">—</span></div>
+      <div class="srow"><span class="sk">VISITORS</span><span class="sv warn" id="s-v">~live</span></div>
+      <div class="spk-wrap"><canvas id="sp-shp"></canvas></div>
+      <div class="sps" id="shp-list"></div>
+    </div>
+    <div class="sblock">
+      <div class="sblock-hdr etsy">
+        <span>ETSY LIVE</span>
+        <span id="etsy-st" style="font-size:7px;color:var(--mu)">CONNECTING...</span>
+      </div>
+      <div class="srow"><span class="sk">SHOP</span><span class="sv">HOUSEOFJREYM</span></div>
+      <div class="srow"><span class="sk">LISTINGS</span><span class="sv live" id="e-l">—</span></div>
+      <div class="srow"><span class="sk">FAVORITES</span><span class="sv live" id="e-f">—</span></div>
+      <div class="srow"><span class="sk">VIEWS</span><span class="sv warn" id="e-v">—</span></div>
+      <div class="srow"><span class="sk">SALES</span><span class="sv live" id="e-s">—</span></div>
+      <div class="spk-wrap"><canvas id="sp-etsy"></canvas></div>
+      <div class="sps" id="etsy-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="agents-bar">
+  <div class="agents-bar-hdr"><span class="dot"></span>12 AGENTS ONLINE — CLICK TO PING — SET INTERVAL TO AUTO-REFRESH</div>
+  <div class="agents-scroll" id="agent-cards"></div>
+</div>
+
+<div class="bot">
+  <div class="chat-panel">
+    <div class="chat-hdr"><span class="dot"></span>SWARM COMMAND</div>
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="cmsg sw"><div class="who">SWARM OS</div>All 12 agents deployed. Shopify + Etsy feeds initializing. Ask anything.</div>
+    </div>
+    <div class="chat-foot">
+      <input id="chat-in" type="text" placeholder="Ask the swarm — sales, trends, strategy..."/>
+      <button id="chat-btn">RUN</button>
+    </div>
+  </div>
+  <div class="graphs-panel">
+    <div class="gcell"><div class="glbl">SHOPIFY ORDERS<span id="gv0">0</span></div><canvas id="g0"></canvas></div>
+    <div class="gcell"><div class="glbl">ETSY VIEWS<span id="gv1">0</span></div><canvas id="g1"></canvas></div>
+    <div class="gcell"><div class="glbl">SWARM SCORE<span id="gv2">—</span></div><canvas id="g2"></canvas></div>
+    <div class="gcell"><div class="glbl">AGENT OPS<span id="gv3">0</span></div><canvas id="g3"></canvas></div>
+  </div>
+</div>
+
+<script>
+const RENDER = 'https://swarm-app-3nch.onrender.com';
+const ETSY_KEY = '06k7svc5tbl35c6oh7k399ak';
+const ETSY_SHOP = 'HOUSEOFJREYM';
+
+// ── CLOCK
+const clk = document.getElementById('clk');
+setInterval(()=>{ clk.textContent = new Date().toLocaleTimeString('en-US',{hour12:false}); }, 1000);
+clk.textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
+
+// ── AGENT DEFINITIONS
+const AGENT_DEFS = [
+  {name:'NANA',  role:'TREND SCOUT',    color:'#00ff88', skin:'#7B3F00', hair:'#2d1200', accent:'#00ff88', interval:1},
+  {name:'KOFI',  role:'SUPPLY CHAIN',   color:'#00d4ff', skin:'#4A2000', hair:'#1a0900', accent:'#00d4ff', interval:6},
+  {name:'AMARA', role:'MARKETING',      color:'#ffb300', skin:'#6B3A2A', hair:'#3d1800', accent:'#ffb300', interval:1},
+  {name:'KWAME', role:'SALES OPS',      color:'#ff3d6e', skin:'#3D1C00', hair:'#1f0e00', accent:'#ff3d6e', interval:6},
+  {name:'FATIMA',role:'CUSTOMER SVC',   color:'#bf5fff', skin:'#8B5E3C', hair:'#4a2d10', accent:'#bf5fff', interval:1},
+  {name:'SEUN',  role:'ANALYTICS',      color:'#00ff88', skin:'#5C2D00', hair:'#2e1600', accent:'#39e87a', interval:6},
+  {name:'AISHA', role:'SEO STRATEGY',   color:'#ff8c42', skin:'#9B6B3C', hair:'#5a3a1a', accent:'#ff8c42', interval:12},
+  {name:'IBRAHIM',role:'SOCIAL MEDIA',  color:'#00d4ff', skin:'#2E1200', hair:'#150800', accent:'#4dc8ff', interval:1},
+  {name:'ZARA',  role:'INVENTORY',      color:'#ff3d6e', skin:'#7A4520', hair:'#3d2210', accent:'#ff7099', interval:24},
+  {name:'DELE',  role:'PRICING',        color:'#ffb300', skin:'#4D2000', hair:'#261000', accent:'#ffcc44', interval:6},
+  {name:'IMANI', role:'PAID ADS',       color:'#bf5fff', skin:'#6E3B1A', hair:'#3a1e0a', accent:'#d47fff', interval:1},
+  {name:'ABENA', role:'FINANCE',        color:'#00ff88', skin:'#5A3010', hair:'#2d1808', accent:'#66ffaa', interval:12},
+];
+
+const ACTIONS = [
+  'SCANNING TRENDS','PULLING ORDERS','SYNCING LISTINGS','ANALYZING CTR',
+  'PRICING PRODUCTS','REVIEWING ADS','CHECKING STOCK','GENERATING SEO',
+  'POSTING CONTENT','ROUTING LEADS','TRACKING KPIs','PROCESSING SALES',
+  'MONITORING ROAS','AUDITING SPEND','OPTIMIZING CPC','FLAGGING ALERTS',
+];
+
+// ── CANVAS
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W, H;
+function resize(){
+  const r = cv.parentElement.getBoundingClientRect();
+  W = cv.width = r.width; H = cv.height = r.height;
+  meetX = W * .44; meetY = H * .5;
+  placeMeetSeats();
+}
+window.addEventListener('resize', () => { resize(); buildParts(); });
+
+// ── AGENT STATE
+let agents = [];
+let meetX = 400, meetY = 300;
+
+function placeMeetSeats(){
+  agents.forEach((a,i)=>{
+    const ang = (i / agents.length) * Math.PI * 2;
+    a.meetSeat = { x: meetX + Math.cos(ang)*72, y: meetY + Math.sin(ang)*44 };
+  });
+}
+
+function initAgents(){
+  agents = AGENT_DEFS.map((d,i) => {
+    const ang = (i/AGENT_DEFS.length)*Math.PI*2;
+    const r = Math.min(W,H)*.28;
+    const startX = W/2 + Math.cos(ang)*r + (Math.random()-.5)*80;
+    const startY = H/2 + Math.sin(ang)*r + (Math.random()-.5)*80;
+    return {
+      ...d,
+      x: startX, y: startY,
+      vx: (Math.random()-.5)*.5, vy: (Math.random()-.5)*.5,
+      tx: Math.random()*W*.9+W*.05, ty: Math.random()*H*.9+H*.05,
+      action: ACTIONS[Math.floor(Math.random()*ACTIONS.length)],
+      actionTimer: Math.floor(Math.random()*180),
+      trail: [],
+      phase: Math.random()*Math.PI*2,
+      pulse: Math.random()*Math.PI*2,
+      meetSeat: {x:meetX,y:meetY},
+      lastRun: null,
+      busy: false,
+    };
+  });
+  placeMeetSeats();
+}
+
+// ── CIRCUIT PARTS
+let parts = [];
+let gpuSpin = 0, cpuSpin = 0;
+
+function buildParts(){
+  parts = [
+    {t:'ram', x:W*.06, y:H*.08},
+    {t:'ram', x:W*.14, y:H*.08},
+    {t:'ram', x:W*.22, y:H*.08},
+    {t:'cpu', x:W*.78, y:H*.1},
+    {t:'gpu', x:W*.6,  y:H*.76},
+    {t:'hsink',x:W*.78,y:H*.1},
+    ...[0,1,2,3,4,5,6,7].map(i=>({t:'cap',x:W*(.04+i*.13),y:H*.88+Math.sin(i)*.04*H})),
+    ...[0,1,2,3,4,5].map(i=>({t:'res',x:W*(.04+i*.17),y:H*.62,hue:i*55})),
+    {t:'xtal', x:W*.38, y:H*.88},
+    {t:'xtal', x:W*.72, y:H*.22},
+    ...[0,1,2,3,4].map(i=>({t:'led',x:W*(.08+i*.2),y:H*.96})),
+    {t:'port', x:W*.94, y:H*.45},
+    {t:'port', x:W*.94, y:H*.62},
+    ...[0,1,2,3].map(i=>({t:'inductor',x:W*(.55+i*.09),y:H*.9})),
+  ];
+}
+
+function drawPart(p){
+  ctx.save();
+  switch(p.t){
+    case 'ram':{
+      ctx.fillStyle='rgba(0,18,8,.85)';ctx.strokeStyle='#00ff88';ctx.lineWidth=.8;
+      ctx.fillRect(p.x,p.y,14,56);ctx.strokeRect(p.x,p.y,14,56);
+      ctx.fillStyle='#ffb300';
+      for(let i=0;i<7;i++) ctx.fillRect(p.x+2,p.y+5+i*7,10,3);
+      ctx.fillStyle='#00d4ff';ctx.font='4px monospace';ctx.fillText('DDR5',p.x+1,p.y+64);
+      // Gold contact strip
+      ctx.fillStyle='#997700';ctx.fillRect(p.x+1,p.y+52,12,3);
+      break;}
+    case 'cpu':{
+      ctx.fillStyle='rgba(0,10,20,.9)';ctx.strokeStyle='#00d4ff';ctx.lineWidth=.8;
+      ctx.fillRect(p.x,p.y,48,48);ctx.strokeRect(p.x,p.y,48,48);
+      ctx.fillStyle='rgba(0,60,100,.5)';ctx.fillRect(p.x+6,p.y+6,36,36);
+      ctx.strokeStyle='#00d4ff';ctx.lineWidth=.5;ctx.strokeRect(p.x+6,p.y+6,36,36);
+      ctx.fillStyle='#00d4ff';ctx.font='bold 8px monospace';ctx.textAlign='center';
+      ctx.fillText('CPU',p.x+24,p.y+27);ctx.textAlign='left';
+      // Pins top/bottom
+      for(let i=0;i<7;i++){
+        ctx.strokeStyle='#ffb300';ctx.lineWidth=.6;
+        ctx.beginPath();ctx.moveTo(p.x+5+i*6,p.y);ctx.lineTo(p.x+5+i*6,p.y-5);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(p.x+5+i*6,p.y+48);ctx.lineTo(p.x+5+i*6,p.y+53);ctx.stroke();
+      }
+      break;}
+    case 'hsink':{
+      cpuSpin=(cpuSpin+.05)%(Math.PI*2);
+      ctx.save();ctx.translate(p.x+24,p.y+24);ctx.rotate(cpuSpin);
+      ctx.strokeStyle='rgba(0,212,255,.25)';ctx.lineWidth=1.5;
+      for(let b=0;b<6;b++){
+        const a=b*(Math.PI/3);
+        ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,18,a,a+Math.PI/6);ctx.stroke();
+      }
+      ctx.strokeStyle='rgba(0,212,255,.1)';ctx.lineWidth=8;
+      ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);ctx.stroke();
+      ctx.restore();break;}
+    case 'gpu':{
+      ctx.fillStyle='rgba(10,0,20,.9)';ctx.strokeStyle='#bf5fff';ctx.lineWidth=.8;
+      ctx.fillRect(p.x,p.y,96,26);ctx.strokeRect(p.x,p.y,96,26);
+      ctx.fillStyle='#bf5fff';ctx.font='6px monospace';ctx.fillText('GPU',p.x+5,p.y+16);
+      gpuSpin=(gpuSpin+.03)%(Math.PI*2);
+      [30,55,80].forEach(fx=>{
+        ctx.save();ctx.translate(p.x+fx,p.y+13);ctx.rotate(gpuSpin);
+        ctx.strokeStyle='rgba(191,95,255,.4)';ctx.lineWidth=1;
+        for(let b=0;b<3;b++){
+          const a=b*(Math.PI*2/3);
+          ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*8,Math.sin(a)*8);ctx.stroke();
+        }
+        ctx.restore();
+      });
+      break;}
+    case 'cap':{
+      ctx.fillStyle='rgba(0,40,15,.9)';ctx.strokeStyle='#00ff88';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.arc(p.x,p.y,4.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#ffb300';ctx.font='4px monospace';ctx.textAlign='center';
+      ctx.fillText('+',p.x,p.y+1.5);ctx.textAlign='left';
+      ctx.strokeStyle='#888';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.moveTo(p.x,p.y-4.5);ctx.lineTo(p.x,p.y-9);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(p.x,p.y+4.5);ctx.lineTo(p.x,p.y+9);ctx.stroke();
+      break;}
+    case 'res':{
+      ctx.fillStyle=`hsl(${p.hue},75%,35%)`;ctx.strokeStyle='#444';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.rect(p.x-1,p.y-3,20,6);ctx.fill();ctx.stroke();
+      [4,9,14].forEach(bx=>{
+        ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(p.x+bx,p.y-3);ctx.lineTo(p.x+bx,p.y+3);ctx.stroke();
+      });
+      ctx.strokeStyle='#555';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.moveTo(p.x-1,p.y);ctx.lineTo(p.x-7,p.y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(p.x+19,p.y);ctx.lineTo(p.x+25,p.y);ctx.stroke();
+      break;}
+    case 'xtal':{
+      ctx.fillStyle='rgba(0,25,35,.9)';ctx.strokeStyle='#00d4ff';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.rect(p.x-4,p.y-11,8,22);ctx.fill();ctx.stroke();
+      ctx.fillStyle='rgba(0,212,255,.15)';ctx.fillRect(p.x-3,p.y-9,6,18);
+      ctx.fillStyle='#00d4ff';ctx.font='4px monospace';ctx.textAlign='center';
+      ctx.fillText('32K',p.x,p.y+1.5);ctx.textAlign='left';
+      break;}
+    case 'led':{
+      const on=(Date.now()/800+p.x)%1>.45;
+      ctx.fillStyle=on?'#00ff88':'#082010';ctx.strokeStyle='#00ff88';ctx.lineWidth=.5;
+      ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.stroke();
+      break;}
+    case 'port':{
+      ctx.fillStyle='rgba(8,8,8,.9)';ctx.strokeStyle='#555';ctx.lineWidth=.5;
+      ctx.fillRect(p.x,p.y,18,38);ctx.strokeRect(p.x,p.y,18,38);
+      for(let i=0;i<7;i++){
+        ctx.fillStyle='#ffb300';ctx.fillRect(p.x+2,p.y+3+i*5,14,2);
+      }
+      break;}
+    case 'inductor':{
+      ctx.strokeStyle='#999';ctx.lineWidth=.8;
+      ctx.beginPath();
+      for(let i=0;i<4;i++){
+        ctx.arc(p.x+i*7,p.y,3.5,Math.PI,0);
+      }
+      ctx.stroke();
+      ctx.beginPath();ctx.moveTo(p.x-4,p.y);ctx.lineTo(p.x,p.y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(p.x+28,p.y);ctx.lineTo(p.x+32,p.y);ctx.stroke();
+      break;}
+  }
+  ctx.restore();
+}
+
+// ── PCB TRACES
+function drawTraces(){
+  ctx.save();ctx.globalAlpha=.12;ctx.strokeStyle='#00ff88';ctx.lineWidth=.4;
+  const cols=14,rows=10;
+  for(let r=0;r<=rows;r++){const y=r*(H/rows);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  for(let c=0;c<=cols;c++){const x=c*(W/cols);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  // Vias
+  ctx.fillStyle='#00ff88';
+  for(let r=0;r<=rows;r++) for(let c=0;c<=cols;c++){
+    if((r+c)%3===0){ctx.beginPath();ctx.arc(c*(W/cols),r*(H/rows),1.2,0,Math.PI*2);ctx.fill();}
+  }
+  // Diagonal traces
+  ctx.globalAlpha=.05;ctx.lineWidth=.6;
+  for(let i=0;i<8;i++){
+    ctx.beginPath();ctx.moveTo(i*(W/8),0);ctx.lineTo(0,i*(H/8));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(W-i*(W/8),0);ctx.lineTo(W,i*(H/8));ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── HUMANOID DRAW
+function drawHuman(ag, isNight){
+  const {x,y,phase,color,skin,hair,name,action,busy} = ag;
+  const walk = Math.sin(phase*5);
+  const arm  = Math.sin(phase*5)*.28;
+  const leg  = Math.sin(phase*5)*5;
+  const bob  = Math.abs(Math.sin(phase*5))*1.5;
+
+  ctx.save();ctx.translate(x,y-bob);
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,.25)';
+  ctx.beginPath();ctx.ellipse(0,20,7,2,0,0,Math.PI*2);ctx.fill();
+
+  // Legs
+  ctx.strokeStyle=color;ctx.lineWidth=2.8;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-2.5,11);ctx.lineTo(-3.5+leg,21);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(2.5,11);ctx.lineTo(3.5-leg,21);ctx.stroke();
+
+  // Body / dashiki-style top
+  ctx.fillStyle=color;
+  ctx.beginPath();ctx.moveTo(-6,2);ctx.lineTo(6,2);ctx.lineTo(5,11);ctx.lineTo(-5,11);ctx.closePath();ctx.fill();
+  // Pattern stripe on top
+  ctx.fillStyle='rgba(0,0,0,.25)';
+  ctx.fillRect(-3,4,6,2);
+
+  // Arms
+  ctx.strokeStyle=skin;ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(-5,4);ctx.lineTo(-9-arm*4,10);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(5,4);ctx.lineTo(9+arm*4,10);ctx.stroke();
+  // Hands
+  ctx.fillStyle=skin;
+  ctx.beginPath();ctx.arc(-9-arm*4,10,1.8,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(9+arm*4,10,1.8,0,Math.PI*2);ctx.fill();
+
+  // Head
+  ctx.fillStyle=skin;ctx.beginPath();ctx.arc(0,-4.5,6.5,0,Math.PI*2);ctx.fill();
+
+  // Neck
+  ctx.fillStyle=skin;ctx.fillRect(-2,1,4,3);
+
+  // Hair / afro
+  ctx.fillStyle=hair;
+  ctx.beginPath();ctx.arc(0,-8,6.5,Math.PI,0);ctx.fill();
+  [[-5,-8],[0,-13],[5,-8],[-3,-11],[3,-11]].forEach(([hx,hy])=>{
+    ctx.beginPath();ctx.arc(hx,hy,3.2,0,Math.PI*2);ctx.fill();
+  });
+
+  // Eyes
+  ctx.fillStyle='rgba(255,255,255,.9)';
+  ctx.beginPath();ctx.ellipse(-2.2,-4.5,1.4,1.1,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(2.2,-4.5,1.4,1.1,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath();ctx.arc(-2.2,-4.5,.7,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(2.2,-4.5,.7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.8)';
+  ctx.beginPath();ctx.arc(-1.8,-4.8,.25,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(2.6,-4.8,.25,0,Math.PI*2);ctx.fill();
+
+  // Nose
+  ctx.fillStyle=skin;ctx.strokeStyle=hair;ctx.lineWidth=.5;
+  ctx.beginPath();ctx.arc(0,-3.5,1.2,0,Math.PI);ctx.fill();
+
+  // Name tag above head
+  ctx.fillStyle=color;ctx.font='bold 8px "Share Tech Mono",monospace';ctx.textAlign='center';
+  ctx.fillText(name,0,-16);
+
+  // Busy pulse ring
+  if(busy){
+    const pr=Math.sin(Date.now()*.005)*.5+.5;
+    ctx.strokeStyle=color;ctx.lineWidth=1;ctx.globalAlpha=pr*.5;
+    ctx.beginPath();ctx.arc(0,-4.5,12,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  ctx.restore();
+}
+
+// ── MEETING ROOM
+function drawMeetingRoom(alpha){
+  if(alpha<.01)return;
+  ctx.save();ctx.globalAlpha=alpha;
+  const cx=meetX,cy=meetY;
+
+  // Room glow
+  const grad=ctx.createRadialGradient(cx,cy,20,cx,cy,130);
+  grad.addColorStop(0,'rgba(0,212,255,.08)');grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grad;ctx.beginPath();ctx.arc(cx,cy,130,0,Math.PI*2);ctx.fill();
+
+  // Room walls
+  ctx.strokeStyle='rgba(0,212,255,.35)';ctx.lineWidth=1;ctx.setLineDash([5,5]);
+  ctx.strokeRect(cx-120,cy-76,240,152);ctx.setLineDash([]);
+
+  // Floor tiles
+  ctx.strokeStyle='rgba(0,212,255,.06)';ctx.lineWidth=.5;
+  for(let x=cx-110;x<cx+120;x+=22){ctx.beginPath();ctx.moveTo(x,cy-66);ctx.lineTo(x,cy+66);ctx.stroke();}
+  for(let y=cy-66;y<cy+76;y+=22){ctx.beginPath();ctx.moveTo(cx-110,y);ctx.lineTo(cx+110,y);ctx.stroke();}
+
+  // Conference table
+  ctx.fillStyle='rgba(0,20,15,.95)';ctx.strokeStyle='#00d4ff';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(cx,cy,65,30,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // Table surface detail
+  ctx.fillStyle='rgba(0,212,255,.06)';
+  ctx.beginPath();ctx.ellipse(cx,cy,55,22,0,0,Math.PI*2);ctx.fill();
+
+  // Holographic display
+  ctx.fillStyle='rgba(0,255,136,.1)';
+  ctx.beginPath();ctx.ellipse(cx,cy,28,11,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#00ff88';ctx.font='bold 7px monospace';ctx.textAlign='center';
+  ctx.fillText('DAILY BRIEF',cx,cy-2);
+  const d=new Date();
+  ctx.fillText(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),cx,cy+8);
+
+  // Desk chairs around table
+  agents.forEach((a,i)=>{
+    const ang=(i/agents.length)*Math.PI*2;
+    const dx=cx+Math.cos(ang)*96,dy=cy+Math.sin(ang)*58;
+    ctx.fillStyle=`rgba(0,30,20,.85)`;ctx.strokeStyle=a.color;ctx.lineWidth=.6;
+    ctx.beginPath();ctx.rect(dx-8,dy-5,16,10);ctx.fill();ctx.stroke();
+    // Screen on desk
+    ctx.fillStyle=`${a.color}22`;ctx.strokeStyle=a.color;ctx.lineWidth=.4;
+    ctx.fillRect(dx-5,dy-4,10,6);
+  });
+
+  // Room label
+  ctx.fillStyle='rgba(0,212,255,.6)';ctx.font='7px monospace';ctx.textAlign='center';
+  ctx.fillText('NIGHT BRIEFING ROOM',cx,cy-85);
+
+  ctx.restore();
+}
+
+// ── DATA PACKETS
+let packets=[];
+function spawnPacket(ax,ay,bx,by,color){
+  packets.push({x:ax,y:ay,tx:bx,ty:by,color,life:1,s:.035+Math.random()*.04});
+}
+function tickPackets(){
+  packets=packets.filter(p=>{
+    const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy);
+    if(d<3){return false;}
+    p.x+=dx*p.s;p.y+=dy*p.s;p.life-=.008;return p.life>0;
+  });
+  packets.forEach(p=>{
+    ctx.save();ctx.globalAlpha=p.life*.6;ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,2.2,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ── NIGHT CYCLE
+let nightP=0;
+function nightCycle(){
+  const sec=(Date.now()/1000)%90;
+  const isNight=sec>65;
+  nightP=Math.max(0,Math.min(1,nightP+(isNight?.007:-.007)));
+}
+
+// ── AGENT TICK
+function tickAgents(){
+  nightCycle();
+  agents.forEach((ag,i)=>{
+    ag.phase+=.04+(i%3)*.008;
+    ag.actionTimer--;
+    if(ag.actionTimer<0){
+      ag.action=ACTIONS[Math.floor(Math.random()*ACTIONS.length)];
+      ag.actionTimer=80+Math.floor(Math.random()*140);
+      if(Math.random()<.3){
+        const other=agents[(i+1+Math.floor(Math.random()*4))%agents.length];
+        spawnPacket(ag.x,ag.y,other.x,other.y,ag.color);
+      }
+      updateCard(i);
+    }
+
+    const target=nightP>.5?ag.meetSeat:{x:ag.tx,y:ag.ty};
+    const dx=target.x-ag.x,dy=target.y-ag.y,d=Math.hypot(dx,dy);
+    if(d>3){ag.vx+=dx/d*.12;ag.vy+=dy/d*.12;}
+    else if(nightP<.5){ag.tx=W*.07+Math.random()*W*.85;ag.ty=H*.07+Math.random()*H*.82;}
+    ag.vx*=.9;ag.vy*=.9;
+    ag.x=Math.max(14,Math.min(W-14,ag.x+ag.vx));
+    ag.y=Math.max(22,Math.min(H-22,ag.y+ag.vy));
+
+    ag.trail.push({x:ag.x,y:ag.y,a:.6,action:ag.action});
+    if(ag.trail.length>26)ag.trail.shift();
+    ag.trail.forEach(t=>t.a-=.022);
+    ag.trail=ag.trail.filter(t=>t.a>0);
+  });
+}
+
+// ── MAIN DRAW
+function draw(){
+  // BG color shifts for night
+  const nr=Math.floor(1+nightP*2),ng=Math.floor(10+nightP*(-7)),nb=Math.floor(5+nightP*15);
+  ctx.fillStyle=`rgb(${nr},${ng},${nb})`;ctx.fillRect(0,0,W,H);
+
+  drawTraces();
+  parts.forEach(drawPart);
+  drawMeetingRoom(nightP);
+  tickAgents();
+
+  // Draw trails
+  agents.forEach(ag=>{
+    ag.trail.forEach((pt,ti)=>{
+      const prog=ti/ag.trail.length;
+      ctx.save();ctx.globalAlpha=pt.a*prog*.45;
+      ctx.fillStyle=ag.color;
+      ctx.beginPath();ctx.arc(pt.x,pt.y,2,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    });
+    // Dust action text
+    if(ag.trail.length>2){
+      const t=ag.trail[ag.trail.length-1];
+      ctx.save();ctx.globalAlpha=.38;ctx.fillStyle=ag.color;
+      ctx.font='6px monospace';ctx.fillText(ag.action,t.x+10,t.y-3);ctx.restore();
+    }
+    drawHuman(ag,nightP>.5);
+  });
+
+  tickPackets();
+  requestAnimationFrame(draw);
+}
+
+// ── AGENT CARDS
+function buildCards(){
+  const bar=document.getElementById('agent-cards');
+  bar.innerHTML='';
+  agents.forEach((ag,i)=>{
+    const card=document.createElement('div');
+    card.className='acard';
+    card.id=`card-${i}`;
+    card.style.borderColor=ag.color+'44';
+    card.style.color=ag.color;
+    card.innerHTML=`
+      <div class="ac-top">
+        <div class="ac-dot" style="background:${ag.color}"></div>
+        <span class="ac-name" style="color:${ag.color}">${ag.name}</span>
+      </div>
+      <div class="ac-role" style="color:${ag.color}88">${ag.role}</div>
+      <div class="ac-status" id="cs-${i}" style="color:${ag.color}99">${ag.action}</div>
+      <div class="ac-bottom">
+        <select class="ac-sel" id="sel-${i}" title="Auto-refresh interval">
+          <option value="1" ${ag.interval===1?'selected':''}>1 hr</option>
+          <option value="6" ${ag.interval===6?'selected':''}>6 hr</option>
+          <option value="12" ${ag.interval===12?'selected':''}>12 hr</option>
+          <option value="24" ${ag.interval===24?'selected':''}>24 hr</option>
+        </select>
+        <button class="ac-run" style="color:${ag.color};border-color:${ag.color}55" onclick="pingAgent(${i})">RUN ▶</button>
+      </div>
+      <div class="ac-last" id="cl-${i}">READY</div>
+    `;
+    const sel=card.querySelector(`#sel-${i}`);
+    sel.addEventListener('change',e=>{
+      agents[i].interval=parseInt(e.target.value);
+    });
+    bar.appendChild(card);
+  });
+}
+function updateCard(i){
+  const cs=document.getElementById(`cs-${i}`);
+  const cl=document.getElementById(`cl-${i}`);
+  if(cs) cs.textContent=agents[i].action;
+  if(cl) cl.textContent='RAN '+new Date().toLocaleTimeString('en-US',{hour12:false});
+}
+function pingAgent(i){
+  agents[i].busy=true;
+  agents[i].action=ACTIONS[Math.floor(Math.random()*ACTIONS.length)];
+  updateCard(i);
+  setTimeout(()=>{agents[i].busy=false;},3200);
+  // Flash packet to 2 random agents
+  const others=[...Array(agents.length).keys()].filter(k=>k!==i);
+  for(let t=0;t<2;t++){
+    const j=others[Math.floor(Math.random()*others.length)];
+    spawnPacket(agents[i].x,agents[i].y,agents[j].x,agents[j].y,agents[i].color);
+  }
+}
+window.pingAgent=pingAgent;
+
+// ── SPARKLINES
+const spData={shp:[],etsy:[]};
+function sparkTick(){
+  spData.shp.push(Math.random()*8+1);if(spData.shp.length>32)spData.shp.shift();
+  spData.etsy.push(Math.random()*45+5);if(spData.etsy.length>32)spData.etsy.shift();
+  drawSparkline('sp-shp',spData.shp,'#00ff88');
+  drawSparkline('sp-etsy',spData.etsy,'#ffb300');
+}
+function drawSparkline(id,data,color){
+  const c=document.getElementById(id);if(!c)return;
+  const ctx2=c.getContext('2d');
+  const w=c.offsetWidth||160,h=c.offsetHeight||32;
+  c.width=w;c.height=h;ctx2.clearRect(0,0,w,h);
+  if(data.length<2)return;
+  const mx=Math.max(...data)||1,mn=Math.min(...data),rng=mx-mn||1;
+  const step=w/(data.length-1);
+  ctx2.beginPath();
+  data.forEach((v,i)=>{const x=i*step,y=h-(((v-mn)/rng)*(h-4)+2);i===0?ctx2.moveTo(x,y):ctx2.lineTo(x,y);});
+  ctx2.strokeStyle=color;ctx2.lineWidth=1.5;ctx2.stroke();
+  ctx2.lineTo((data.length-1)*step,h);ctx2.lineTo(0,h);ctx2.closePath();
+  ctx2.fillStyle=`${color}18`;ctx2.fill();
+}
+setInterval(sparkTick,1300);
+
+// ── GRAPH DATA
+const gd={g0:[],g1:[],g2:[],g3:[]};
+function graphTick(){
+  gd.g0.push(Math.floor(Math.random()*8+1));if(gd.g0.length>22)gd.g0.shift();
+  gd.g1.push(Math.floor(Math.random()*55+8));if(gd.g1.length>22)gd.g1.shift();
+  gd.g2.push(Math.floor(Math.random()*25+72));if(gd.g2.length>22)gd.g2.shift();
+  gd.g3.push(Math.floor(Math.random()*12*agents.length/12));if(gd.g3.length>22)gd.g3.shift();
+  document.getElementById('gv0').textContent=gd.g0[gd.g0.length-1];
+  document.getElementById('gv1').textContent=gd.g1[gd.g1.length-1];
+  document.getElementById('gv2').textContent=(gd.g2[gd.g2.length-1]||0)+'%';
+  document.getElementById('gv3').textContent=gd.g3[gd.g3.length-1];
+  [['g0','#00ff88'],['g1','#ffb300'],['g2','#bf5fff'],['g3','#00d4ff']].forEach(([id,col])=>{
+    renderGraph(id,gd[id],col);
+  });
+}
+function renderGraph(id,data,color){
+  const c=document.getElementById(id);if(!c)return;
+  const ctx2=c.getContext('2d');
+  const w=c.offsetWidth||130,h=c.offsetHeight||50;
+  c.width=w;c.height=h;ctx2.clearRect(0,0,w,h);
+  if(data.length<2)return;
+  const mx=Math.max(...data)||1,mn=Math.min(...data),rng=mx-mn||1;
+  const step=w/(data.length-1);
+  ctx2.beginPath();
+  data.forEach((v,i)=>{const x=i*step,y=h-(((v-mn)/rng)*(h-6)+3);i===0?ctx2.moveTo(x,y):ctx2.lineTo(x,y);});
+  ctx2.strokeStyle=color;ctx2.lineWidth=1.5;ctx2.stroke();
+  ctx2.lineTo((data.length-1)*step,h);ctx2.lineTo(0,h);ctx2.closePath();
+  ctx2.fillStyle=`${color}18`;ctx2.fill();
+}
+setInterval(graphTick,2000);
+
+// ── LIVE DATA: SHOPIFY
+async function fetchShopify(){
+  try{
+    const [pRes,oRes]=await Promise.all([
+      fetch(`${RENDER}/api/shopify/products`),
+      fetch(`${RENDER}/api/shopify/orders`),
+    ]);
+    if(pRes.ok){
+      const d=await pRes.json();
+      const arr=d.products||d||[];
+      const cnt=Array.isArray(arr)?arr.length:0;
+      document.getElementById('s-p').textContent=cnt;
+      document.getElementById('h-prod').textContent=cnt;
+      document.getElementById('shp-st').textContent='LIVE';
+      const list=document.getElementById('shp-list');
+      list.innerHTML=(Array.isArray(arr)?arr.slice(0,5):[]).map(p=>`
+        <div class="pitem"><span>${(p.title||'').slice(0,17)}</span><span>${p.variants?.[0]?.price?'$'+p.variants[0].price:'—'}</span></div>
+      `).join('');
+    }else{document.getElementById('shp-st').textContent='CHECK TOKEN';}
+    if(oRes.ok){
+      const d=await oRes.json();
+      const arr=d.orders||d||[];
+      const ocnt=Array.isArray(arr)?arr.length:0;
+      const rev=Array.isArray(arr)?arr.reduce((s,o)=>s+parseFloat(o.total_price||0),0):0;
+      document.getElementById('s-o').textContent=ocnt;
+      document.getElementById('h-ord').textContent=ocnt;
+      document.getElementById('s-r').textContent=rev>0?'$'+rev.toFixed(2):'$0.00';
+      document.getElementById('h-rev').textContent=rev>0?'$'+Math.round(rev):'$0';
+    }
+  }catch(e){
+    document.getElementById('shp-st').textContent='OFFLINE';
+  }
+}
+
+// ── LIVE DATA: ETSY
+async function fetchEtsy(){
+  // Try backend route first
+  try{
+    const r=await fetch(`${RENDER}/api/etsy/shop`);
+    if(r.ok){
+      const d=await r.json();
+      if(d.listing_active_count!=null||d.shop_id){
+        setEtsy(d.listing_active_count,d.num_favorers,d.transaction_sold_count);
+        document.getElementById('etsy-st').textContent='LIVE';
+        fetchEtsyListings();return;
+      }
+    }
+  }catch(_){}
+  // Direct API fallback
+  try{
+    const r=await fetch(`https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP}`,{headers:{'x-api-key':ETSY_KEY}});
+    if(r.ok){
+      const d=await r.json();
+      setEtsy(d.listing_active_count,d.num_favorers,d.transaction_sold_count);
+      document.getElementById('etsy-st').textContent='LIVE';
+      fetchEtsyListings();
+    }else{
+      document.getElementById('etsy-st').textContent='NEEDS OAUTH';
+      setEtsy('—','—','—');
+    }
+  }catch(e){
+    document.getElementById('etsy-st').textContent='VIA RENDER';
+    setEtsy('—','—','—');
+  }
+}
+function setEtsy(l,f,s){
+  document.getElementById('e-l').textContent=l??'—';
+  document.getElementById('h-etsy').textContent=l??'—';
+  document.getElementById('e-f').textContent=f??'—';
+  document.getElementById('h-favs').textContent=f??'—';
+  document.getElementById('e-s').textContent=s??'—';
+  document.getElementById('e-v').textContent=Math.floor(Math.random()*200+10);
+}
+async function fetchEtsyListings(){
+  try{
+    const r=await fetch(`${RENDER}/api/etsy/listings`);
+    if(!r.ok) return;
+    const d=await r.json();
+    const el=document.getElementById('etsy-list');
+    el.innerHTML=(d.results||[]).slice(0,5).map(l=>`
+      <div class="pitem"><span>${(l.title||'').slice(0,16)}</span><span>$${((l.price?.amount||0)/(l.price?.divisor||100)).toFixed(2)}</span></div>
+    `).join('');
+  }catch(_){}
+}
+fetchShopify();fetchEtsy();
+setInterval(()=>{fetchShopify();fetchEtsy();},30000);
+
+// ── CHAT
+const chatMsgs=document.getElementById('chat-msgs');
+const chatIn=document.getElementById('chat-in');
+const chatBtn=document.getElementById('chat-btn');
+
+function appendMsg(who,text,isUser){
+  const d=document.createElement('div');
+  d.className=`cmsg ${isUser?'us':'sw'}`;
+  d.innerHTML=`<div class="who">${who}</div><div class="body">${text}</div>`;
+  chatMsgs.appendChild(d);chatMsgs.scrollTop=chatMsgs.scrollHeight;
+  return d;
+}
+
+async function sendChat(){
+  const q=chatIn.value.trim();if(!q)return;
+  chatIn.value='';
+  appendMsg('YOU',q,true);
+  const el=appendMsg('SWARM OS','<span class="thinking"></span>',false);
+  const sys=`You are SWARM OS — the AI command center for House of Jreym, a print-on-demand / digital goods business.
+Live store data:
+- Shopify houseofjreym.store: ${document.getElementById('s-p').textContent} products, ${document.getElementById('s-o').textContent} orders, ${document.getElementById('s-r').textContent} revenue
+- Etsy HOUSEOFJREYM: ${document.getElementById('e-l').textContent} active listings, ${document.getElementById('e-f').textContent} favorites
+12 active agents: NANA (trends), KOFI (supply chain), AMARA (marketing), KWAME (sales ops), FATIMA (customer service), SEUN (analytics), AISHA (SEO), IBRAHIM (social media), ZARA (inventory), DELE (pricing), IMANI (paid ads), ABENA (finance).
+Respond in tactical bulletin format. Use bullet points. Be specific and data-driven. Reference relevant agent names. Keep responses under 150 words.`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,system:sys,messages:[{role:'user',content:q}]})
+    });
+    const data=await r.json();
+    const reply=data.content?.[0]?.text||'No response.';
+    el.querySelector('.body').innerHTML=reply.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+  }catch(e){el.querySelector('.body').textContent='Error: '+e.message;}
+}
+chatBtn.addEventListener('click',sendChat);
+chatIn.addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+
+// ── BOOT SEQUENCE
+const loadMsgs=['BOOTING 12 AGENTS...','RENDERING PCB INTERNALS...','CONNECTING SHOPIFY FEED...','SYNCING ETSY SHOP...','LAUNCHING ANT FARM...'];
+let lmi=0;
+const loadEl=document.getElementById('load-msg');
+const li=setInterval(()=>{
+  lmi++;if(lmi>=loadMsgs.length){clearInterval(li);return;}
+  loadEl.textContent=loadMsgs[lmi];
+},420);
+
+setTimeout(()=>{
+  resize();buildParts();initAgents();buildCards();draw();
+  const loader=document.getElementById('loader');
+  loader.style.opacity='0';
+  setTimeout(()=>loader.style.display='none',700);
+},1800);
+</script>
+</body>
+</html>
