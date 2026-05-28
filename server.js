@@ -492,7 +492,7 @@ app.get("/health", (req, res) => {
 
 // ── SHOPIFY OAUTH ─────────────────────────────────────────────────────────────
 app.get("/auth/shopify", (req, res) => {
-  const scopes = "read_orders,read_products,write_products,read_analytics,read_inventory";
+  const scopes = "read_orders,write_orders,read_products,write_products,write_price_rules,write_discounts,read_analytics,read_inventory,write_inventory,write_draft_orders,read_customers,write_customers";
   const redirectUri = `${process.env.APP_URL || "https://swarm-app-3nch.onrender.com"}/auth/shopify/callback`;
   const authUrl = `https://${SHOPIFY_DOMAIN}/admin/oauth/authorize?client_id=${SHOPIFY_CLIENT_ID}&scope=${scopes}&redirect_uri=${redirectUri}`;
   res.redirect(authUrl);
