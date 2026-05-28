@@ -860,12 +860,12 @@ Live store data:
 12 active agents: NANA (trends), KOFI (supply chain), AMARA (marketing), KWAME (sales ops), FATIMA (customer service), SEUN (analytics), AISHA (SEO), IBRAHIM (social media), ZARA (inventory), DELE (pricing), IMANI (paid ads), ABENA (finance).
 Respond in tactical bulletin format. Use bullet points. Be specific and data-driven. Reference relevant agent names. Keep responses under 150 words.`;
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{
+    const r=await fetch('https://swarm-app-3nch.onrender.com/api/swarm',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,system:sys,messages:[{role:'user',content:q}]})
+      body:JSON.stringify({prompt:sys+'\n\n'+q,history:[]})
     });
     const data=await r.json();
-    const reply=data.content?.[0]?.text||'No response.';
+    const reply=data.reply||'No response.';
     el.querySelector('.body').innerHTML=reply.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
   }catch(e){el.querySelector('.body').textContent='Error: '+e.message;}
 }
