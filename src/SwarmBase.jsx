@@ -240,7 +240,7 @@ const msg=input.trim(); setInput("");
 setMessages(p=>[...p,{role:"user",content:msg}]); setLoading(true);
 try {
 const r=await fetch("/api/swarm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:`SWARMX PRIME of HOUSE OF JREYM. Format:\n- **BOLD HEADERS**\n- • bullets\n- ▸ action items\nStore: $${salesData?.revenue||0} rev, ${salesData?.orders||0} orders, ${salesData?.products||0} products.\nUser: ${msg}`,history:messages.map(m=>({role:m.role,content:m.content}))})});
-const data=await r.json(); const reply=data.reply||"No response";
+if(!r.ok){const err=await r.text();throw new Error(err||`Server error ${r.status}`);}const data=await r.json(); const reply=data.reply||data.error||"No response";
 let gd=null; const match=reply.match(/GRAPH_DATA:(\[.*?\])/s);
 if(match){try{gd=JSON.parse(match[1]);}catch(e){}}
 setMessages(p=>[...p,{role:"assistant",content:reply.replace(/GRAPH_DATA:\[.*?\]/s,"").trim(),graphData:gd}]);
