@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use((req,res,next)=>{if(req.path==='/swarm_shop_os_v5.html'){const fs=require('fs'),p=require('path');try{let h=fs.readFileSync(p.join(__dirname,'dist/swarm_shop_os_v5.html'),'utf8');h=h.replace('</body>','<script>setInterval(()=>{const b=document.getElementById("chat-btn");if(b&&!b._r){b._r=1;const orig=window.sendChat;b.onclick=(e)=>{e.stopPropagation();if(window.sendChat)window.sendChat();setTimeout(()=>{const i=document.getElementById("chat-in");if(i){i.focus();}},400);}}},500);<\/script></body>');return res.send(h);}catch(e){}}next();});
 app.use(express.static(path.join(__dirname, "dist")));
 
 // ── CLIENTS ───────────────────────────────────────────────────────────────────
