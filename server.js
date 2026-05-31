@@ -33,7 +33,7 @@ app.get("/api/health/supabase", async (req, res) => {
     try {
           const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
           if (!url || !key) return res.status(500).json({ status: "fail", reason: "SUPABASE_URL or SUPABASE_ANON_KEY not set" });
-          const r = await fetch(`${url}/rest/v1/`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+              const r = await fetch(`${url}/auth/v1/health`, { headers: { apikey: key } });
           r.ok ? res.json({ status: "ok", supabaseUrl: url }) : res.status(500).json({ status: "fail", httpStatus: r.status });
     } catch (err) { res.status(500).json({ status: "fail", reason: err.message }); }
 });
