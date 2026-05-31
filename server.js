@@ -12,6 +12,32 @@ app.use(express.json());
 app.use(cors());
 app.use(express.static(path.join(__dirname, "dist")));
 
+// HEALTH CHECKS
+app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", service: "SWARM-X Quantum Edge", version: "3.0.0", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/health/render", (req, res) => {
+    res.json({ status: "ok", host: req.hostname, port: process.env.PORT || 4000, uptime: Math.floor(process.uptime()) + "s", env: process.env.RENDER ? "render" : "local" });
+});
+
+app.get("/api/health/anthropic", async (req, res) => {
+    try {
+          if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ status: "fail", reason: "ANTHROPIC_API_KEY not set" });
+          const r = await client.messages.create({ model: "claude-haiku-4-5-20251001", max_tokens: 10, messages: [{ role: "user", content: "ping" }] });
+          res.json({ status: "ok", model: r.model });
+    } catch (err) { res.status(500).json({ status: "fail", reason: err.message }); }
+});
+
+app.get("/api/health/supabase", async (req, res) => {
+    try {
+          const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+          if (!url || !key) return res.status(500).json({ status: "fail", reason: "SUPABASE_URL or SUPABASE_ANON_KEY not set" });
+          const r = await fetch(`${url}/rest/v1/`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+          r.ok ? res.json({ status: "ok", supabaseUrl: url }) : res.status(500).json({ status: "fail", httpStatus: r.status });
+    } catch (err) { res.status(500).json({ status: "fail", reason: err.message }); }
+});
+
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SWARM_SYSTEM_PROMPT = `You are the Architect Core of SWARM-X, a scalable autonomous multi-agent system.
