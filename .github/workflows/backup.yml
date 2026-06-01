@@ -1,0 +1,26 @@
+name: Nightly Supabase Backup
+on:
+  schedule:
+      - cron: '0 2 * * *'
+        workflow_dispatch:
+        jobs:
+          backup:
+              runs-on: ubuntu-latest
+                  steps:
+                        - name: Install postgresql-client
+                                run: sudo apt-get install -y postgresql-client
+                                      - name: Dump database
+                                              env:
+                                                        SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+                                                                run: |
+                                                                          TS=$(date +%Y%m%d_%H%M%S)
+                                                                                    pg_dump "$SUPABASE_DB_URL" --no-owner --no-acl -F p > backup_${TS}.sql
+                                                                                              gzip backup_${TS}.sql
+                                                                                                        ls -lh backup_*.sql.gz
+                                                                                                              - name: Upload artifact
+                                                                                                                      uses: actions/upload-artifact@v4
+                                                                                                                              with:
+                                                                                                                                        name: supabase-backup-${{ github.run_number }}
+                                                                                                                                                  path: backup_*.sql.gz
+                                                                                                                                                            retention-days: 30
+                                                                                                                                                            
