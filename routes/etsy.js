@@ -8,7 +8,7 @@ const ETSY_KEY    = process.env.ETSY_API_KEY    || "";
 const ETSY_SECRET = process.env.ETSY_SECRET_KEY || "";
 const ETSY_SHOP   = process.env.SHOP_NAME       || "HOUSEOFJREYM";
 const APP_URL     = process.env.APP_URL         || "https://swarm-app-3nch.onrender.com";
-const REDIRECT_URI = `${APP_URL}/api/etsy/callback`;
+const REDIRECT_URI = `${APP_URL}/api/etsy/allback`;
 const oauthStates = new Map();
 
 async function getEtsyToken() {
@@ -105,7 +105,7 @@ etsyRouter.get("/orders", async (req, res) => {
     if (data.results?.length) {
       for (const o of data.results) {
         await supabase.from("revenue_events").upsert({ platform: "etsy", order_id: String(o.receipt_id), amount: parseFloat(o.grandtotal?.amount||0)/100, recorded_at: new Date(o.create_timestamp*1000).toISOString() }, { onConflict: "order_id" });
-      });
+      }
     }
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
