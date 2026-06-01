@@ -1,6 +1,6 @@
 // agents/executor.js — Claude-powered agent task runner
 import Anthropic from "@anthropic-ai/sdk";
-import { logAgent, saveDecision, saveTrend } from "../lib/supabase.js";
+import { logAgent, saveDecision, saveTrend, saveAgentOutput } from "../lib/supabase.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -58,6 +58,10 @@ const TASK_HANDLERS = {
 
   financial_report: async (p) => callClaude("ABENA",
     `Financial summary for ${p.period || "this month"}. Return JSON: { gross_revenue, net_profit, margin_pct, top_revenue_sources, alerts, forecast_30d }`),
+    generate_etsy_title: async (p) => callClaude("AMARA", `Generate Etsy title for trend keyword "${p.keyword || p.trend_keyword}". Max 140 chars, SEO-optimised, end with product type. Return JSON only: {"title":"string","confidence":0.9}`),
+      generate_etsy_description: async (p) => callClaude("AMARA", `Generate Etsy description for "${p.keyword || p.trend_keyword}". 600-800 chars, bullet format, include file formats. Return JSON only: {"description":"string","confidence":0.9}`),
+        generate_etsy_tags: async (p) => callClaude("AMARA", `Generate 13 Etsy tags for "${p.keyword || p.trend_keyword}". Max 20 chars each, no duplicates. Return JSON only: {"tags":["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10","tag11","tag12","tag13"],"confidence":0.9}`),
+          generate_social_caption: async (p) => callClaude("AMARA", `Generate TikTok/IG caption for "${p.keyword || p.trend_keyword}". Hook first line, 3-4 lines, 3-5 hashtags, Brooklyn luxury tone. Return JSON only: {"caption":"string","confidence":0.9}`),
 };
 
 async function callClaude(agent, prompt) {
