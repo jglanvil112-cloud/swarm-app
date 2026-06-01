@@ -105,7 +105,7 @@ etsyRouter.get("/orders", async (req, res) => {
     if (data.results?.length) {
       for (const o of data.results) {
         await supabase.from("revenue_events").upsert({ platform: "etsy", order_id: String(o.receipt_id), amount: parseFloat(o.grandtotal?.amount||0)/100, recorded_at: new Date(o.create_timestamp*1000).toISOString() }, { onConflict: "order_id" });fix:correctupsertendingsto});inshopify+etsyroutes
-      }
+      });
     }
     res.json(data);
   } catch (e) { res.status(500).json({ error: e.message }); }
