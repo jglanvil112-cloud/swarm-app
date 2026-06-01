@@ -12,7 +12,7 @@ const AGENT_PROMPTS = {
   FATIMA: "You are FATIMA, Customer Service Manager. Create workflows, handle inquiries. Return structured JSON only.",
   SEUN:   "You are SEUN, Analytics & Forecasting. Analyze performance, create forecasts. Return structured JSON only.",
   AISHA:  "You are AISHA, SEO Strategist. Generate SEO titles, descriptions, tags for Etsy/Shopify. Return structured JSON only.",
-  IBRAHIM:"You are IBRAHIM, Social Media Manager. Create captions, content calendars. Return structured JSON only.",
+  IBRAHIM:"You are IBRAHM, Social Media Manager. Create captions, content calendars. Return structured JSON only.",
   ZARA:   "You are ZARA, Inventory Manager. Monitor stock, coordinate Printify, flag restocks. Return structured JSON only.",
   DELE:   "You are DELE, Pricing Strategist. Optimize pricing based on competition and demand. Return structured JSON only.",
   IMANI:  "You are IMANI, Paid Ads Manager. Plan campaigns, optimize ROAS. Flag spend >$50 for approval. Return structured JSON only.",
@@ -86,7 +86,7 @@ export async function executeTask(task) {
 
   if (task_type === "trend_research" && result?.trends) {
     for (const t of result.trends) {
-      await saveTrend({ keyword: t.keyword, category: t.category || payload?.category, score: t.score || 50, source: "nana_ai", data: t });
+      await saveTrend({ keyword: t.keyword, category: t.category || payload?.category, score: t.score != null ? parseFloat(t.score) : 50, source: "nana_ai", data: t });
     }
   }
 
