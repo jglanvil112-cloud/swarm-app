@@ -15,7 +15,7 @@ async function getStoredToken() {
 }
 function shopifyHeaders(token) {
   return { "X-Shopify-Access-Token": token || process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_CLIENT_SECRET || "", "Content-Type": "application/json" };
-
+}
 function shopifyBase(shop) {
   const domain = (shop || process.env.SHOPIFY_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   return `https://${domain}/admin/api/2024-01`;
