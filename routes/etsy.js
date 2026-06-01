@@ -74,7 +74,7 @@ etsyRouter.get("/listings", async (req, res) => {
     const data = await r.json();
     if (data.results?.length) {
       for (const l of data.results) {
-        await supabase.from("products").upsert({ external_id: String(l.listing_id), platform: "etsy", title: l.title, description: l.description?.slice(0,1000), tags: l.tags||[], price: l.price ? l.price.amount/l.price.divisor : 0, status: l.state, updated_at: new Date().toISOString() }, { onConflict: "external_id,platform" }).catch(()=>{});
+        await supabase.from("products").upsert({ external_id: String(l.listing_id), platform: "etsy", title: l.title, description: l.description?.slice(0,1000), tags: l.tags||[], price: l.price ? l.price.amount/l.price.divisor : 0, status: l.state, updated_at: new Date().toISOString() }, { onConflict: "external_id,platform" }).;
       }
     }
     res.json(data);
@@ -104,7 +104,7 @@ etsyRouter.get("/orders", async (req, res) => {
     const data = await r.json();
     if (data.results?.length) {
       for (const o of data.results) {
-        await supabase.from("revenue_events").upsert({ platform: "etsy", order_id: String(o.receipt_id), amount: parseFloat(o.grandtotal?.amount||0)/100, recorded_at: new Date(o.create_timestamp*1000).toISOString() }, { onConflict: "order_id" }).catch(()=>{});
+        await supabase.from("revenue_events").upsert({ platform: "etsy", order_id: String(o.receipt_id), amount: parseFloat(o.grandtotal?.amount||0)/100, recorded_at: new Date(o.create_timestamp*1000).toISOString() }, { onConflict: "order_id" }).;
       }
     }
     res.json(data);
