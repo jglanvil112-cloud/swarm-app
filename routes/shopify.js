@@ -62,7 +62,7 @@ shopifyRouter.get("/products", async (req, res) => {
     const data = await r.json();
     if (data.products?.length) {
       for (const p of data.products) {
-        await supabase.from("products").upsert({ external_id: String(p.id), platform: "shopify", title: p.title, tags: p.tags ? p.tags.split(",").map(t=>t.trim()) : [], price: parseFloat(p.variants?.[0]?.price||0), status: p.status, updated_at: new Date().toISOString() }, { onConflict: "external_id,platform" }).catch(()=>{});
+        await supabase.from("products").upsert({ external_id: String(p.id), platform: "shopify", title: p.title, tags: p.tags ? p.tags.split(",").map(t=>t.trim()) : [], price: parseFloat(p.variants?.[0]?.price||0), status: p.status, updated_at: new Date().toISOString() }, { onConflict: "external_id,platform" }).;
       }
     }
     res.json(data);
@@ -80,7 +80,7 @@ shopifyRouter.get("/orders", async (req, res) => {
     if (data.orders?.length) {
       for (const o of data.orders) {
         if (o.financial_status === "paid") {
-          await supabase.from("revenue_events").upsert({ platform: "shopify", order_id: String(o.id), amount: parseFloat(o.total_price), recorded_at: o.created_at }, { onConflict: "order_id" }).catch(()=>{});
+          await supabase.from("revenue_events").upsert({ platform: "shopify", order_id: String(o.id), amount: parseFloat(o.total_price), recorded_at: o.created_at }, { onConflict: "order_id" }).;
         }
       }
     }
