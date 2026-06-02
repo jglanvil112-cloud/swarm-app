@@ -5,6 +5,7 @@ import{supabase,logAgent,enqueueTask}from"../lib/supabase.js";
 export const etsyRouter=express.Router();
 
 const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
+const ETSY_SECRET=process.env.ETSY_SECRET||"";
 const ETSY_SHOP=process.env.SHOP_NAME||"HOUSEOFJREYM";
 const ETSY_SHOP_ID=process.env.ETSY_SHOP_ID||"";
 const APP_URL=process.env.APP_URL||"https://swarm-app-3nch.onrender.com";
@@ -33,8 +34,8 @@ async function refreshEtsyToken(refreshToken){
   return data.access_token;
 }
 
-function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY,"Content-Type":"application/json"};}
-function pubH(){return{"x-api-key":ETSY_KEY};}
+function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_SECRET||ETSY_KEY,"Content-Type":"application/json"};}
+function pubH(){return{"x-api-key":ETSY_SECRET||ETSY_KEY};}
 
 etsyRouter.get("/auth",(req,res)=>{
   const verifier=crypto.randomBytes(32).toString("base64url");
