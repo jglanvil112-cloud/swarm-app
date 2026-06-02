@@ -34,8 +34,8 @@ async function refreshEtsyToken(refreshToken){
   return data.access_token;
 }
 
-function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY,"Content-Type":"application/json"};}
-function pubH(){return{"x-api-key":ETSY_KEY};}
+function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+":"+ETSY_SECRET,"Content-Type":"application/json"};}
+function pubH(){return{"x-api-key":ETSY_KEY+":"+ETSY_SECRET};}
 
 etsyRouter.get("/auth",(req,res)=>{
   const verifier=crypto.randomBytes(32).toString("base64url");
