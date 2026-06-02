@@ -35,7 +35,7 @@ async function refreshEtsyToken(refreshToken){
 }
 
 function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_SECRET||ETSY_KEY,"Content-Type":"application/json"};}
-function pubH(){return{"x-api-key":ETSY_SECRET||ETSY_KEY};}
+function pubH(){return{"x-api-key":ETSY_KEY};}
 
 etsyRouter.get("/auth",(req,res)=>{
   const verifier=crypto.randomBytes(32).toString("base64url");
@@ -171,6 +171,7 @@ etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
     if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});
+    etsyRouter.get("/debug-ping",async(req,res)=>{try{const r=await fetch(ETSY_BASE+"/openapi-ping",{headers:{"x-api-key":ETSY_KEY}});const t=await r.text();res.json({status:r.status,key_used:ETSY_KEY.slice(0,8)+"...",secret_set:!!ETSY_SECRET,body:t});}catch(e){res.status(500).json({error:e.message});}});
     res.json(await r.json());
   }catch(e){res.status(500).json({error:e.message});}
 });
