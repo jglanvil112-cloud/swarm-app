@@ -1,6 +1,6 @@
 // workers/scheduler.js — SWARM OS Worker v2 (fixes: smart-seed, retry, security)
 import cron from "node-cron";
-import { enqueueTask, claimNextTask, updateTaskStatus, updateSchedulerState, logAgent, recordHealth, supabase } from "../lib/supabase.js";
+import { enqueueTask, claimNextTask, updateTaskStatus, updateSchedulerState, logAgent, recordHealth, saveAgentOutput, supabase } from "../lib/supabase.js";
 import { executeTask } from "../agents/executor.js";
 
 const WORKER_ID = `worker-${process.env.RENDER_INSTANCE_ID || "local"}-${Date.now()}`;
@@ -46,7 +46,23 @@ async function processAgentQueue(agent) {
                                                                                                                                                   const { task_type } = completedTask;
                                                                                                                                                     if (task_type === "trend_research" && result?.top_pick) {
                                                                                                                                                         await enqueueTask({ agent: "AISHA", task_type: "seo_generation", payload: { title: result.top_pick, keywords: result.trends?.map(t => t.keyword) || [], platform: "etsy" }, priority: 3, parentTaskId: completedTask.id });
-                                                                                                                                                          }
+                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_etsy_title",       payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
+                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_etsy_description", payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
+                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_etsy_tags",        payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
+                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_social_caption",   payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
+                                                                                                                                                          console.log(`[PIPELINE] NANA->AISHA+4xAMARA queued for "${result.top_pick}"`);
+                                                                                                                                                          }  if (task_type === "generate_etsy_title" && result?.title) {
+                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "etsy_title", etsyTitle: result.title, confidence: result.confidence || 0.8 });
+                                                                                                                                                      }
+                                                                                                                                                    if (task_type === "generate_etsy_description" && result?.description) {
+                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "etsy_description", etsyDescription: result.description, confidence: result.confidence || 0.8 });
+                                                                                                                                                      }
+                                                                                                                                                    if (task_type === "generate_etsy_tags" && result?.tags) {
+                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "etsy_tags", etsyTags: result.tags, confidence: result.confidence || 0.8 });
+                                                                                                                                                      }
+                                                                                                                                                    if (task_type === "generate_social_caption" && result?.caption) {
+                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "social_caption", socialCaption: result.caption, confidence: result.confidence || 0.8 });
+                                                                                                                                                      }
                                                                                                                                                             if (task_type === "seo_generation" && result?.title) {
                                                                                                                                                                 await enqueueTask({ agent: "AMARA", task_type: "social_caption", payload: { product: result.title, platform: "instagram", count: 3 }, priority: 4, parentTaskId: completedTask.id });
                                                                                                                                                                   }
