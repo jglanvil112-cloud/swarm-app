@@ -69,8 +69,8 @@ etsyRouter.post("/refresh-token",async(req,res)=>{
 
 etsyRouter.get("/shop-id",async(req,res)=>{
   try{
-    const t=await getEtsyToken();
-    const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP,{headers:t?authH(t):pubH()});
+    const t=await getEtsyToken();if(!t)return res.status(401).json({error:"Not authenticated — visit /api/etsy/auth"});const userId=t.split('.')[0];const r=await fetch(ETSY_BASE+"/users/"+userId+"/shops",{headers:authH(t)});
+    if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});const d=await r.json();const shop=d.results?.[0]||d;res.json({shop_id:shop.shop_id,shop_name:shop.shop_name,hint:"Add as ETSY_SHOP_ID in Render env"});
     if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});
     const d=await r.json();
     res.json({shop_id:d.shop_id,shop_name:d.shop_name,hint:"Add as ETSY_SHOP_ID in Render env"});
