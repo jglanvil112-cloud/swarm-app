@@ -55,10 +55,11 @@ etsyRouter.get("/callback",async(req,res)=>{
     const tr=await fetch("https://api.etsy.com/v3/public/oauth/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",client_id:ETSY_KEY,redirect_uri:REDIRECT_URI,code,code_verifier:stored.verifier})});
     const td=await tr.json();
     if(!td.access_token)return res.status(500).json({error:"Token exchange failed",detail:td});
+    console.log("[ETSY-TOKEN-SAVED]",td.access_token?.slice(0,12),"expires_in:",td.expires_in);
     await supabase.from("oauth_tokens").upsert({platform:"etsy",access_token:td.access_token,refresh_token:td.refresh_token,expires_at:new Date(Date.now()+td.expires_in*1000).toISOString(),updated_at:new Date().toISOString()},{onConflict:"platform"});
     await logAgent("AISHA","Etsy OAuth completed","success");
     res.redirect("/swarm_shop_os_v5.html?etsy=connected");
-  }catch(err){res.status(500).json({error:err.message});}
+  }catch(err){console.error("[ETSY-CALLBACK-ERROR]",err.message,JSON.stringify(err));res.status(500).json({error:err.message});}
 });
 
 etsyRouter.post("/refresh-token",async(req,res)=>{
