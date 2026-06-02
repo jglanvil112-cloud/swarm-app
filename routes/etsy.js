@@ -4,7 +4,7 @@ import crypto from "crypto";
 import{supabase,logAgent,enqueueTask}from"../lib/supabase.js";
 export const etsyRouter=express.Router();
 
-const ETSY_KEY=process.env.ETSY_API_KEY||"";
+const ETSY_KEY=process.env.ETSY_API_KEY||process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
 const ETSY_SHOP=process.env.SHOP_NAME||"HOUSEOFJREYM";
 const ETSY_SHOP_ID=process.env.ETSY_SHOP_ID||"";
 const APP_URL=process.env.APP_URL||"https://swarm-app-3nch.onrender.com";
