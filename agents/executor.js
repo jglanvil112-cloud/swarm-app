@@ -96,21 +96,19 @@ const TASK_HANDLERS = {
     }
   },
 
-  publish_etsy_listing:async(p)=>{
-    const{title,description,tags,price=4.99,file_url,file_name}=p;
+    publish_etsy_listing:async(p)=>{
+    const{title,description,price=4.99,file_url,file_name}=p;
+    let tags=p.tags;
+    if(typeof tags==="string"){try{tags=JSON.parse(tags);}catch{tags=[];}}
+    if(!Array.isArray(tags))tags=[];
     if(!title||!description)throw new Error("publish_etsy_listing: missing title or description");
-    if(!Array.isArray(tags)||!tags.length)throw new Error("publish_etsy_listing: tags array empty");
+    if(!tags.length)throw new Error("publish_etsy_listing: tags array empty after normalization");
     if(!ETSY_SHOP_ID)throw new Error("ETSY_SHOP_ID env var not set");
     const pub=await selfPost("/api/etsy/publish",{title,description,tags,price,shop_id:ETSY_SHOP_ID});
     const{listing_id,url}=pub;console.log("[executor] Listing: "+listing_id);
     let fr={skipped:true,reason:"no file_url"};
     if(file_url){try{fr=await selfPost("/api/etsy/upload-file",{listing_id,shop_id:ETSY_SHOP_ID,file_url,file_name:file_name||"digital-download.svg"});console.log("[executor] File attached");}catch(e){fr={skipped:true,reason:e.message};}}
     return{published:true,listing_id,url,file_attached:!fr.skipped};
-  },
-};
-
-export async function executeTask(task){
-  const{id,agent,task_type,payload}=task;
   const handler=TASK_HANDLERS[task_type];
   if(!handler)throw new Error("No handler for task_type: "+task_type);
   await logAgent(agent,"Starting: "+task_type,"info",null,id);
