@@ -1,141 +1,160 @@
-// workers/scheduler.js — SWARM OS Worker v2 (fixes: smart-seed, retry, security)
+// workers/scheduler.js — SWARM OS v6.0
+// [FIX-1] extractTopPick() — safe string coercion kills [object Object]
+// [FIX-2] generate_etsy_tags follow-up assembles siblings + queues file gen
+// [NEW-1] generate_digital_file follow-up queues publish with file_url
+// [NEW-2] publish follow-up logs live URL
+// [NEW-3] Proactive Etsy token refresh in health check
 import cron from "node-cron";
-import { enqueueTask, claimNextTask, updateTaskStatus, updateSchedulerState, logAgent, recordHealth, saveAgentOutput, supabase } from "../lib/supabase.js";
-import { executeTask } from "../agents/executor.js";
+import{enqueueTask,claimNextTask,updateTaskStatus,updateSchedulerState,logAgent,recordHealth,saveAgentOutput,supabase}from"../lib/supabase.js";
+import{executeTask}from"../agents/executor.js";
 
-const WORKER_ID = `worker-${process.env.RENDER_INSTANCE_ID || "local"}-${Date.now()}`;
-console.log(`SWARM OS Scheduler starting — ${WORKER_ID}`);
+const WORKER_ID="worker-"+(process.env.RENDER_INSTANCE_ID||"local")+"-"+Date.now();
+const BASE_URL=process.env.BASE_URL||"https://swarm-app-3nch.onrender.com";
+console.log("SWARM OS v6.0 — "+WORKER_ID);
 
-async function processAgentQueue(agent) {
-  try {
-      const task = await claimNextTask(agent);
-          if (!task) return;
-              console.log(`[${agent}] Claimed: ${task.task_type} (${task.id})`);
-                  try {
-                        const result = await executeTask(task);
-                              if (result?.requires_approval) {
-                                      await updateTaskStatus(task.id, "awaiting_approval", result);
-                                              await logAgent(agent, `Awaiting approval: ${task.task_type}`, "warn", result, task.id);
-                                                    } else {
-                                                            await updateTaskStatus(task.id, "completed", result);
-                                                                    await enqueueFollowUps(task, result);
-                                                                          }
-                                                                              } catch (err) {
-                                                                                    await updateTaskStatus(task.id, "failed", null, err.message);
-                                                                                          await logAgent(agent, `Failed: ${err.message}`, "error", null, task.id);
-                                                                                              }
-                                                                                                } catch (err) { console.error(`[${agent}] Queue error:`, err.message); }
-                                                                                                }
+function extractTopPick(result){
+  const raw=result?.top_pick;
+  if(!raw)return null;
+  if(typeof raw==="string"&&raw.trim())return raw.trim();
+  if(typeof raw==="object"){const v=raw.keyword??raw.top_pick??raw.title??raw.name??"";if(typeof v==="string"&&v.trim())return v.trim();}
+  return null;
+}
 
-                                                                                                // FIX 4: Auto-retry failed tasks (every 5 min, tasks failed > 2 min ago)
-                                                                                                async function retryFailedTasks() {
-                                                                                                  try {
-                                                                                                      const { data: failed, count } = await supabase
-                                                                                                            .from("tasks").select("id", { count: "exact" })
-                                                                                                                  .eq("status", "failed")
-                                                                                                                        .lt("updated_at", new Date(Date.now() - 120000).toISOString())
-                                                                                                                              .lt("priority", 9);
-                                                                                                                                  if (!count) return;
-                                                                                                                                      const ids = (failed || []).map(t => t.id);
-                                                                                                                                          await supabase.from("tasks").update({ status: "pending", error: null, started_at: null, updated_at: new Date().toISOString() }).in("id", ids);
-                                                                                                                                              console.log(`[RETRY] Reset ${count} failed tasks to pending`);
-                                                                                                                                                } catch (err) { console.error("[RETRY] Error:", err.message); }
-                                                                                                                                                }
+async function processAgentQueue(agent){
+  try{
+    const task=await claimNextTask(agent);if(!task)return;
+    console.log("["+agent+"] Claimed: "+task.task_type+" ("+task.id+")");
+    try{
+      const result=await executeTask(task);
+      if(result?.requires_approval){await updateTaskStatus(task.id,"awaiting_approval",result);await logAgent(agent,"Awaiting: "+task.task_type,"warn",result,task.id);}
+      else{await updateTaskStatus(task.id,"completed",result);await enqueueFollowUps(task,result);}
+    }catch(err){await updateTaskStatus(task.id,"failed",null,err.message);await logAgent(agent,"Failed: "+err.message,"error",null,task.id);}
+  }catch(err){console.error("["+agent+"] Queue error:",err.message);}
+}
 
-                                                                                                                                                async function enqueueFollowUps(completedTask, result) {
-                                                                                                                                                  const { task_type } = completedTask;
-                                                                                                                                                    if (task_type === "trend_research" && result?.top_pick) {
-                                                                                                                                                        await enqueueTask({ agent: "AISHA", task_type: "seo_generation", payload: { title: result.top_pick, keywords: result.trends?.map(t => t.keyword) || [], platform: "etsy" }, priority: 3, parentTaskId: completedTask.id });
-                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_etsy_title",       payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
-                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_etsy_description", payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
-                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_etsy_tags",        payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
-                                                                                                                                                          await enqueueTask({ agent: "AMARA", task_type: "generate_social_caption",   payload: { keyword: result.top_pick }, priority: 3, parentTaskId: completedTask.id });
-                                                                                                                                                          console.log(`[PIPELINE] NANA->AISHA+4xAMARA queued for "${result.top_pick}"`);
-                                                                                                                                                          }  if (task_type === "generate_etsy_title" && result?.title) {
-                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "etsy_title", etsyTitle: result.title, confidence: result.confidence || 0.8 });
-                                                                                                                                                      }
-                                                                                                                                                    if (task_type === "generate_etsy_description" && result?.description) {
-                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "etsy_description", etsyDescription: result.description, confidence: result.confidence || 0.8 });
-                                                                                                                                                      }
-                                                                                                                                                    if (task_type === "generate_etsy_tags" && result?.tags) {
-                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "etsy_tags", etsyTags: result.tags, confidence: result.confidence || 0.8 });
-                                                                                                                                                      }
-                                                                                                                                                    if (task_type === "generate_social_caption" && result?.caption) {
-                                                                                                                                                          await saveAgentOutput({ taskId: completedTask.id, agent: "AMARA", outputType: "social_caption", socialCaption: result.caption, confidence: result.confidence || 0.8 });
-                                                                                                                                                      }
-                                                                                                                                                            if (task_type === "seo_generation" && result?.title) {
-                                                                                                                                                                await enqueueTask({ agent: "AMARA", task_type: "social_caption", payload: { product: result.title, platform: "instagram", count: 3 }, priority: 4, parentTaskId: completedTask.id });
-                                                                                                                                                                  }
-                                                                                                                                                                    if (task_type === "analytics_report" && result?.underperformers?.length > 0) {
-                                                                                                                                                                        await enqueueTask({ agent: "KWAME", task_type: "sales_optimization", payload: { sales: result }, priority: 4, parentTaskId: completedTask.id });
-                                                                                                                                                                          }
-                                                                                                                                                                            if (task_type === "inventory_check" && result?.status === "critical") {
-                                                                                                                                                                                await enqueueTask({ agent: "ZARA", task_type: "inventory_check", payload: { low_stock: result.low_stock, context: "critical_alert" }, priority: 1, parentTaskId: completedTask.id });
-                                                                                                                                                                                  }
-                                                                                                                                                                                  }
+async function retryFailedTasks(){
+  try{
+    const{data:failed,count}=await supabase.from("tasks").select("id",{count:"exact"}).eq("status","failed").lt("updated_at",new Date(Date.now()-120000).toISOString()).lt("priority",9);
+    if(!count)return;
+    await supabase.from("tasks").update({status:"pending",error:null,started_at:null,updated_at:new Date().toISOString()}).in("id",(failed||[]).map(t=>t.id));
+    console.log("[RETRY] Reset "+count+" tasks");
+  }catch(err){console.error("[RETRY]",err.message);}
+}
 
-                                                                                                                                                                                  async function runHourlyTrendScan() {
-                                                                                                                                                                                    const categories = ["wall art","digital prints","home decor","affirmation prints","black art"];
-                                                                                                                                                                                      for (const category of categories) await enqueueTask({ agent: "NANA", task_type: "trend_research", payload: { category }, priority: 3 });
-                                                                                                                                                                                        await updateSchedulerState("hourly_trend_scan", "ok");
-                                                                                                                                                                                        }
-                                                                                                                                                                                        async function runHourlyInventoryCheck() { await enqueueTask({ agent: "KOFI", task_type: "inventory_check", payload: {}, priority: 2 }); await updateSchedulerState("hourly_inventory_check", "ok"); }
-                                                                                                                                                                                        async function runHourlyOrderMonitor() { await enqueueTask({ agent: "SEUN", task_type: "analytics_report", payload: { period: "last_hour" }, priority: 2 }); await updateSchedulerState("hourly_order_monitor", "ok"); }
-                                                                                                                                                                                        async function runDailySEO() {
-                                                                                                                                                                                          const { data: trends } = await supabase.from("trends").select("*").order("score", { ascending: false }).limit(5);
-                                                                                                                                                                                            if (trends?.length) for (const t of trends) await enqueueTask({ agent: "AISHA", task_type: "seo_generation", payload: { title: t.keyword, keywords: [t.keyword], platform: "etsy" }, priority: 4 });
-                                                                                                                                                                                              await updateSchedulerState("daily_seo_generation", "ok");
-                                                                                                                                                                                              }
-                                                                                                                                                                                              async function runDailyAnalytics() {
-                                                                                                                                                                                                await enqueueTask({ agent: "SEUN", task_type: "analytics_report", payload: { period: "last_24_hours" }, priority: 3 });
-                                                                                                                                                                                                  await enqueueTask({ agent: "ABENA", task_type: "financial_report", payload: { period: "today" }, priority: 4 });
-                                                                                                                                                                                                    await updateSchedulerState("daily_analytics_report", "ok");
-                                                                                                                                                                                                    }
-                                                                                                                                                                                                    async function runWeeklyCampaign() { await enqueueTask({ agent: "AMARA", task_type: "marketing_campaign", payload: { goal: "weekly_review" }, priority: 5 }); await updateSchedulerState("weekly_campaign_review", "ok"); }
-                                                                                                                                                                                                    async function runWeeklyAudit() {
-                                                                                                                                                                                                      await enqueueTask({ agent: "KWAME", task_type: "sales_optimization", payload: { context: "weekly_audit" }, priority: 5 });
-                                                                                                                                                                                                        await enqueueTask({ agent: "DELE", task_type: "pricing_analysis", payload: { context: "weekly_review" }, priority: 5 });
-                                                                                                                                                                                                          await updateSchedulerState("weekly_product_audit", "ok");
-                                                                                                                                                                                                          }
-                                                                                                                                                                                                          async function runHealthCheck() {
-                                                                                                                                                                                                            for (const svc of ["anthropic","supabase","shopify","etsy"]) {
-                                                                                                                                                                                                                try {
-                                                                                                                                                                                                                      const start = Date.now();
-                                                                                                                                                                                                                            const r = await fetch(`https://swarm-app-3nch.onrender.com/api/health/${svc}`, { signal: AbortSignal.timeout(8000) });
-                                                                                                                                                                                                                                  const d = await r.json();
-                                                                                                                                                                                                                                        await recordHealth(svc, d.status === "ok" ? "ok" : "fail", Date.now()-start, d);
-                                                                                                                                                                                                                                            } catch (e) { await recordHealth(svc, "fail", null, { error: e.message }); }
-                                                                                                                                                                                                                                              }
-                                                                                                                                                                                                                                              }
+async function getSiblingOutputs(parentId,types){
+  if(!parentId)return{};
+  const{data:siblings}=await supabase.from("tasks").select("id,task_type").eq("parent_task_id",parentId).in("task_type",types);
+  if(!siblings?.length)return{};
+  const ids=siblings.map(t=>t.id);
+  const{data:outputs}=await supabase.from("agent_outputs").select("output_type,etsy_title,etsy_description,etsy_tags").in("task_id",ids);
+  const map={};for(const o of(outputs||[]))map[o.output_type]=o;
+  return map;
+}
 
-                                                                                                                                                                                                                                              const AGENTS = ["NANA","KOFI","AMARA","KWAME","FATIMA","SEUN","AISHA","IBRAHIM","ZARA","DELE","IMANI","ABENA"];
-                                                                                                                                                                                                                                              async function runWorkerLoop() { for (const agent of AGENTS) await processAgentQueue(agent); }
+async function enqueueFollowUps(completedTask,result){
+  const{task_type,id:taskId,parent_task_id:parentId}=completedTask;
 
-                                                                                                                                                                                                                                              cron.schedule("*/30 * * * * *", runWorkerLoop);
-                                                                                                                                                                                                                                              cron.schedule("*/5 * * * *", retryFailedTasks); // FIX 4: retry
-                                                                                                                                                                                                                                              cron.schedule("0 * * * *", runHourlyTrendScan);
-                                                                                                                                                                                                                                              cron.schedule("5 * * * *", runHourlyInventoryCheck);
-                                                                                                                                                                                                                                              cron.schedule("10 * * * *", runHourlyOrderMonitor);
-                                                                                                                                                                                                                                              cron.schedule("0 6 * * *", runDailySEO);
-                                                                                                                                                                                                                                              cron.schedule("15 6 * * *", runDailyAnalytics);
-                                                                                                                                                                                                                                              cron.schedule("0 7 * * 1", runWeeklyCampaign);
-                                                                                                                                                                                                                                              cron.schedule("30 7 * * 1", runWeeklyAudit);
-                                                                                                                                                                                                                                              cron.schedule("*/15 * * * *", runHealthCheck);
+  if(task_type==="trend_research"&&result?.top_pick){
+    const kw=extractTopPick(result);
+    if(!kw){console.warn("[PIPELINE] top_pick unextractable");return;}
+    console.log("[PIPELINE] NANA → \""+kw+"\"");
+    await enqueueTask({agent:"AISHA",task_type:"seo_generation",payload:{title:kw,keywords:result.trends?.map(t=>t.keyword)||[],platform:"etsy"},priority:3,parentTaskId:taskId});
+    await enqueueTask({agent:"AMARA",task_type:"generate_etsy_title",payload:{keyword:kw},priority:3,parentTaskId:taskId});
+    await enqueueTask({agent:"AMARA",task_type:"generate_etsy_description",payload:{keyword:kw},priority:3,parentTaskId:taskId});
+    await enqueueTask({agent:"AMARA",task_type:"generate_etsy_tags",payload:{keyword:kw},priority:3,parentTaskId:taskId});
+    await enqueueTask({agent:"AMARA",task_type:"generate_social_caption",payload:{keyword:kw},priority:4,parentTaskId:taskId});
+  }
 
-                                                                                                                                                                                                                                              // FIX 3: Smart seed — skip if >= 3 pending tasks created in last 30 min
-                                                                                                                                                                                                                                              (async () => {
-                                                                                                                                                                                                                                                try {
-                                                                                                                                                                                                                                                    const since = new Date(Date.now() - 1800000).toISOString();
-                                                                                                                                                                                                                                                        const { count } = await supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "pending").gt("created_at", since);
-                                                                                                                                                                                                                                                            if ((count || 0) < 3) {
-                                                                                                                                                                                                                                                                  console.log(`[SEED] ${count} recent pending — seeding`);
-                                                                                                                                                                                                                                                                        await runHourlyTrendScan();
-                                                                                                                                                                                                                                                                              await runDailyAnalytics();
-                                                                                                                                                                                                                                                                                    console.log("SWARM OS: Tasks seeded");
-                                                                                                                                                                                                                                                                                        } else {
-                                                                                                                                                                                                                                                                                              console.log(`[SEED] ${count} pending tasks exist — skipping duplicate seed`);
-                                                                                                                                                                                                                                                                                                  }
-                                                                                                                                                                                                                                                                                                    } catch(e) { console.error("Seed error:", e.message); }
-                                                                                                                                                                                                                                                                                                    })();
-                                                                                                                                                                                                                                                                                                    console.log("SWARM OS: All cron jobs registered");
-                                                                                                                                                                                                                                                                                                    
+  if(task_type==="generate_etsy_title"&&result?.title)await saveAgentOutput({taskId,agent:"AMARA",outputType:"etsy_title",etsyTitle:result.title,confidence:result.confidence||0.8});
+  if(task_type==="generate_etsy_description"&&result?.description)await saveAgentOutput({taskId,agent:"AMARA",outputType:"etsy_description",etsyDescription:result.description,confidence:result.confidence||0.8});
+  if(task_type==="generate_social_caption"&&result?.caption)await saveAgentOutput({taskId,agent:"AMARA",outputType:"social_caption",socialCaption:result.caption,confidence:result.confidence||0.8});
+
+  if(task_type==="generate_etsy_tags"&&result?.tags){
+    await saveAgentOutput({taskId,agent:"AMARA",outputType:"etsy_tags",etsyTags:result.tags,confidence:result.confidence||0.8});
+    if(!parentId){console.warn("[PIPELINE] generate_etsy_tags: no parent_task_id");return;}
+    const sib=await getSiblingOutputs(parentId,["generate_etsy_title","generate_etsy_description"]);
+    const titleRow=sib["etsy_title"];const descRow=sib["etsy_description"];
+    if(!titleRow||!descRow){console.warn("[PIPELINE] Missing title/desc siblings — will retry");return;}
+    console.log("[PIPELINE] All content ready → queuing file gen");
+    await enqueueTask({agent:"AMARA",task_type:"generate_digital_file",payload:{keyword:titleRow.etsy_title,title:titleRow.etsy_title,description:descRow.etsy_description,tags:result.tags,price:4.99},priority:2,parentTaskId:parentId});
+  }
+
+  if(task_type==="generate_digital_file"){
+    if(!parentId){console.warn("[PIPELINE] generate_digital_file: no parent");return;}
+    const sib=await getSiblingOutputs(parentId,["generate_etsy_title","generate_etsy_description","generate_etsy_tags"]);
+    const title=sib["etsy_title"]?.etsy_title;const description=sib["etsy_description"]?.etsy_description;const tags=sib["etsy_tags"]?.etsy_tags;
+    if(!title||!description||!tags){console.warn("[PIPELINE] generate_digital_file: missing content siblings");return;}
+    console.log("[PIPELINE] File ready → queuing publish: \""+title+"\"");
+    await enqueueTask({agent:"AISHA",task_type:"publish_etsy_listing",payload:{title,description,tags,price:4.99,file_url:result.file_url||null,file_name:result.file_name||"digital-download.svg"},priority:1,parentTaskId:parentId});
+  }
+
+  if(task_type==="publish_etsy_listing"&&result?.published){
+    await logAgent("AISHA","LIVE: "+result.url+" | file:"+result.file_attached,"success",result,taskId);
+    await saveAgentOutput({taskId,agent:"AISHA",outputType:"etsy_listing_published",etsyTitle:result.url,confidence:1.0});
+    console.log("[PIPELINE] LISTING LIVE: "+result.url);
+  }
+
+  if(task_type==="seo_generation"&&result?.title)await enqueueTask({agent:"AMARA",task_type:"social_caption",payload:{product:result.title,platform:"instagram",count:3},priority:4,parentTaskId:taskId});
+  if(task_type==="analytics_report"&&result?.underperformers?.length>0)await enqueueTask({agent:"KWAME",task_type:"sales_optimization",payload:{sales:result},priority:4,parentTaskId:taskId});
+  if(task_type==="inventory_check"&&result?.status==="critical")await enqueueTask({agent:"ZARA",task_type:"inventory_check",payload:{low_stock:result.low_stock,context:"critical_alert"},priority:1,parentTaskId:taskId});
+}
+
+async function runHourlyTrendScan(){
+  const cats=["wall art","digital prints","home decor","affirmation prints","black art"];
+  for(const c of cats)await enqueueTask({agent:"NANA",task_type:"trend_research",payload:{category:c},priority:3});
+  await updateSchedulerState("hourly_trend_scan","ok");
+}
+async function runHourlyInventoryCheck(){await enqueueTask({agent:"KOFI",task_type:"inventory_check",payload:{},priority:2});await updateSchedulerState("hourly_inventory_check","ok");}
+async function runHourlyOrderMonitor(){await enqueueTask({agent:"SEUN",task_type:"analytics_report",payload:{period:"last_hour"},priority:2});await updateSchedulerState("hourly_order_monitor","ok");}
+async function runDailySEO(){
+  const{data:trends}=await supabase.from("trends").select("*").order("score",{ascending:false}).limit(5);
+  if(trends?.length)for(const t of trends)await enqueueTask({agent:"AISHA",task_type:"seo_generation",payload:{title:t.keyword,keywords:[t.keyword],platform:"etsy"},priority:4});
+  await updateSchedulerState("daily_seo_generation","ok");
+}
+async function runDailyAnalytics(){
+  await enqueueTask({agent:"SEUN",task_type:"analytics_report",payload:{period:"last_24_hours"},priority:3});
+  await enqueueTask({agent:"ABENA",task_type:"financial_report",payload:{period:"today"},priority:4});
+  await updateSchedulerState("daily_analytics_report","ok");
+}
+async function runWeeklyCampaign(){await enqueueTask({agent:"AMARA",task_type:"marketing_campaign",payload:{goal:"weekly_review"},priority:5});await updateSchedulerState("weekly_campaign_review","ok");}
+async function runWeeklyAudit(){
+  await enqueueTask({agent:"KWAME",task_type:"sales_optimization",payload:{context:"weekly_audit"},priority:5});
+  await enqueueTask({agent:"DELE",task_type:"pricing_analysis",payload:{context:"weekly_review"},priority:5});
+  await updateSchedulerState("weekly_product_audit","ok");
+}
+
+async function runHealthCheck(){
+  for(const svc of["anthropic","supabase","shopify","etsy"]){
+    try{const start=Date.now();const r=await fetch(BASE_URL+"/api/health/"+svc,{signal:AbortSignal.timeout(8000)});const d=await r.json();await recordHealth(svc,d.status==="ok"?"ok":"fail",Date.now()-start,d);}
+    catch(e){await recordHealth(svc,"fail",null,{error:e.message});}
+  }
+  try{
+    const{data:row}=await supabase.from("oauth_tokens").select("expires_at").eq("platform","etsy").single().catch(()=>({data:null}));
+    if(row?.expires_at){const h=(new Date(row.expires_at)-Date.now())/3600000;if(h<2){console.log("[healthCheck] Etsy token expires in "+h.toFixed(1)+"h — refreshing");await fetch(BASE_URL+"/api/etsy/refresh-token",{method:"POST"}).catch(e=>console.warn("[healthCheck] Refresh failed:",e.message));}}
+  }catch(e){console.warn("[healthCheck] Token check failed:",e.message);}
+}
+
+const AGENTS=["NANA","KOFI","AMARA","KWAME","FATIMA","SEUN","AISHA","IBRAHIM","ZARA","DELE","IMANI","ABENA"];
+async function runWorkerLoop(){for(const agent of AGENTS)await processAgentQueue(agent);}
+
+cron.schedule("*/30 * * * * *",runWorkerLoop);
+cron.schedule("*/5 * * * *",retryFailedTasks);
+cron.schedule("0 * * * *",runHourlyTrendScan);
+cron.schedule("5 * * * *",runHourlyInventoryCheck);
+cron.schedule("10 * * * *",runHourlyOrderMonitor);
+cron.schedule("0 6 * * *",runDailySEO);
+cron.schedule("15 6 * * *",runDailyAnalytics);
+cron.schedule("0 7 * * 1",runWeeklyCampaign);
+cron.schedule("30 7 * * 1",runWeeklyAudit);
+cron.schedule("*/15 * * * *",runHealthCheck);
+
+(async()=>{
+  try{
+    const since=new Date(Date.now()-1800000).toISOString();
+    const{count}=await supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","pending").gt("created_at",since);
+    if((count||0)<3){console.log("[SEED] "+count+" recent pending — seeding");await runHourlyTrendScan();await runDailyAnalytics();console.log("[SEED] Done");}
+    else console.log("[SEED] "+count+" pending exist — skipping");
+  }catch(e){console.error("[SEED]",e.message);}
+})();
+
+console.log("SWARM OS v6.0: All cron jobs registered");
