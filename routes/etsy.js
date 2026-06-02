@@ -34,7 +34,7 @@ async function refreshEtsyToken(refreshToken){
   return data.access_token;
 }
 
-function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_SECRET||ETSY_KEY,"Content-Type":"application/json"};}
+function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY,"Content-Type":"application/json"};}
 function pubH(){return{"x-api-key":ETSY_KEY};}
 
 etsyRouter.get("/auth",(req,res)=>{
@@ -56,7 +56,7 @@ etsyRouter.get("/callback",async(req,res)=>{
     const td=await tr.json();
     if(!td.access_token)return res.status(500).json({error:"Token exchange failed",detail:td});
     console.log("[ETSY-TOKEN-SAVED]",td.access_token?.slice(0,12),"expires_in:",td.expires_in);
-    await supabase.from("oauth_tokens").upsert({platform:"etsy",access_token:td.access_token,refresh_token:td.refresh_token,expires_at:new Date(Date.now()+td.expires_in*1000).toISOString(),updated_at:new Date().toISOString()},{onConflict:"platform"});
+    const{error:saveErr}=await supabase.from("oauth_tokens").upsert({platform:"etsy",access_token:td.access_token,refresh_token:td.refresh_token,expires_at:new Date(Date.now()+td.expires_in*1000).toISOString(),updated_at:new Date().toISOString()},{onConflict:"platform"});if(saveErr)throw new Error("Token save failed: "+saveErr.message);
     await logAgent("AISHA","Etsy OAuth completed","success");
     res.redirect("/swarm_shop_os_v5.html?etsy=connected");
   }catch(err){console.error("[ETSY-CALLBACK-ERROR]",err.message,JSON.stringify(err));res.status(500).json({error:err.message});}
