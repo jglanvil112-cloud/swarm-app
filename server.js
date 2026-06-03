@@ -9,6 +9,7 @@ import { shopifyRouter } from "./routes/shopify.js";
 import { etsyRouter } from "./routes/etsy.js";
 import { printifyRouter } from "./routes/printify.js";
 import { tasksRouter } from "./routes/tasks.js";
+import { pipelineRouter } from "./routes/pipeline.js";
 import { supabase, recordHealth, getRecentOutputs } from "./lib/supabase.js";
 import "./workers/scheduler.js";
 
@@ -31,8 +32,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KE
 
 // AUTH MIDDLEWARE — dashboard routes are always public (no API key needed)
 const API_SECRET = process.env.API_SECRET;
-const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify"];
-app.use("/api/", (req, res, next) => {
+const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify", "/pipeline"];app.use("/api/", (req, res, next) => {
   const isPublic = PUBLIC_API_PREFIXES.some(p => req.path === p || req.path.startsWith(p + "/") || req.path.startsWith("/health"));
     if (isPublic) return next();
       if (!API_SECRET) return next();
@@ -56,6 +56,7 @@ app.use("/api/", (req, res, next) => {
                         app.use("/api/etsy", etsyRouter);
                         app.use("/api/printify", printifyRouter);
                         app.use("/api/tasks", tasksRouter);
+app.use("/api/pipeline", pipelineRouter);
 
                         // Agent outputs — feeds dashboard AMARA output panel
                         app.get("/api/outputs", async (req, res) => {
