@@ -67,15 +67,7 @@ etsyRouter.post("/refresh-token",async(req,res)=>{
   catch(err){res.status(500).json({ok:false,error:err.message});}
 });
 
-etsyRouter.get("/shop-id",async(req,res)=>{
-  const t=await getEtsyToken();if(!t)return res.status(401).json({error:"Not authenticated"});const uid=t.split('.')[0];const r=await fetch(ETSY_BASE+"/users/"+uid+"/shops",{headers:authH(t)});
-    const t=await getEtsyToken();if(!t)return res.status(401).json({error:"Not authenticated — visit /api/etsy/auth"});const userId=t.split('.')[0];const r=await fetch(ETSY_BASE+"/users/"+userId+"/shops",{headers:authH(t)});
-    if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});const d=await r.json();const shop=d.results?.[0]||d;res.json({shop_id:shop.shop_id,shop_name:shop.shop_name,hint:"Add as ETSY_SHOP_ID in Render env"});
-    if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});
-    const d=await r.json();
-    res.json({shop_id:d.shop_id,shop_name:d.shop_name,hint:"Add as ETSY_SHOP_ID in Render env"});
-  }catch(e){res.status(500).json({error:e.message});}
-});
+etsyRouter.get("/shop-id",async(req,res)=>{try{const t=await getEtsyToken();if(!t)return res.status(401).json({error:"Not authenticated — visit /api/etsy/auth"});const uid=t.split('.')[0];const r=await fetch(ETSY_BASE+"/users/"+uid+"/shops",{headers:authH(t)});if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});const d=await r.json();const s=d.results?.[0]||d;res.json({shop_id:s.shop_id,shop_name:s.shop_name,hint:"Add as ETSY_SHOP_ID in Render env"});}catch(e){res.status(500).json({error:e.message});}});
 
 etsyRouter.get("/shop",async(req,res)=>{
   try{
