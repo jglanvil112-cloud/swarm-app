@@ -6,7 +6,7 @@ export const etsyRouter=express.Router();
 
 const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
 const ETSY_SECRET=process.env.ETSY_SECRET||"";
-const ETSY_SHOP=process.env.SHOP_NAME||"HOUSEOFJREYM";
+const ETSY_SHOP=process.env.SHOP_NAME||"HOSEOFJREYM";
 const ETSY_SHOP_ID=parseInt(process.env.ETSY_SHOP_ID)||0;
 const APP_URL=process.env.APP_URL||"https://swarm-app-3nch.onrender.com";
 const ETSY_BASE="https://openapi.etsy.com/v3/application";
@@ -72,8 +72,7 @@ etsyRouter.get("/shop-id",async(req,res)=>{try{const t=await getEtsyToken();if(!
 etsyRouter.get("/shop",async(req,res)=>{
   try{
     const t=await getEtsyToken();
-    const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP,{headers:t?authH(t):pubH()});
-    if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,300)});}
+const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID,{headers:t?authH(t):pubH()});    if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,300)});}
     res.json(await r.json());
   }catch(e){res.status(500).json({error:e.message});}
 });
@@ -81,8 +80,7 @@ etsyRouter.get("/shop",async(req,res)=>{
 etsyRouter.get("/listings",async(req,res)=>{
   try{
     const t=await getEtsyToken();
-    const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/listings/active?limit="+(req.query.limit||25)+"&includes=Images",{headers:t?authH(t):pubH()});
-    if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,300)});}
+const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+(req.query.limit||25)+"&includes=Images",{headers:t?authH(t):pubH()});    if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,300)});}
     const data=await r.json();
     if(data.results?.length)for(const l of data.results)await supabase.from("products").upsert({external_id:String(l.listing_id),platform:"etsy",title:l.title,description:l.description?.slice(0,1000),tags:l.tags||[],price:l.price?l.price.amount/l.price.divisor:0,status:l.state,updated_at:new Date().toISOString()},{onConflict:"external_id,platform"});
     res.json(data);
@@ -143,8 +141,7 @@ etsyRouter.patch("/listings/:id",async(req,res)=>{
   try{
     const t=await getEtsyToken();
     if(!t)return res.status(401).json({error:"Not authenticated"});
-    const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/listings/"+req.params.id,{method:"PATCH",headers:authH(t),body:JSON.stringify(req.body)});
-    res.status(r.status).json(await r.json());
+const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+req.params.id,{method:"PATCH",headers:authH(t),body:JSON.stringify(req.body)});    res.status(r.status).json(await r.json());
   }catch(e){res.status(500).json({error:e.message});}
 });
 
@@ -152,8 +149,7 @@ etsyRouter.get("/orders",async(req,res)=>{
   try{
     const t=await getEtsyToken();
     if(!t)return res.status(401).json({error:"Not authenticated"});
-    const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/receipts?limit=25",{headers:authH(t)});
-    if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,300)});}
+const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/receipts?limit=25",{headers:authH(t)});    if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,300)});}
     const data=await r.json();
     if(data.results?.length)for(const o of data.results)await supabase.from("revenue_events").upsert({platform:"etsy",order_id:String(o.receipt_id),amount:parseFloat(o.grandtotal?.amount||0)/100,recorded_at:new Date(o.create_timestamp*1000).toISOString()},{onConflict:"order_id"});
     res.json(data);
