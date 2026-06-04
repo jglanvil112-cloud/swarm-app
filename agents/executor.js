@@ -1,4 +1,4 @@
-// agents/executor.js — SWARM OS v6.1 CLEAN
+// agents/executor.js — SWARM OS v6.2 — file-always-attached, inline SVG fallback
 // All handlers properly closed. Tags string→array fix in publish_etsy_listing.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, supabase } from "../lib/supabase.js";
@@ -123,18 +123,26 @@ const TASK_HANDLERS = {
     if (!ETSY_SHOP_ID) throw new Error("ETSY_SHOP_ID env var not set — add to Render");
     const pub = await selfPost("/api/etsy/publish", { title, description, tags, price, shop_id: ETSY_SHOP_ID });
     const { listing_id, url } = pub;
-    console.log("[executor] Listing created: " + listing_id);
     let fr = { skipped: true, reason: "no file_url" };
-    if (file_url) {
+    let resolvedUrl = file_url;
+    if (!resolvedUrl) {
       try {
-        fr = await selfPost("/api/etsy/upload-file", { listing_id, shop_id: ETSY_SHOP_ID, file_url, file_name: file_name || "digital-download.svg" });
-        console.log("[executor] File attached to " + listing_id);
+        const genResult = await TASK_HANDLERS.generate_digital_file({ keyword: title, tags: Array.isArray(tags) ? tags : [] });
+        resolvedUrl = genResult.file_url;
+        console.log("[executor] Inline SVG generated for listing " + listing_id);
+      } catch(genErr) { console.warn("[executor] Inline SVG gen failed: " + genErr.message); }
+    }
+    if (resolvedUrl) {
+      try {
+        fr = await selfPost("/api/etsy/upload-file", { listing_id, shop_id: ETSY_SHOP_ID, file_url: resolvedUrl, file_name: file_name || "digital-download.svg" });
+        console.log("[executor] File attached to listing " + listing_id);
       } catch (e) {
         fr = { skipped: true, reason: e.message };
         console.warn("[executor] File upload failed: " + e.message);
       }
     }
-    return { published: true, listing_id, url, file_attached: !fr.skipped };
+    }
+    return { published: true, listing_id, url, file_attached: !fr.skipped, file_url: resolvedUrl };
   },
 };
 
