@@ -1,4 +1,4 @@
-// routes/etsy.js — SWARM OS v6.4 — authH key:secret restored, debug-ping fixed
+// routes/etsy.js — SWARM OS v6.5 — upload-file auth fixed
 import express from "express";
 import crypto from "crypto";
 import{supabase,logAgent,enqueueTask}from"../lib/supabase.js";
@@ -124,7 +124,7 @@ etsyRouter.post("/upload-file",async(req,res)=>{
     const form=new FormData();
     form.append("file",fileBuffer,{filename:resolvedName,contentType:resolvedMime});
     form.append("name",resolvedName);form.append("rank","1");
-    const up=await fetch(ETSY_BASE+"/shops/"+sid+"/listings/"+listing_id+"/files",{method:"POST",headers:{"x-api-key":ETSY_KEY,Authorization:"Bearer "+t,...form.getHeaders()},body:form});
+    const up=await fetch(ETSY_BASE+"/shops/"+sid+"/listings/"+listing_id+"/files",{method:"POST",headers:{"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:""),Authorization:"Bearer "+t,...form.getHeaders()},body:form});
     const upData=await up.json();
     if(!up.ok)return res.status(502).json({error:"File upload failed",details:upData});
     await logAgent("AISHA","File attached to "+listing_id,"success");
