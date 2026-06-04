@@ -150,7 +150,7 @@ async function runWorkerLoop(){for(const agent of AGENTS)await processAgentQueue
 
 cron.schedule("*/30 * * * * *",runWorkerLoop);
 cron.schedule("*/5 * * * *",retryFailedTasks);
-cron.schedule(*/10 * * * *",async()=>{const r=await publishNextListing().catch(e=>({queued:0}));if(r.queued>0)console.log("[PUBLISH-QUEUE] "+r.queued);});
+cron.schedule("*/10 * * * *",async()=>{const r=await publishNextListing().catch(e=>({queued:0}));if(r.queued>0)console.log("[PUBLISH-QUEUE] "+r.queued);});
 cron.schedule("0 */4 * * *",runHourlyTrendScan);
 cron.schedule("5 * * * *",runHourlyInventoryCheck);
 cron.schedule("10 * * * *",runHourlyOrderMonitor);
