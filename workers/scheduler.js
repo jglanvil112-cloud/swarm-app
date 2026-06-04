@@ -6,7 +6,7 @@
 // [NEW-3] Proactive Etsy token refresh in health check
 import cron from "node-cron";
 import{enqueueTask,claimNextTask,updateTaskStatus,updateSchedulerState,logAgent,recordHealth,saveAgentOutput,supabase}from"../lib/supabase.js";
-import{executeTask}from"../agents/executor.js";
+import{executeTask,publishNextListing}from"../agents/executor.js";
 
 const WORKER_ID="worker-"+(process.env.RENDER_INSTANCE_ID||"local")+"-"+Date.now();
 const BASE_URL=process.env.BASE_URL||"https://swarm-app-3nch.onrender.com";
