@@ -1,4 +1,4 @@
-// routes/etsy.js — SWARM OS v6.3 — authH key-only, ETSY_SECRET || fix
+// routes/etsy.js — SWARM OS v6.4 — authH key:secret restored, debug-ping fixed
 import express from "express";
 import crypto from "crypto";
 import{supabase,logAgent,enqueueTask}from"../lib/supabase.js";
@@ -34,8 +34,8 @@ async function refreshEtsyToken(refreshToken){
   return data.access_token;
 }
 
-function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY,"Content-Type":"application/json"};}
-function pubH(){return{"x-api-key":ETSY_KEY};}
+function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:""),"Content-Type":"application/json"};}
+function pubH(){return{"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")};}
 
 etsyRouter.get("/auth",(req,res)=>{
   const verifier=crypto.randomBytes(32).toString("base64url");
