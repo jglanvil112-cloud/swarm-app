@@ -1,11 +1,11 @@
-// routes/etsy.js — SWARM OS v6.1 — getEtsyToken .catch bug fixed
+// routes/etsy.js — SWARM OS v6.2 — tag 20char truncate fix
 import express from "express";
 import crypto from "crypto";
 import{supabase,logAgent,enqueueTask}from"../lib/supabase.js";
 export const etsyRouter=express.Router();
 
 const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
-const ETSY_SECRET=process.env.ETSY_SECRET||"";
+const ETSY_SECRET=process.env.ETSY_SECRET|"";
 const ETSY_SHOP=process.env.SHOP_NAME||"HOSEOFJREYM";
 const ETSY_SHOP_ID=parseInt(process.env.ETSY_SHOP_ID)||0;
 const APP_URL=process.env.APP_URL||"https://swarm-app-3nch.onrender.com";
@@ -97,7 +97,7 @@ etsyRouter.post("/publish",async(req,res)=>{
   try{
     const t=await getEtsyToken();
     if(!t)return res.status(401).json({error:"Not authenticated — visit /api/etsy/auth"});
-    const body={title:String(title).slice(0,140),description:String(description),price:parseFloat(price),quantity:999,who_made:"i_did",when_made:"made_to_order",is_supply:false,taxonomy_id:2078,tags:tags.slice(0,13),state:"active",type:"download",is_digital:true};
+    const body={title:String(title).slice(0,140),description:String(description),price:parseFloat(price),quantity:999,who_made:"i_did",when_made:"made_to_order",is_supply:false,taxonomy_id:2078,tags:tags.map(t=>String(t).slice(0,20)).filter(t=>t.length>0).slice(0,13),state:"active",type:"download",is_digital:true};
     const r=await fetch(ETSY_BASE+"/shops/"+sid+"/listings",{method:"POST",headers:authH(t),body:JSON.stringify(body)});
     const listing=await r.json();
     if(!r.ok){await logAgent("AISHA","Listing failed: "+(listing?.error||r.status),"error");return res.status(502).json({error:"Etsy listing failed",details:listing});}
