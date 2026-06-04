@@ -29,7 +29,13 @@ function extractKeyword(p) {
     const inner = raw.keyword ?? raw.top_pick ?? raw.name ?? "";
     if (typeof inner === "string" && inner.trim()) return inner.trim();
   }
-  throw new Error("Invalid keyword in payload: " + JSON.stringify(raw));
+  // Fallback: use first tag if no keyword field (scheduler sends tags-only payloads)
+  const firstTag = Array.isArray(p.tags) ? p.tags[0] : (typeof p.tags === "string" ? p.tags.split(",")[0].trim() : "");
+  if (firstTag && firstTag.trim()) return firstTag.trim();
+  // Last resort: use niche or title
+  if (p.niche && typeof p.niche === "string") return p.niche.trim();
+  if (p.title && typeof p.title === "string") return p.title.split("—")[0].trim().slice(0, 30);
+  throw new Error("Invalid keyword in payload: " + JSON.stringify(p));
 }
 
 async function callClaude(agent, prompt) {
