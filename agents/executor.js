@@ -1,7 +1,7 @@
 // agents/executor.js — SWARM OS v6.3 — file-always-attached, verified upload-file step
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
-import { logAgent, saveDecision, saveTrend, saveAgentOutput, supabase } from "../lib/supabase.js";
+import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
 
 const anthropic    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BASE_URL     = process.env.BASE_URL    || "https://swarm-app-3nch.onrender.com";
@@ -138,6 +138,40 @@ async function attachFileToListing(listingId, svgContent, filename) {
   return { attached: true, listing_file_id: json.listing_file_id, ...json };
 }
 
+// ── publishNextListing() — scans agent_outputs, queues publish_etsy_listing tasks ──
+export async function publishNextListing() {
+    try {
+          const { data: titleRows } = await supabase.from("agent_outputs").select("task_id, etsy_title").eq("output_type", "etsy_title").not("etsy_title", "is", null).limit(100);
+          if (!titleRows?.length) { console.log("[publishNext] No title outputs"); return { queued: 0 }; }
+          const taskIds = titleRows.map(r => r.task_id).filter(Boolean);
+          const { data: titleTasks } = await supabase.from("tasks").select("id, parent_task_id").in("id", taskIds).not("parent_task_id", "is", null);
+          if (!titleTasks?.length) { return { queued: 0 }; }
+          const parentIds = [...new Set(titleTasks.map(t => t.parent_task_id))];
+          const { data: existingPublish } = await supabase.from("tasks").select("parent_task_id").in("parent_task_id", parentIds).eq("task_type", "publish_etsy_listing");
+          const alreadyQueued = new Set((existingPublish || []).map(t => t.parent_task_id));
+          const candidateParents = parentIds.filter(pid => !alreadyQueued.has(pid));
+          if (!candidateParents.length) { return { queued: 0, total_parents: parentIds.length }; }
+          console.log(`[publishNext] ${candidateParents.length} sets ready`);
+          let queued = 0;
+          for (const parentId of candidateParents.slice(0, 10)) {
+                  const { data: siblings } = await supabase.from("tasks").select("id, task_type").eq("parent_task_id", parentId).in("task_type", ["generate_etsy_title", "generate_etsy_description", "generate_etsy_tags"]);
+                  if (!siblings?.length) continue;
+                  const { data: outputs } = await supabase.from("agent_outputs").select("output_type, etsy_title, etsy_description, etsy_tags").in("task_id", siblings.map(s => s.id));
+                  if (!outputs?.length) continue;
+                  const oMap = {}; for (const o of outputs) oMap[o.output_type] = o;
+                  const title = oMap["etsy_title"]?.etsy_title;
+                  const description = oMap["etsy_description"]?.etsy_description;
+                  const tags = oMap["etsy_tags"]?.etsy_tags;
+                  if (!title || !description || !tags) continue;
+                  const keyword = title.split("\u2014")[0].trim().split("|")[0].trim();
+                  await enqueueTask({ agent: "AISHA", task_type: "publish_etsy_listing", payload: { title, description, tags, price: 4.99, keyword }, priority: 1, parentTaskId: parentId });
+                  console.log(`[publishNext] Queued: "${title.slice(0, 60)}"`);
+                  queued++;
+          }
+          return { queued, candidates: candidateParents.length, total_parents: parentIds.length };
+    } catch (err) { console.error("[publishNext] Error:", err.message); return { error: err.message, queued: 0 }; }
+}
+
 // ── publish_etsy_listing handler ───────────────────────────────────────────────
 export async function handlePublishEtsyListing(payload) {
   const keyword     = extractKeyword(payload);
@@ -229,6 +263,17 @@ export async function executeTask(task) {
       return await handlePublishEtsyListing(payload);
     }
 
+
+        if (task_type === "generate_digital_file") {
+                const keyword = extractKeyword(payload);
+                const niche = payload.niche || payload.category || "Digital Art Print";
+                const svgContent = generateSVG(keyword, niche);
+                const filename = `hoj_${keyword.replace(/\s+/g,"_").toLowerCase().slice(0,30)}.svg`;
+                const dataUri = "data:image/svg+xml;base64," + Buffer.from(svgContent, "utf8").toString("base64");
+                await saveAgentOutput({ taskId: task.id, agent: "AMARA", outputType: "digital_file", etsyTitle: keyword, confidence: 0.95 });
+                console.log(`[generate_digital_file] SVG ready for "${keyword}"`);
+      return { generated: true, keyword, niche, file_name: filename, file_url: dataUri };
+        }
     if (task_type === "generate_etsy_title") {
       const kw  = extractKeyword(payload);
       const res = await callClaude("AMARA", `Generate 5 Etsy listing titles for a digital print about "${kw}". Return JSON: { titles: string[] }`);
