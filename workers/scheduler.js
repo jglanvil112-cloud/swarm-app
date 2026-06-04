@@ -1,4 +1,4 @@
-// workers/scheduler.js — SWARM OS v6.0
+// workers/scheduler.js — SWARM OS v6.1 — analytics→NANA, niche rotation, shopify fulfillment hook
 // [FIX-1] extractTopPick() — safe string coercion kills [object Object]
 // [FIX-2] generate_etsy_tags follow-up assembles siblings + queues file gen
 // [NEW-1] generate_digital_file follow-up queues publish with file_url
@@ -92,15 +92,26 @@ async function enqueueFollowUps(completedTask,result){
     await logAgent("AISHA","LIVE: "+result.url+" | file:"+result.file_attached,"success",result,taskId);
     await saveAgentOutput({taskId,agent:"AISHA",outputType:"etsy_listing_published",etsyTitle:result.url,confidence:1.0});
     console.log("[PIPELINE] LISTING LIVE: "+result.url);
+    // Analytics feedback loop — SEUN reports back so NANA can refine next scan
+    await enqueueTask({agent:"SEUN",task_type:"analytics_report",payload:{period:"last_hour",trigger:"listing_published"},priority:3,parentTaskId:taskId}).catch(()=>{});
+    // Shopify fulfillment hook — KOFI checks inventory after each listing
+    await enqueueTask({agent:"KOFI",task_type:"inventory_check",payload:{trigger:"post_publish",listing_url:result.listing_id},priority:4,parentTaskId:taskId}).catch(()=>{});
   }
 
   if(task_type==="seo_generation"&&result?.title)await enqueueTask({agent:"AMARA",task_type:"social_caption",payload:{product:result.title,platform:"instagram",count:3},priority:4,parentTaskId:taskId});
-  if(task_type==="analytics_report"&&result?.underperformers?.length>0)await enqueueTask({agent:"KWAME",task_type:"sales_optimization",payload:{sales:result},priority:4,parentTaskId:taskId});
+  if(task_type==="analytics_report"&&result?.underperformers?.length>0){
+    await enqueueTask({agent:"KWAME",task_type:"sales_optimization",payload:{sales:result},priority:4,parentTaskId:taskId});
+    // Feed analytics back to NANA — pivot to better niches based on what's underperforming
+    const hour=new Date().getUTCHours();const startIdx=((hour+7)*3)%NICHE_POOL.length;
+    const pivotCats=NICHE_POOL.slice(startIdx,startIdx+3);
+    for(const cat of pivotCats)await enqueueTask({agent:"NANA",task_type:"trend_research",payload:{category:cat,context:"analytics_pivot"},priority:2});
+  }
   if(task_type==="inventory_check"&&result?.status==="critical")await enqueueTask({agent:"ZARA",task_type:"inventory_check",payload:{low_stock:result.low_stock,context:"critical_alert"},priority:1,parentTaskId:taskId});
 }
 
+const NICHE_POOL=["wall art","digital prints","home decor","affirmation prints","black art","luxury quote prints","motivational wall art","minimalist line art","gothic wall decor","abstract art prints","botanical prints","celestial art","feminist art prints","dad jokes prints","boho decor"];
 async function runHourlyTrendScan(){
-  const cats=["wall art","digital prints","home decor","affirmation prints","black art"];
+  const hour=new Date().getUTCHours();const startIdx=(hour*3)%NICHE_POOL.length;const cats=[...NICHE_POOL.slice(startIdx,startIdx+5),...NICHE_POOL.slice(0,Math.max(0,5-(NICHE_POOL.length-startIdx)))].slice(0,5);
   for(const c of cats)await enqueueTask({agent:"NANA",task_type:"trend_research",payload:{category:c},priority:3});
   await updateSchedulerState("hourly_trend_scan","ok");
 }
@@ -139,7 +150,7 @@ async function runWorkerLoop(){for(const agent of AGENTS)await processAgentQueue
 
 cron.schedule("*/30 * * * * *",runWorkerLoop);
 cron.schedule("*/5 * * * *",retryFailedTasks);
-cron.schedule("0 * * * *",runHourlyTrendScan);
+cron.schedule("0 */4 * * *",runHourlyTrendScan);
 cron.schedule("5 * * * *",runHourlyInventoryCheck);
 cron.schedule("10 * * * *",runHourlyOrderMonitor);
 cron.schedule("0 6 * * *",runDailySEO);
