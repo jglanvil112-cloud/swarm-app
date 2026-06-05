@@ -99,7 +99,7 @@ function generateSVG(keyword, niche) {
 // ── Upload SVG file to Etsy listing ───────────────────────────────────────────────
 async function attachFileToListing(listingId, svgContent, filename) {
   const ETSY_KEY   = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
-  const ETSY_TOKEN = process.env.ETSY_ACCESS_TOKEN || "";
+  const { data: _tok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('updated_at',{ascending:false}).limit(1); const ETSY_TOKEN = _tok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
   if (!listingId || !ETSY_SHOP_ID) {
     console.warn("[attachFile] Missing listingId or ETSY_SHOP_ID — skip attach");
     return { skipped: true, reason: "missing_ids" };
@@ -187,7 +187,7 @@ export async function handlePublishEtsyListing(payload) {
   const price     = Math.max(2.99, Math.min(19.99, parseFloat(basePrice.toFixed(2))));
 
   const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
-  const authH    = etsyAuthHeader();
+  const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET}` };
 
   if (!ETSY_SHOP_ID) {
     console.error("[publish] ETSY_SHOP_ID not set — cannot publish");
@@ -211,6 +211,7 @@ export async function handlePublishEtsyListing(payload) {
   };
 
   console.log(`[publish] Creating Etsy listing: "${title.slice(0,60)}..."`);
+  const { data: _eTok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('updated_at',{ascending:false}).limit(1); const _liveToken = _eTok?.[0]?.access_token || "";
   const createRes  = await fetch(
     `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings`,
     { method: "POST", headers: { ...authH, "Content-Type": "application/json", "x-api-key": ETSY_KEY }, body: JSON.stringify(listingBody) }
