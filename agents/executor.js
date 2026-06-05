@@ -60,7 +60,7 @@ async function getLiveEtsyToken() {
       .eq('platform','etsy').order('id',{ascending:false}).limit(1);
     const row = rows?.[0];
     if (!row) return process.env.ETSY_ACCESS_TOKEN || null;
-    if (row.access_token) return row.access_token;
+    if (row.access_token) { console.log("[getLiveEtsyToken] returning token for platform:", row.access_token.slice(0,20)); return row.access_token; }
     if (row.refresh_token) {
       const r = await fetch('https://api.etsy.com/v3/public/oauth/token', {
         method: 'POST',
@@ -141,7 +141,7 @@ async function attachFileToListing(listingId, svgContent, filename) {
   const headers = {
     "Content-Type": `multipart/form-data; boundary=${boundary}`,
     "Content-Length": body.length.toString(),
-    ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET}` }),
+    ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_VAL}` }),
   };
 
   const url = `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/files`;
