@@ -49,13 +49,35 @@ async function callClaude(agent, prompt) {
   try { return JSON.parse(raw); } catch { return { raw_response: raw, parse_error: true }; }
 }
 
-// ── Etsy auth header ────────────────────────────────────────────────────────
-function etsyAuthHeader() {
-  const ETSY_KEY    = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
-  const ETSY_SECRET = process.env.ETSY_SECRET || "4omdt27v26";
-  const ETSY_TOKEN  = process.env.ETSY_ACCESS_TOKEN || "";
-  if (ETSY_TOKEN) return { Authorization: `Bearer ${ETSY_TOKEN}` };
-  return { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET}` };
+// ── Etsy token (auto-refresh) ───────────────────────────────────────────────
+const ETSY_KEY    = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
+const ETSY_SECRET_VAL = process.env.ETSY_SECRET || "4omdt27v26";
+
+async function getLiveEtsyToken() {
+  try {
+    const { data: rows } = await supabase
+      .from('oauth_tokens').select('access_token, refresh_token')
+      .eq('platform','etsy').order('id',{ascending:false}).limit(1);
+    const row = rows?.[0];
+    if (!row) return process.env.ETSY_ACCESS_TOKEN || null;
+    if (row.access_token) return row.access_token;
+    if (row.refresh_token) {
+      const r = await fetch('https://api.etsy.com/v3/public/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', client_id: ETSY_KEY, refresh_token: row.refresh_token }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        if (j.access_token) {
+          await supabase.from('oauth_tokens').update({ access_token: j.access_token, refresh_token: j.refresh_token || row.refresh_token }).eq('platform','etsy');
+          console.log('[getLiveEtsyToken] Token auto-refreshed');
+          return j.access_token;
+        }
+      }
+    }
+    return process.env.ETSY_ACCESS_TOKEN || null;
+  } catch(e) { console.error('[getLiveEtsyToken]', e.message); return process.env.ETSY_ACCESS_TOKEN || null; }
 }
 
 // ── SVG generator ────────────────────────────────────────────────────────────
@@ -99,8 +121,7 @@ function generateSVG(keyword, niche) {
 // ── Upload SVG file to Etsy listing ───────────────────────────────────────────────
 async function attachFileToListing(listingId, svgContent, filename) {
   const ETSY_KEY   = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
-  const { data: _tok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('id',{ascending:false}).limit(1);
-const ETSY_TOKEN = _tok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
+  const ETSY_TOKEN = await getLiveEtsyToken() || process.env.ETSY_ACCESS_TOKEN || "";
   if (!listingId || !ETSY_SHOP_ID) {
     console.warn("[attachFile] Missing listingId or ETSY_SHOP_ID — skip attach");
     return { skipped: true, reason: "missing_ids" };
@@ -175,8 +196,7 @@ export async function publishNextListing() {
 
 // ── publish_etsy_listing handler ───────────────────────────────────────────────
 export async function handlePublishEtsyListing(payload) {
-  const { data: _eTok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('id',{ascending:false}).limit(1);
-const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
+  const _liveToken = await getLiveEtsyToken() || process.env.ETSY_ACCESS_TOKEN || "";
   const keyword     = extractKeyword(payload);
   const niche       = payload.niche       || payload.category || "Digital Art Print";
   const title       = payload.title       || `${keyword} — Luxury Digital Print | House of Jreym`;
@@ -191,7 +211,7 @@ const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || 
 
   const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
   const ETSY_SECRET_PUB = process.env.ETSY_SECRET || "4omdt27v26";
-const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_PUB}` };
+const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_VAL}` };
 
   if (!ETSY_SHOP_ID) {
     console.error("[publish] ETSY_SHOP_ID not set — cannot publish");
