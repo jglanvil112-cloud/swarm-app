@@ -1,4 +1,4 @@
-—// agents/executor.js — SWARM OS v6.3 — file-always-attached, verified upload-file step
+// agents/executor.js — SWARM OS v6.3 — file-always-attached, verified upload-file step
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
@@ -190,7 +190,8 @@ const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || 
   const price     = Math.max(2.99, Math.min(19.99, parseFloat(basePrice.toFixed(2))));
 
   const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
-  const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET}` };
+  const ETSY_SECRET_PUB = process.env.ETSY_SECRET || "4omdt27v26";
+const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_PUB}` };
 
   if (!ETSY_SHOP_ID) {
     console.error("[publish] ETSY_SHOP_ID not set — cannot publish");
