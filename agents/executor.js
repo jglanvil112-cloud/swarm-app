@@ -263,16 +263,19 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
 
   const attachResult = await attachFileToListing(listingId, svgContent, filename);
 
-  await saveAgentOutput("AISHA", "publish_etsy_listing", {
-    listing_id: listingId,
+  const outputRow = await saveAgentOutput("AISHA", "publish_etsy_listing", {
+    listing_id:      listingId,
+    listing_url:     `https://www.etsy.com/listing/${listingId}`,
+    listing_file_id: attachResult.listing_file_id || null,
     title,
     keyword,
     niche,
     price,
     tags,
-    file_attached: attachResult.attached || false,
-    attach_result: attachResult,
+    file_attached:   attachResult.attached || false,
+    published_at:    new Date().toISOString(),
   });
+  await logAgent("AISHA", `LIVE: ${listingId} | file:${attachResult.attached||false} | saved:${!!outputRow}`, "success");
 
   return {
     published: true,
