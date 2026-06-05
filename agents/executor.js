@@ -54,30 +54,36 @@ const ETSY_KEY    = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
 const ETSY_SECRET_VAL = process.env.ETSY_SECRET || "4omdt27v26";
 
 async function getLiveEtsyToken() {
+  console.log('[getLiveEtsyToken] START');
   try {
-    const { data: rows } = await supabase
+    const { data: rows, error: rErr } = await supabase
       .from('oauth_tokens').select('access_token, refresh_token')
       .eq('platform','etsy').order('id',{ascending:false}).limit(1);
+    console.log('[getLiveEtsyToken] rows:', rows?.length, 'err:', rErr?.message || 'none');
     const row = rows?.[0];
-    if (!row) return process.env.ETSY_ACCESS_TOKEN || null;
-    if (row.access_token) { console.log("[getLiveEtsyToken] returning token for platform:", row.access_token.slice(0,20)); return row.access_token; }
+    if (!row) { console.log('[getLiveEtsyToken] no row found'); return process.env.ETSY_ACCESS_TOKEN || null; }
+    if (row.access_token) {
+      console.log('[getLiveEtsyToken] token found:', row.access_token.slice(0,12));
+      return row.access_token;
+    }
     if (row.refresh_token) {
+      console.log('[getLiveEtsyToken] trying refresh...');
       const r = await fetch('https://api.etsy.com/v3/public/oauth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'refresh_token', client_id: ETSY_KEY, refresh_token: row.refresh_token }),
       });
+      const rt = await r.text(); console.log('[getLiveEtsyToken] refresh:', r.status, rt.slice(0,80));
       if (r.ok) {
-        const j = await r.json();
+        const j = JSON.parse(rt);
         if (j.access_token) {
           await supabase.from('oauth_tokens').update({ access_token: j.access_token, refresh_token: j.refresh_token || row.refresh_token }).eq('platform','etsy');
-          console.log('[getLiveEtsyToken] Token auto-refreshed');
           return j.access_token;
         }
       }
     }
     return process.env.ETSY_ACCESS_TOKEN || null;
-  } catch(e) { console.error('[getLiveEtsyToken]', e.message); return process.env.ETSY_ACCESS_TOKEN || null; }
+  } catch(e) { console.error('[getLiveEtsyToken] ERROR:', e.message); return process.env.ETSY_ACCESS_TOKEN || null; }
 }
 
 // ── SVG generator ────────────────────────────────────────────────────────────
