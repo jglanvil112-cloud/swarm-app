@@ -140,7 +140,7 @@ async function attachFileToListing(listingId, svgContent, filename) {
   const parts = [
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeFilename}"\r\nContent-Type: image/svg+xml\r\n\r\n`,
     svgBytes,
-    `\r\n--${boundary}--\r\n`,
+    `\r\n--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${safeFilename}\r\n--${boundary}--\r\n`,
   ];
   const body = Buffer.concat(parts.map(p => (typeof p === "string" ? Buffer.from(p) : p)));
 
