@@ -174,6 +174,7 @@ export async function publishNextListing() {
 
 // ── publish_etsy_listing handler ───────────────────────────────────────────────
 export async function handlePublishEtsyListing(payload) {
+  const { data: _eTok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('updated_at',{ascending:false}).limit(1); const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
   const keyword     = extractKeyword(payload);
   const niche       = payload.niche       || payload.category || "Digital Art Print";
   const title       = payload.title       || `${keyword} — Luxury Digital Print | House of Jreym`;
@@ -211,7 +212,6 @@ export async function handlePublishEtsyListing(payload) {
   };
 
   console.log(`[publish] Creating Etsy listing: "${title.slice(0,60)}..."`);
-  const { data: _eTok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('updated_at',{ascending:false}).limit(1); const _liveToken = _eTok?.[0]?.access_token || "";
   const createRes  = await fetch(
     `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings`,
     { method: "POST", headers: { ...authH, "Content-Type": "application/json", "x-api-key": ETSY_KEY }, body: JSON.stringify(listingBody) }
