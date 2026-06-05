@@ -11,7 +11,7 @@ const ETSY_SHOP_ID=parseInt(process.env.ETSY_SHOP_ID)||0;
 const APP_URL=process.env.APP_URL||"https://swarm-app-3nch.onrender.com";
 const ETSY_BASE="https://openapi.etsy.com/v3/application";
 const REDIRECT_URI=APP_URL+"/api/etsy/callback";
-const oauthStates=new Map();
+// oauthStates moved to Supabase (fix: Render restarts wipe in-memory state)
 
 async function getEtsyToken(){
   try{
@@ -37,22 +37,25 @@ async function refreshEtsyToken(refreshToken){
 function authH(t){return{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:""),"Content-Type":"application/json"};}
 function pubH(){return{"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")};}
 
-etsyRouter.get("/auth",(req,res)=>{
+etsyRouter.get("/auth",async(req,res)=>{
   const verifier=crypto.randomBytes(32).toString("base64url");
   const challenge=crypto.createHash("sha256").update(verifier).digest("base64url");
   const state=crypto.randomBytes(16).toString("hex");
-  oauthStates.set(state,{verifier,createdAt:Date.now()});
+  // FIX 1: persist state in Supabase so Render restarts don't wipe it
+  await supabase.from("oauth_states").upsert({state,verifier,created_at:new Date().toISOString()},{onConflict:"state"});
   const scopes="listings_r listings_w listings_d transactions_r transactions_w billing_r profile_r shops_r shops_w".split(" ").join("%20");
   res.redirect("https://www.etsy.com/oauth/connect?response_type=code&redirect_uri="+encodeURIComponent(REDIRECT_URI)+"&scope="+scopes+"&client_id="+ETSY_KEY+"&state="+state+"&code_challenge="+challenge+"&code_challenge_method=S256");
 });
 
 etsyRouter.get("/callback",async(req,res)=>{
   const{code,state}=req.query;
-  const stored=oauthStates.get(state);
-  if(!stored)return res.status(403).json({error:"Invalid or expired OAuth state"});
-  oauthStates.delete(state);
+  // FIX 1: read state from Supabase
+  const{data:storedRow,error:stateErr}=await supabase.from("oauth_states").select("verifier").eq("state",state).single();
+  if(stateErr||!storedRow)return res.status(403).json({error:"Invalid or expired OAuth state"});
+  await supabase.from("oauth_states").delete().eq("state",state);
+  const stored={verifier:storedRow.verifier};
   try{
-    const tr=await fetch("https://api.etsy.com/v3/public/oauth/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",client_id:ETSY_KEY,redirect_uri:REDIRECT_URI,code,code_verifier:stored.verifier})});
+    const tr=await fetch("https://api.etsy.com/v3/public/oauth/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",client_id:ETSY_KEY,client_secret:ETSY_SECRET,redirect_uri:REDIRECT_URI,code,code_verifier:stored.verifier})});
     const td=await tr.json();
     if(!td.access_token)return res.status(500).json({error:"Token exchange failed",detail:td});
     console.log("[ETSY-TOKEN-SAVED]",td.access_token?.slice(0,12),"expires_in:",td.expires_in);
@@ -145,6 +148,7 @@ const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+req.params.id,
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+etsyRouter.get("/debug-ping",async(req,res)=>{try{const r=await fetch(ETSY_BASE+"/openapi-ping",{headers:{"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")}});const t=await r.text();const tok=await getEtsyToken();res.json({ping_status:r.status,ping_body:t,key_used:ETSY_KEY.slice(0,8)+"...",secret_set:!!ETSY_SECRET,has_token:!!tok,token_preview:tok?tok.slice(0,12)+"...":null});}catch(e){res.status(500).json({error:e.message});}});
 etsyRouter.get("/orders",async(req,res)=>{
   try{
     const t=await getEtsyToken();
@@ -160,7 +164,7 @@ etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
     if(!r.ok)return res.status(r.status).json({error:"Etsy "+r.status});
-    etsyRouter.get("/debug-ping",async(req,res)=>{try{const r=await fetch(ETSY_BASE+"/openapi-ping",{headers:{"x-api-key":ETSY_KEY}});const t=await r.text();res.json({status:r.status,key_used:ETSY_KEY.slice(0,8)+"...",secret_set:!!ETSY_SECRET,body:t});}catch(e){res.status(500).json({error:e.message});}});
+
     res.json(await r.json());
   }catch(e){res.status(500).json({error:e.message});}
 });
