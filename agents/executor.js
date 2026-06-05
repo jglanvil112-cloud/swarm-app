@@ -99,7 +99,8 @@ function generateSVG(keyword, niche) {
 // ── Upload SVG file to Etsy listing ───────────────────────────────────────────────
 async function attachFileToListing(listingId, svgContent, filename) {
   const ETSY_KEY   = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
-  const { data: _tok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('id',{ascending:false}).limit(1); const ETSY_TOKEN = _tok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
+  const { data: _tok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('id',{ascending:false}).limit(1);
+const ETSY_TOKEN = _tok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
   if (!listingId || !ETSY_SHOP_ID) {
     console.warn("[attachFile] Missing listingId or ETSY_SHOP_ID — skip attach");
     return { skipped: true, reason: "missing_ids" };
@@ -174,7 +175,8 @@ export async function publishNextListing() {
 
 // ── publish_etsy_listing handler ───────────────────────────────────────────────
 export async function handlePublishEtsyListing(payload) {
-  const { data: _eTok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('id',{ascending:false}).limit(1); const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
+  const { data: _eTok } = await supabase.from('oauth_tokens').select('access_token').not('refresh_token','is',null).order('id',{ascending:false}).limit(1);
+const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || "";
   const keyword     = extractKeyword(payload);
   const niche       = payload.niche       || payload.category || "Digital Art Print";
   const title       = payload.title       || `${keyword} — Luxury Digital Print | House of Jreym`;
