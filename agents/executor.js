@@ -141,7 +141,8 @@ async function attachFileToListing(listingId, svgContent, filename) {
   const headers = {
     "Content-Type": `multipart/form-data; boundary=${boundary}`,
     "Content-Length": body.length.toString(),
-    ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_VAL}` }),
+    ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : {}),
+"x-api-key": ETSY_KEY,
   };
 
   const url = `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/files`;
@@ -211,7 +212,7 @@ export async function handlePublishEtsyListing(payload) {
 
   const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
   const ETSY_SECRET_PUB = process.env.ETSY_SECRET || "4omdt27v26";
-const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_VAL}` };
+const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": ETSY_KEY };
 
   if (!ETSY_SHOP_ID) {
     console.error("[publish] ETSY_SHOP_ID not set — cannot publish");
@@ -237,7 +238,7 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
   console.log(`[publish] Creating Etsy listing: "${title.slice(0,60)}..."`);
   const createRes  = await fetch(
     `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings`,
-    { method: "POST", headers: { ...authH, "Content-Type": "application/json", ...(_liveToken ? {} : { "x-api-key": ETSY_KEY }) }, body: JSON.stringify(listingBody) }
+    { method: "POST", headers: { ...authH, "Content-Type": "application/json", "x-api-key": ETSY_KEY }, body: JSON.stringify(listingBody) }
   );
   const createText = await createRes.text();
   let createJson;
