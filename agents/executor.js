@@ -1,4 +1,4 @@
-// agents/executor.js — SWARM OS v6.4 — fix: remove x-api-key from Bearer listing POST
+// agents/executor.js — SWARM OS v6.5 — fix: send x-api-key as key:secret with Bearer token
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
@@ -244,7 +244,7 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
   console.log(`[publish] Creating Etsy listing: "${title.slice(0,60)}..."`);
   const createRes  = await fetch(
     `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings`,
-    { method: "POST", headers: { ...authH, "Content-Type": "application/json" }, body: JSON.stringify(listingBody) }
+    { method: "POST", headers: { ...authH, "Content-Type": "application/json", "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_PUB}` }, body: JSON.stringify(listingBody) }
   );
   const createText = await createRes.text();
   let createJson;
