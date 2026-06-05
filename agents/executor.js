@@ -119,7 +119,7 @@ async function attachFileToListing(listingId, svgContent, filename) {
   const headers = {
     "Content-Type": `multipart/form-data; boundary=${boundary}`,
     "Content-Length": body.length.toString(),
-    ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : { "x-api-key": ETSY_KEY }),
+    ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : { "x-api-key": `${ETSY_KEY}:${ETSY_SECRET}` }),
   };
 
   const url = `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/files`;
