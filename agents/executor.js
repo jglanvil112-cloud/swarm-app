@@ -1,4 +1,4 @@
-// agents/executor.js — SWARM OS v6.3 — file-always-attached, verified upload-file step
+—// agents/executor.js — SWARM OS v6.3 — file-always-attached, verified upload-file step
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
@@ -216,7 +216,7 @@ const _liveToken = _eTok?.[0]?.access_token || process.env.ETSY_ACCESS_TOKEN || 
   console.log(`[publish] Creating Etsy listing: "${title.slice(0,60)}..."`);
   const createRes  = await fetch(
     `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings`,
-    { method: "POST", headers: { ...authH, "Content-Type": "application/json", "x-api-key": ETSY_KEY }, body: JSON.stringify(listingBody) }
+    { method: "POST", headers: { ...authH, "Content-Type": "application/json", ...(_liveToken ? {} : { "x-api-key": ETSY_KEY }) }, body: JSON.stringify(listingBody) }
   );
   const createText = await createRes.text();
   let createJson;
