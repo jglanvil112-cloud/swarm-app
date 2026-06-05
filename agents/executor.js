@@ -1,4 +1,4 @@
-// agents/executor.js — SWARM OS v6.5 — fix: send x-api-key as key:secret with Bearer token
+—// agents/executor.js — SWARM OS v6.5 — fix: send x-api-key as key:secret with Bearer token
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
@@ -148,7 +148,7 @@ async function attachFileToListing(listingId, svgContent, filename) {
     "Content-Type": `multipart/form-data; boundary=${boundary}`,
     "Content-Length": body.length.toString(),
     ...(ETSY_TOKEN ? { Authorization: `Bearer ${ETSY_TOKEN}` } : {}),
-"x-api-key": ETSY_KEY,
+"x-api-key": ETSY_KEY+":"+ETSY_SECRET_VAL,
   };
 
   const url = `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/files`;
