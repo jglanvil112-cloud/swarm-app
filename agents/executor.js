@@ -236,7 +236,7 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
     tags,
     type: "download",
     is_digital: true,
-    shipping_profile_id: null,
+    
     should_auto_renew: true,
     state: "active",
   };
