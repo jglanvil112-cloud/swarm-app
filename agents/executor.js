@@ -1,4 +1,4 @@
-—// agents/executor.js — SWARM OS v6.5 — fix: send x-api-key as key:secret with Bearer token
+// agents/executor.js — SWARM OS v6.5 — fix: send x-api-key as key:secret with Bearer token
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
