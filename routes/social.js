@@ -784,6 +784,181 @@ socialRouter.post("/token/refresh", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── TOKEN WIZARD — paste one token, auto-discover everything ─────────────────
+
+// POST /api/social/setup/meta — paste a user access token, auto-discovers pages + IG
+socialRouter.post("/setup/meta", async (req, res) => {
+  const { user_access_token } = req.body;
+  if (!user_access_token) return res.status(400).json({ error: "user_access_token required" });
+
+  try {
+    const results = { facebook: null, instagram: null, errors: [] };
+
+    // Step 1: Verify token and get user info
+    const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${user_access_token}`);
+    const me = await meRes.json();
+    if (me.error) throw new Error("Token invalid: " + me.error.message);
+
+    // Step 2: Get long-lived token (60 days) if we have app credentials
+    let longToken = user_access_token;
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    if (appId && appSecret && !appId.startsWith("PASTE")) {
+      const llRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${user_access_token}`);
+      const llData = await llRes.json();
+      if (llData.access_token) {
+        longToken = llData.access_token;
+        console.log("[IBRAHIM] Got long-lived Meta token, expires_in:", llData.expires_in);
+      }
+    }
+    const expiresAt = new Date(Date.now() + 5183944000).toISOString(); // 60 days default
+
+    // Step 3: Get all pages managed by user
+    const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,followers_count,media_count}&limit=25&access_token=${longToken}`);
+    const pagesData = await pagesRes.json();
+    const pages = pagesData.data || [];
+    console.log("[IBRAHIM] Found", pages.length, "pages:", pages.map(p=>p.name));
+
+    if (!pages.length) {
+      results.errors.push("No Facebook Pages found. Make sure you're logged in as an admin of the Houseofjreym page.");
+    }
+
+    // Step 4: Find House of Jreym page (fuzzy match)
+    const hojKeywords = ["jreym", "house of", "houseofjreym"];
+    const hojPage = pages.find(p =>
+      hojKeywords.some(k => p.name?.toLowerCase().includes(k))
+    ) || pages[0]; // fallback to first page
+
+    if (hojPage) {
+      const pageToken = hojPage.access_token || longToken;
+      // Page tokens are long-lived by default
+
+      // Store Facebook
+      const { error: fbErr } = await supabase.from("social_credentials").upsert({
+        platform: "facebook",
+        access_token: pageToken,
+        page_id: hojPage.id,
+        username: hojPage.name,
+        connected: true,
+        token_expires_at: expiresAt,
+        meta: { user_id: me.id, user_name: me.name, all_pages: pages.map(p => ({ id: p.id, name: p.name })) },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "platform" });
+
+      results.facebook = { ok: !fbErr, page_id: hojPage.id, page_name: hojPage.name, error: fbErr?.message };
+      if (!fbErr) await logAgent("IBRAHIM", `Facebook connected: ${hojPage.name} (page_id: ${hojPage.id})`, "success");
+
+      // Step 5: Check for linked Instagram Business Account
+      const igAccount = hojPage.instagram_business_account;
+      if (igAccount?.id) {
+        // Get detailed IG info using page token
+        const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccount.id}?fields=id,username,followers_count,media_count,biography&access_token=${pageToken}`);
+        const ig = await igRes.json();
+
+        const { error: igErr } = await supabase.from("social_credentials").upsert({
+          platform: "instagram",
+          access_token: pageToken, // IG Business uses page token
+          page_id: ig.id,
+          account_id: ig.id,
+          username: ig.username || igAccount.username || "houseofjreym",
+          connected: true,
+          token_expires_at: expiresAt,
+          meta: { followers: ig.followers_count, media_count: ig.media_count, fb_page_id: hojPage.id, fb_page_name: hojPage.name },
+          updated_at: new Date().toISOString()
+        }, { onConflict: "platform" });
+
+        // Snapshot followers
+        if (ig.followers_count) {
+          await supabase.from("social_account_stats").insert({ platform: "instagram", followers: ig.followers_count, recorded_at: new Date().toISOString() });
+        }
+        results.instagram = { ok: !igErr, account_id: ig.id, username: ig.username || "houseofjreym", followers: ig.followers_count, error: igErr?.message };
+        if (!igErr) await logAgent("IBRAHIM", `Instagram connected: @${ig.username} (${ig.followers_count} followers)`, "success");
+      } else {
+        results.errors.push("No Instagram Business Account linked to this Facebook Page. Go to Facebook Page Settings → Instagram → Connect Account.");
+        results.instagram = { ok: false, error: "No IG Business Account linked to page" };
+      }
+    }
+
+    res.json({ ok: true, user: me, results, tip: "If Instagram not found, link it in Facebook Page Settings → Instagram" });
+  } catch (e) {
+    console.error("[IBRAHIM] Meta setup error:", e.message);
+    await logAgent("IBRAHIM", "Meta setup failed: " + e.message, "error");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/social/setup/tiktok — paste TikTok access token, auto-saves
+socialRouter.post("/setup/tiktok", async (req, res) => {
+  const { access_token, open_id, refresh_token } = req.body;
+  if (!access_token) return res.status(400).json({ error: "access_token required" });
+
+  try {
+    // Get user info
+    const userRes = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,display_name,avatar_url,follower_count,following_count,likes_count,video_count", {
+      headers: { "Authorization": "Bearer " + access_token, "Content-Type": "application/json" }
+    });
+    const userData = await userRes.json();
+    const user = userData.data?.user || {};
+    const resolvedOpenId = user.open_id || open_id || null;
+
+    const expiresAt = new Date(Date.now() + 86400000).toISOString(); // 24h default
+
+    const { error } = await supabase.from("social_credentials").upsert({
+      platform: "tiktok",
+      access_token,
+      refresh_token: refresh_token || null,
+      account_id: resolvedOpenId,
+      username: user.display_name || "houseofjreym",
+      connected: true,
+      token_expires_at: expiresAt,
+      meta: { followers: user.follower_count, likes: user.likes_count, videos: user.video_count, open_id: resolvedOpenId },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "platform" });
+
+    if (error) throw new Error(error.message);
+
+    if (user.follower_count) {
+      await supabase.from("social_account_stats").insert({ platform: "tiktok", followers: user.follower_count, recorded_at: new Date().toISOString() });
+    }
+
+    await logAgent("IBRAHIM", `TikTok connected: @${user.display_name || "houseofjreym"} (${user.follower_count || 0} followers)`, "success");
+    res.json({ ok: true, username: user.display_name || "houseofjreym", followers: user.follower_count || 0, open_id: resolvedOpenId });
+  } catch (e) {
+    console.error("[IBRAHIM] TikTok setup error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/social/setup/meta-instructions — returns exact steps to get the token
+socialRouter.get("/setup/meta-instructions", (req, res) => {
+  const appId = process.env.META_APP_ID;
+  const hasRealApp = appId && !appId.startsWith("PASTE");
+  res.json({
+    method: hasRealApp ? "oauth" : "graph_explorer",
+    steps: hasRealApp ? [
+      "1. Go to swarm-app-3nch.onrender.com/social_dashboard.html",
+      "2. Click Connect Accounts tab",
+      "3. Click Connect with Meta button",
+      "4. Log in with the Facebook account that manages Houseofjreym page",
+      "5. Grant all requested permissions",
+      "6. You'll be redirected back automatically"
+    ] : [
+      "1. Go to https://developers.facebook.com/tools/explorer/",
+      "2. Click 'Meta App' dropdown → select an app (or create one)",
+      "3. Click 'Generate Access Token'",
+      "4. Log in as the Facebook account managing Houseofjreym page",
+      "5. Select permissions: pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish, instagram_manage_insights",
+      "6. Copy the generated User Access Token",
+      "7. Paste it into the dashboard Connect Accounts → Manual Token Entry",
+      "8. Or POST to /api/social/setup/meta with {user_access_token: 'YOUR_TOKEN'}"
+    ],
+    oauth_ready: hasRealApp,
+    meta_app_id: hasRealApp ? appId : null,
+    redirect_uri: "https://swarm-app-3nch.onrender.com/api/social/callback/meta"
+  });
+});
+
+
 // ─── DASHBOARD DATA ENDPOINT ──────────────────────────────────────────────────
 
 // GET /api/social/dashboard — single endpoint that feeds the dashboard
