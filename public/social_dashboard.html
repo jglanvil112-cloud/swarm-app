@@ -5,620 +5,770 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IBRAHIM — Social Command Center | House of Jreym</title>
 <style>
-  :root{--bg:#0a0a12;--surface:#12121e;--card:#1a1a2e;--border:#2a2a4a;--gold:#e2b04a;--gold2:#f0c040;--blue:#4a9eff;--green:#4ade80;--red:#f87171;--orange:#fb923c;--purple:#a78bfa;--text:#f0ede8;--muted:#8a87a0;--ig:#e1306c;--fb:#1877f2;--tt:#000000;}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Georgia',serif;min-height:100vh}
-  .header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
-  .header h1{font-size:20px;letter-spacing:6px;color:var(--gold)}
-  .header .phase-badge{background:#1a1a00;border:1px solid var(--gold);color:var(--gold);padding:4px 12px;border-radius:20px;font-size:11px;letter-spacing:3px}
-  .nav{display:flex;gap:4px;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto}
-  .nav button{background:none;border:1px solid var(--border);color:var(--muted);padding:6px 16px;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:1px;white-space:nowrap;transition:all .2s}
-  .nav button.active,.nav button:hover{background:var(--card);color:var(--gold);border-color:var(--gold)}
-  .main{padding:24px;max-width:1400px;margin:0 auto}
-  .grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
-  .grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
-  .card h3{font-size:11px;letter-spacing:4px;color:var(--muted);margin-bottom:16px;text-transform:uppercase}
-  .stat-val{font-size:36px;font-weight:bold;color:var(--gold)}
-  .stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
-  .platform-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
-  .dot-ig{background:var(--ig)} .dot-fb{background:var(--fb)} .dot-tt{background:#69c9d0}
-  .connection-card{display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface);border-radius:10px;border:1px solid var(--border);margin-bottom:10px}
-  .conn-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-  .conn-icon.ig{background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
-  .conn-icon.fb{background:var(--fb)} .conn-icon.tt{background:#000;border:1px solid #69c9d0}
-  .conn-status{margin-left:auto;padding:4px 12px;border-radius:20px;font-size:11px;letter-spacing:1px}
-  .conn-status.connected{background:#0a2a0a;color:var(--green);border:1px solid var(--green)}
-  .conn-status.disconnected{background:#2a0a0a;color:var(--red);border:1px solid var(--red)}
-  .post-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px}
-  .post-card:hover{border-color:var(--gold);transition:border-color .2s}
-  .post-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  .post-caption{font-size:13px;line-height:1.5;color:var(--text);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  .post-meta{display:flex;gap:12px;font-size:11px;color:var(--muted)}
-  .status-badge{padding:3px 10px;border-radius:12px;font-size:10px;letter-spacing:2px;text-transform:uppercase;font-weight:bold}
-  .status-draft{background:#1a1a00;color:#d4b44a;border:1px solid #d4b44a}
-  .status-pending_approval{background:#1a0a00;color:var(--orange);border:1px solid var(--orange)}
-  .status-approved{background:#0a2a0a;color:var(--green);border:1px solid var(--green)}
-  .status-scheduled{background:#0a0a2a;color:var(--blue);border:1px solid var(--blue)}
-  .status-published{background:#1a0a2a;color:var(--purple);border:1px solid var(--purple)}
-  .status-rejected{background:#2a0a0a;color:var(--red);border:1px solid var(--red)}
-  .btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:12px;letter-spacing:1px;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
-  .btn-gold{background:var(--gold);color:#000;font-weight:bold}
-  .btn-gold:hover{background:var(--gold2)}
-  .btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
-  .btn-outline:hover{border-color:var(--gold);color:var(--gold)}
-  .btn-green{background:#064206;border:1px solid var(--green);color:var(--green)}
-  .btn-green:hover{background:var(--green);color:#000}
-  .btn-red{background:#420606;border:1px solid var(--red);color:var(--red)}
-  .btn-red:hover{background:var(--red);color:#000}
-  .btn-sm{padding:4px 10px;font-size:11px}
-  .form-group{margin-bottom:16px}
-  .form-group label{display:block;font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
-  .form-group input,.form-group textarea,.form-group select{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border-color .2s}
-  .form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:var(--gold)}
-  .form-group textarea{min-height:100px;resize:vertical;line-height:1.5}
-  .tab-content{display:none} .tab-content.active{display:block}
-  .section-title{font-size:12px;letter-spacing:6px;color:var(--gold);text-transform:uppercase;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border)}
-  .report-box{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:8px;padding:20px;white-space:pre-line;font-size:13px;line-height:1.7;color:var(--text)}
-  .empty-state{text-align:center;padding:48px;color:var(--muted);font-size:13px}
-  .empty-state .icon{font-size:48px;margin-bottom:12px;opacity:.4}
-  .alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px}
-  .alert-warning{background:#1a1a00;border:1px solid var(--gold);color:var(--gold)}
-  .alert-success{background:#0a2a0a;border:1px solid var(--green);color:var(--green)}
-  .alert-error{background:#2a0a0a;border:1px solid var(--red);color:var(--red)}
-  .metric-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
-  .metric-row:last-child{border-bottom:none}
-  .metric-label{font-size:12px;color:var(--muted)}
-  .metric-val{font-size:14px;color:var(--text);font-weight:bold}
-  .hashtags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-  .hashtag{background:var(--card);border:1px solid var(--border);padding:2px 8px;border-radius:20px;font-size:11px;color:var(--blue)}
-  .loader{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .row-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-  .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--gold);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;max-width:320px}
-  .toast.show{opacity:1}
-  @media(max-width:768px){.grid-2{grid-template-columns:1fr}.main{padding:12px}}
+:root{--bg:#080810;--surface:#0f0f1a;--card:#141428;--card2:#1a1a30;--border:#252545;--gold:#e2b04a;--gold2:#f0c040;--gold3:#c8943a;--blue:#4a9eff;--green:#4ade80;--red:#f87171;--orange:#fb923c;--purple:#a78bfa;--pink:#f472b6;--text:#f0ede8;--muted:#6a6880;--muted2:#8a87a0;--ig-grad:linear-gradient(135deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);--fb:#1877f2;--tt:#000;--tt-accent:#69c9d0;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Georgia',serif;min-height:100vh;overflow-x:hidden}
+
+/* ── HEADER ── */
+.header{background:linear-gradient(90deg,var(--card) 0%,#0a0a18 100%);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header-left{display:flex;align-items:center;gap:16px}
+.header h1{font-size:18px;letter-spacing:6px;color:var(--gold);text-transform:uppercase}
+.header-sub{font-size:11px;color:var(--muted2);letter-spacing:2px}
+.phase-badge{background:#1a1400;border:1px solid var(--gold3);color:var(--gold3);padding:4px 12px;border-radius:20px;font-size:10px;letter-spacing:3px;text-transform:uppercase}
+.header-right{display:flex;gap:8px;align-items:center}
+
+/* ── NAV ── */
+.nav{display:flex;gap:2px;padding:10px 24px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap}
+.nav button{background:none;border:none;color:var(--muted2);padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:1px;font-family:inherit;transition:all .2s;border:1px solid transparent}
+.nav button.active{background:var(--card);color:var(--gold);border-color:var(--border)}
+.nav button:hover:not(.active){color:var(--text);background:var(--card)}
+
+/* ── MAIN ── */
+.main{padding:24px;max-width:1440px;margin:0 auto}
+.tab-content{display:none}.tab-content.active{display:block}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card h3{font-size:10px;letter-spacing:4px;color:var(--muted2);margin-bottom:14px;text-transform:uppercase}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:20px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.stat-val{font-size:34px;font-weight:bold;color:var(--gold);line-height:1}
+.stat-sub{font-size:11px;color:var(--muted2);margin-top:6px}
+
+/* ── PLATFORM CARDS ── */
+.platform-connect-card{border-radius:14px;padding:22px;position:relative;overflow:hidden;border:1px solid var(--border);background:var(--card2);transition:border-color .3s}
+.platform-connect-card.connected{border-color:var(--green)}
+.platform-connect-card.error{border-color:var(--red)}
+.plat-header{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.plat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.plat-icon.ig{background:var(--ig-grad)}
+.plat-icon.fb{background:var(--fb)}
+.plat-icon.tt{background:#111;border:1px solid var(--tt-accent)}
+.plat-name{font-size:16px;font-weight:bold;letter-spacing:1px}
+.plat-handle{font-size:12px;color:var(--muted2);margin-top:2px}
+.conn-badge{margin-left:auto;padding:4px 12px;border-radius:20px;font-size:10px;letter-spacing:2px;font-weight:bold;text-transform:uppercase}
+.conn-badge.live{background:#052005;color:var(--green);border:1px solid var(--green)}
+.conn-badge.off{background:#200505;color:var(--red);border:1px solid var(--red)}
+.conn-badge.warn{background:#1a1000;color:var(--orange);border:1px solid var(--orange)}
+.plat-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+.plat-stat{background:var(--surface);border-radius:8px;padding:10px;text-align:center}
+.plat-stat-val{font-size:18px;font-weight:bold;color:var(--text)}
+.plat-stat-label{font-size:10px;color:var(--muted2);margin-top:2px;letter-spacing:1px}
+.plat-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── BUTTONS ── */
+.btn{padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-size:12px;letter-spacing:1px;font-family:inherit;transition:all .2s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-gold{background:var(--gold);color:#000;font-weight:bold}
+.btn-gold:hover{background:var(--gold2)}
+.btn-outline{background:none;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-green{background:#052005;border:1px solid var(--green);color:var(--green)}
+.btn-green:hover{background:var(--green);color:#000}
+.btn-red{background:#200505;border:1px solid var(--red);color:var(--red)}
+.btn-red:hover{background:var(--red);color:#000}
+.btn-blue{background:#051520;border:1px solid var(--blue);color:var(--blue)}
+.btn-ig{background:var(--ig-grad);color:#fff;font-weight:bold}
+.btn-fb{background:var(--fb);color:#fff;font-weight:bold}
+.btn-tt{background:#111;border:1px solid var(--tt-accent);color:var(--tt-accent);font-weight:bold}
+.btn-sm{padding:5px 12px;font-size:11px}
+.btn-xs{padding:3px 8px;font-size:10px}
+
+/* ── FORMS ── */
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:10px;letter-spacing:2px;color:var(--muted2);margin-bottom:6px;text-transform:uppercase}
+.form-group input,.form-group textarea,.form-group select{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border-color .2s}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:var(--gold)}
+.form-group textarea{min-height:100px;resize:vertical;line-height:1.6}
+
+/* ── POSTS ── */
+.post-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color .2s}
+.post-card:hover{border-color:var(--gold3)}
+.post-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.post-caption{font-size:13px;line-height:1.6;color:var(--text);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.post-meta{display:flex;gap:12px;font-size:11px;color:var(--muted2);flex-wrap:wrap}
+.status-badge{padding:3px 10px;border-radius:12px;font-size:10px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;white-space:nowrap}
+.s-draft{background:#1a1400;color:#d4b44a;border:1px solid #d4b44a}
+.s-pending_approval{background:#1a0800;color:var(--orange);border:1px solid var(--orange)}
+.s-approved{background:#052005;color:var(--green);border:1px solid var(--green)}
+.s-scheduled{background:#05051a;color:var(--blue);border:1px solid var(--blue)}
+.s-published{background:#150520;color:var(--purple);border:1px solid var(--purple)}
+.s-rejected{background:#200505;color:var(--red);border:1px solid var(--red)}
+.post-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.hashtags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.hashtag{background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:20px;font-size:11px;color:var(--blue)}
+
+/* ── MISC ── */
+.section-title{font-size:11px;letter-spacing:6px;color:var(--gold);text-transform:uppercase;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;line-height:1.5}
+.alert-warning{background:#1a1200;border:1px solid var(--gold3);color:var(--gold)}
+.alert-success{background:#052005;border:1px solid var(--green);color:var(--green)}
+.alert-error{background:#200505;border:1px solid var(--red);color:var(--red)}
+.alert-info{background:#05051a;border:1px solid var(--blue);color:var(--blue)}
+.metric-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+.metric-row:last-child{border-bottom:none}
+.metric-label{font-size:12px;color:var(--muted2)}
+.metric-val{font-size:14px;font-weight:bold}
+.empty-state{text-align:center;padding:48px 24px;color:var(--muted2)}
+.empty-state .icon{font-size:48px;margin-bottom:12px;opacity:.4}
+.loader{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--gold);padding:12px 20px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.toast.show{opacity:1}
+.divider{border:none;border-top:1px solid var(--border);margin:20px 0}
+.setup-step{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;display:flex;gap:14px;align-items:flex-start}
+.step-num{background:var(--gold);color:#000;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;margin-top:2px}
+.step-content h4{font-size:13px;margin-bottom:4px}
+.step-content p{font-size:12px;color:var(--muted2);line-height:1.5}
+.step-content code{background:var(--surface);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--blue)}
+.report-box{background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:8px;padding:20px;white-space:pre-line;font-size:13px;line-height:1.7}
+@media(max-width:768px){.grid-2{grid-template-columns:1fr}.main{padding:12px}.grid-3,.grid-4{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>
-    <h1>IBRAHIM SOCIAL</h1>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px">House of Jreym — Social Command Center</div>
+  <div class="header-left">
+    <div>
+      <h1>IBRAHIM SOCIAL</h1>
+      <div class="header-sub">House of Jreym — Social Command Center</div>
+    </div>
+    <span class="phase-badge" id="phase-badge">⚠ PHASE 1 — DRAFT ONLY</span>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
-    <span class="phase-badge">⚠ PHASE 1 — DRAFT ONLY</span>
+  <div class="header-right">
+    <div id="conn-dots" style="display:flex;gap:6px;align-items:center"></div>
     <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh</button>
   </div>
 </div>
 
 <div class="nav">
-  <button class="active" onclick="showTab('overview')">Overview</button>
-  <button onclick="showTab('connections')">Connections</button>
-  <button onclick="showTab('drafts')">Drafts</button>
-  <button onclick="showTab('approval')">⚡ Approval Queue</button>
-  <button onclick="showTab('generate')">Generate Content</button>
-  <button onclick="showTab('analytics')">Analytics</button>
-  <button onclick="showTab('report')">CEO Report</button>
+  <button class="active" onclick="showTab('overview',this)">📊 Overview</button>
+  <button onclick="showTab('connect',this)">🔗 Connect Accounts</button>
+  <button onclick="showTab('drafts',this)">📝 Drafts</button>
+  <button onclick="showTab('approval',this)" id="nav-approval">⚡ Approval Queue</button>
+  <button onclick="showTab('generate',this)">✦ Generate Content</button>
+  <button onclick="showTab('analytics',this)">📈 Analytics</button>
+  <button onclick="showTab('report',this)">📋 CEO Report</button>
 </div>
 
 <div class="main">
-  <div class="alert alert-warning">
-    ⚠ <strong>Phase 1 — Draft Only Mode:</strong> IBRAHIM can create and manage content drafts, but no posts will be published automatically. All posts require your manual approval and publish action.
+
+<!-- OVERVIEW -->
+<div id="tab-overview" class="tab-content active">
+  <div class="section-title">Social Media Overview</div>
+  <div class="grid-4" id="stat-cards">
+    <div class="card"><h3>Drafts</h3><div class="stat-val" id="s-drafts">—</div><div class="stat-sub">Ready for review</div></div>
+    <div class="card"><h3>Pending Approval</h3><div class="stat-val" id="s-pending" style="color:var(--orange)">—</div><div class="stat-sub">Awaiting your sign-off</div></div>
+    <div class="card"><h3>Published</h3><div class="stat-val" id="s-pub" style="color:var(--purple)">—</div><div class="stat-sub">Live posts</div></div>
+    <div class="card"><h3>Total Followers</h3><div class="stat-val" id="s-followers" style="color:var(--blue)">—</div><div class="stat-sub">Across all platforms</div></div>
+  </div>
+  <div class="grid-3">
+    <div class="card" id="overview-accounts"><h3>Account Status</h3>Loading...</div>
+    <div class="card" id="overview-followers"><h3>Followers</h3>Loading...</div>
+    <div class="card" id="overview-report"><h3>Latest CEO Report</h3>Loading...</div>
+  </div>
+  <div class="card"><h3>Recent Posts</h3><div id="overview-recent">Loading...</div></div>
+</div>
+
+<!-- CONNECT ACCOUNTS -->
+<div id="tab-connect" class="tab-content">
+  <div class="section-title">Connect Your Accounts</div>
+
+  <div class="alert alert-warning" style="margin-bottom:24px">
+    ⚠ <strong>Setup required before connecting:</strong> You need Meta App credentials (from developers.facebook.com) and TikTok credentials (from developers.tiktok.com). Add them as Render env vars first, then connect below.
   </div>
 
-  <!-- OVERVIEW TAB -->
-  <div id="tab-overview" class="tab-content active">
-    <div class="section-title">Social Media Overview</div>
+  <!-- Platform Cards -->
+  <div class="grid-3" id="platform-cards">Loading accounts...</div>
 
-    <div class="grid-4" id="overview-stats">
-      <div class="card"><h3>Total Drafts</h3><div class="stat-val" id="stat-drafts">—</div><div class="stat-sub">Awaiting review</div></div>
-      <div class="card"><h3>Pending Approval</h3><div class="stat-val" id="stat-pending" style="color:var(--orange)">—</div><div class="stat-sub">Need your sign-off</div></div>
-      <div class="card"><h3>Published</h3><div class="stat-val" id="stat-published" style="color:var(--purple)">—</div><div class="stat-sub">Live posts</div></div>
-      <div class="card"><h3>Total Reach</h3><div class="stat-val" id="stat-reach" style="color:var(--blue)">—</div><div class="stat-sub">Last 30 days</div></div>
-    </div>
+  <!-- Setup Guide -->
+  <div class="card" style="margin-top:24px">
+    <h3>Setup Guide</h3>
+    <div style="margin-top:4px">
 
-    <div class="grid-3">
-      <div class="card">
-        <h3>Platform Connections</h3>
-        <div id="overview-connections">Loading...</div>
-      </div>
-      <div class="card">
-        <h3>Followers</h3>
-        <div id="overview-followers">Loading...</div>
-      </div>
-      <div class="card">
-        <h3>Latest Report</h3>
-        <div id="overview-report">Loading...</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Recent Activity</h3>
-      <div id="overview-recent">Loading...</div>
-    </div>
-  </div>
-
-  <!-- CONNECTIONS TAB -->
-  <div id="tab-connections" class="tab-content">
-    <div class="section-title">Platform Connections</div>
-    <div style="max-width:600px">
-      <div id="connections-list">Loading...</div>
-
-      <div class="card" style="margin-top:24px">
-        <h3>Add / Update Credentials</h3>
-        <div class="alert alert-warning" style="margin-bottom:16px">Tokens are stored securely in Supabase. Never share access tokens in URLs or logs.</div>
-        <div class="form-group">
-          <label>Platform</label>
-          <select id="cred-platform">
-            <option value="instagram">Instagram Business</option>
-            <option value="facebook">Facebook Page</option>
-            <option value="tiktok">TikTok Business</option>
-          </select>
+      <div style="font-size:13px;color:var(--gold);margin-bottom:16px;margin-top:8px">Step 1 — Add Render Environment Variables</div>
+      <div class="setup-step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h4>Meta App (Instagram + Facebook)</h4>
+          <p>Go to <strong>developers.facebook.com</strong> → My Apps → Create App → Business.<br>
+          Add <code>META_APP_ID</code> and <code>META_APP_SECRET</code> to Render env vars.<br>
+          Set OAuth redirect URI to: <code id="meta-redirect-url">https://swarm-app-3nch.onrender.com/api/social/callback/meta</code></p>
         </div>
-        <div class="form-group"><label>Access Token</label><input type="password" id="cred-token" placeholder="Access token from platform developer portal"></div>
-        <div class="form-group"><label>Page / Account ID</label><input type="text" id="cred-page-id" placeholder="Facebook Page ID or Instagram Business Account ID"></div>
-        <div class="form-group"><label>Username (optional)</label><input type="text" id="cred-username" placeholder="@handle"></div>
-        <div class="form-group"><label>Token Expires At (optional)</label><input type="datetime-local" id="cred-expires"></div>
-        <button class="btn btn-gold" onclick="saveCredentials()">Save Credentials</button>
       </div>
-    </div>
-  </div>
-
-  <!-- DRAFTS TAB -->
-  <div id="tab-drafts" class="tab-content">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <div class="section-title" style="margin-bottom:0">Content Drafts</div>
-      <div style="display:flex;gap:8px">
-        <select id="drafts-filter" onchange="loadDrafts()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px">
-          <option value="draft">Drafts</option>
-          <option value="pending_approval">Pending Approval</option>
-          <option value="approved">Approved</option>
-          <option value="scheduled">Scheduled</option>
-          <option value="published">Published</option>
-          <option value="rejected">Rejected</option>
-        </select>
-        <button class="btn btn-outline btn-sm" onclick="loadDrafts()">↻</button>
-      </div>
-    </div>
-    <div id="drafts-list">Loading...</div>
-  </div>
-
-  <!-- APPROVAL TAB -->
-  <div id="tab-approval" class="tab-content">
-    <div class="section-title">⚡ Approval Queue</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Review and approve posts before they can be published. Posts will NOT go live without your approval.</p>
-    <div id="approval-list">Loading...</div>
-  </div>
-
-  <!-- GENERATE TAB -->
-  <div id="tab-generate" class="tab-content">
-    <div class="section-title">Generate Content with IBRAHIM</div>
-    <div class="grid-2" style="max-width:900px">
-      <div class="card">
-        <h3>AI Content Generator</h3>
-        <div class="form-group"><label>Keyword / Topic</label><input type="text" id="gen-keyword" placeholder="e.g. Black history wall art, motivational prints"></div>
-        <div class="form-group">
-          <label>Platform</label>
-          <select id="gen-platform">
-            <option value="all">All Platforms</option>
-            <option value="instagram">Instagram</option>
-            <option value="facebook">Facebook</option>
-            <option value="tiktok">TikTok</option>
-          </select>
+      <div class="setup-step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h4>TikTok Business App</h4>
+          <p>Go to <strong>developers.tiktok.com</strong> → Manage Apps → Create App.<br>
+          Add <code>TIKTOK_CLIENT_KEY</code> and <code>TIKTOK_CLIENT_SECRET</code> to Render env vars.<br>
+          Set redirect URI to: <code>https://swarm-app-3nch.onrender.com/api/social/callback/tiktok</code></p>
         </div>
-        <div class="form-group">
-          <label>Style</label>
-          <select id="gen-style">
-            <option value="luxury_brooklyn">Brooklyn Luxury (default)</option>
-            <option value="minimal">Minimal High-End</option>
-            <option value="hype">Hype / Gen Z</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Number of Drafts</label><input type="number" id="gen-count" value="3" min="1" max="5"></div>
-        <div class="form-group"><label>Etsy Listing ID (optional)</label><input type="text" id="gen-listing" placeholder="e.g. 4515831505"></div>
-        <button class="btn btn-gold" onclick="generateContent()" id="gen-btn">✦ Generate Drafts</button>
       </div>
-      <div class="card">
-        <h3>Manual Draft</h3>
-        <div class="form-group"><label>Platform</label>
-          <select id="draft-platform"><option value="all">All Platforms</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option></select>
+      <div class="setup-step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h4>Connect Meta (Instagram + Facebook together)</h4>
+          <p>Click "Connect with Meta" above. Log in with the Facebook account that manages <strong>Houseofjreym page</strong> and <strong>@houseofjreym Instagram</strong>. Both platforms connect in one OAuth flow.</p>
         </div>
-        <div class="form-group"><label>Caption</label><textarea id="draft-caption" placeholder="Write your post caption..."></textarea></div>
-        <div class="form-group"><label>Hashtags (space or comma separated)</label><input type="text" id="draft-hashtags" placeholder="#digitalart #instantdownload #houseofjreym"></div>
-        <div class="form-group"><label>Media URL (optional)</label><input type="text" id="draft-media" placeholder="https://..."></div>
-        <div class="form-group"><label>Schedule For (optional)</label><input type="datetime-local" id="draft-schedule"></div>
-        <button class="btn btn-outline" onclick="createManualDraft()">Save Draft</button>
+      </div>
+      <div class="setup-step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h4>Connect TikTok</h4>
+          <p>Click "Connect TikTok" above. Log in as <strong>@houseofjreym</strong>. Grant video upload and insights permissions.</p>
+        </div>
+      </div>
+
+      <hr class="divider">
+      <div style="font-size:13px;color:var(--gold);margin-bottom:16px">Manual Token Entry (alternative)</div>
+      <p style="font-size:12px;color:var(--muted2);margin-bottom:16px">If OAuth isn't available yet, paste tokens directly from each platform's developer portal.</p>
+      <div class="grid-2" style="max-width:700px">
+        <div>
+          <div class="form-group"><label>Platform</label>
+            <select id="m-platform"><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option></select>
+          </div>
+          <div class="form-group"><label>Access Token</label><input type="password" id="m-token" placeholder="Paste token here"></div>
+          <div class="form-group"><label>Page / Account ID</label><input type="text" id="m-pageid" placeholder="e.g. 123456789"></div>
+          <div class="form-group"><label>Username</label><input type="text" id="m-username" placeholder="houseofjreym"></div>
+          <button class="btn btn-gold" onclick="saveManualCred()">Save Token</button>
+        </div>
+        <div>
+          <div class="form-group"><label>Token Expires At</label><input type="datetime-local" id="m-expires"></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;color:var(--muted2);line-height:1.7">
+            <strong style="color:var(--gold)">Token Sources:</strong><br>
+            Instagram/Facebook: Graph API Explorer at developers.facebook.com/tools/explorer<br><br>
+            TikTok: developers.tiktok.com → Auth code tool<br><br>
+            Tokens are stored encrypted in Supabase. Never in logs or URLs.
+          </div>
+        </div>
       </div>
     </div>
-    <div id="gen-results" style="margin-top:20px"></div>
-  </div>
-
-  <!-- ANALYTICS TAB -->
-  <div id="tab-analytics" class="tab-content">
-    <div class="section-title">Analytics</div>
-    <div class="grid-4" id="analytics-totals">Loading...</div>
-    <div class="grid-3" id="analytics-by-platform">Loading...</div>
-    <div style="display:flex;gap:10px;margin-bottom:20px">
-      <button class="btn btn-outline btn-sm" onclick="syncAnalytics()">↻ Sync Analytics</button>
-      <button class="btn btn-outline btn-sm" onclick="snapshotFollowers()">📊 Snapshot Followers</button>
-    </div>
-  </div>
-
-  <!-- REPORT TAB -->
-  <div id="tab-report" class="tab-content">
-    <div class="section-title">CEO Daily Report</div>
-    <div style="display:flex;gap:10px;margin-bottom:20px">
-      <button class="btn btn-gold" onclick="generateReport()">Generate Today's Report</button>
-      <button class="btn btn-outline btn-sm" onclick="loadReport()">Load Latest</button>
-    </div>
-    <div id="report-content">Click "Load Latest" to view the most recent CEO report.</div>
   </div>
 </div>
 
+<!-- DRAFTS -->
+<div id="tab-drafts" class="tab-content">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <div class="section-title" style="margin-bottom:0">Content Drafts</div>
+    <div style="display:flex;gap:8px">
+      <select id="drafts-filter" onchange="loadDrafts()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px">
+        <option value="draft">Drafts</option>
+        <option value="pending_approval">Pending Approval</option>
+        <option value="approved">Approved</option>
+        <option value="scheduled">Scheduled</option>
+        <option value="published">Published</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="loadDrafts()">↻</button>
+    </div>
+  </div>
+  <div id="drafts-list">Loading...</div>
+</div>
+
+<!-- APPROVAL QUEUE -->
+<div id="tab-approval" class="tab-content">
+  <div class="section-title">⚡ Approval Queue</div>
+  <div class="alert alert-warning" style="margin-bottom:20px">Posts will <strong>NOT</strong> go live until you approve and manually publish them. Phase 1 — draft only mode.</div>
+  <div id="approval-list">Loading...</div>
+</div>
+
+<!-- GENERATE CONTENT -->
+<div id="tab-generate" class="tab-content">
+  <div class="section-title">Generate Content with IBRAHIM</div>
+  <div class="grid-2" style="max-width:960px">
+    <div class="card">
+      <h3>AI Content Generator</h3>
+      <div class="form-group"><label>Keyword / Topic</label>
+        <input type="text" id="gen-kw" placeholder="e.g. Black history wall art, motivational prints, afrocentric decor">
+      </div>
+      <div class="form-group"><label>Platform</label>
+        <select id="gen-plat">
+          <option value="all">All Platforms (IG + FB + TT)</option>
+          <option value="instagram">Instagram only</option>
+          <option value="facebook">Facebook only</option>
+          <option value="tiktok">TikTok only</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Content Style</label>
+        <select id="gen-style">
+          <option value="luxury_brooklyn">Brooklyn Luxury — Silent Pressure</option>
+          <option value="minimal">Minimal High-End</option>
+          <option value="hype">Hype / Gen Z Energy</option>
+          <option value="educational">Educational / Story-Led</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Number of Drafts (1-5)</label>
+        <input type="number" id="gen-count" value="3" min="1" max="5">
+      </div>
+      <div class="form-group"><label>Link to Etsy Listing ID (optional)</label>
+        <input type="text" id="gen-listing" placeholder="e.g. 4515831505">
+      </div>
+      <button class="btn btn-gold" onclick="generateContent()" id="gen-btn">✦ Generate Drafts</button>
+    </div>
+    <div class="card">
+      <h3>Manual Draft</h3>
+      <div class="form-group"><label>Platform</label>
+        <select id="d-plat"><option value="all">All</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option></select>
+      </div>
+      <div class="form-group"><label>Caption</label>
+        <textarea id="d-cap" placeholder="Write your post caption..."></textarea>
+      </div>
+      <div class="form-group"><label>Hashtags (space or comma separated)</label>
+        <input type="text" id="d-tags" placeholder="#digitalart #houseofjreym #instantdownload">
+      </div>
+      <div class="form-group"><label>Media URL (optional)</label>
+        <input type="text" id="d-media" placeholder="https://...">
+      </div>
+      <div class="form-group"><label>Schedule For (optional)</label>
+        <input type="datetime-local" id="d-sched">
+      </div>
+      <button class="btn btn-outline" onclick="createManualDraft()">💾 Save Draft</button>
+    </div>
+  </div>
+  <div id="gen-results" style="margin-top:20px"></div>
+</div>
+
+<!-- ANALYTICS -->
+<div id="tab-analytics" class="tab-content">
+  <div class="section-title">Analytics</div>
+  <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+    <button class="btn btn-outline btn-sm" onclick="syncAnalytics()">↻ Sync Analytics</button>
+    <button class="btn btn-outline btn-sm" onclick="snapshotFollowers()">📊 Snapshot Followers</button>
+    <select id="analytics-days" onchange="loadAnalytics()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px">
+      <option value="7">Last 7 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select>
+  </div>
+  <div class="grid-4" id="analytics-totals">Loading...</div>
+  <div class="grid-3" id="analytics-platforms">Loading...</div>
+</div>
+
+<!-- CEO REPORT -->
+<div id="tab-report" class="tab-content">
+  <div class="section-title">CEO Daily Report</div>
+  <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+    <button class="btn btn-gold" onclick="generateReport()">Generate Today's Report</button>
+    <button class="btn btn-outline btn-sm" onclick="loadReport()">↻ Load Latest</button>
+  </div>
+  <div id="report-content"><div class="empty-state"><div class="icon">📋</div>Click "Load Latest" to view the most recent CEO report.</div></div>
+</div>
+
+</div><!-- /main -->
 <div class="toast" id="toast"></div>
 
 <script>
 const API = '/api/social';
-let dashData = null;
+const KEY = 'swarm-os-key-2025';
+let authStatus = null;
 
-function showTab(tab) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  event.target.classList.add('active');
-  if (tab === 'overview') loadOverview();
-  if (tab === 'connections') loadConnections();
-  if (tab === 'drafts') loadDrafts();
-  if (tab === 'approval') loadApproval();
-  if (tab === 'analytics') loadAnalytics();
-  if (tab === 'report') loadReport();
-}
-
+// ── UTILS ──
 function toast(msg, type='info') {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.style.borderColor = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--gold)';
+  t.style.borderColor = type==='success'?'var(--green)':type==='error'?'var(--red)':type==='warn'?'var(--orange)':'var(--gold)';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(()=>t.classList.remove('show'), 3500);
 }
 
-async function apiFetch(path, method='GET', body=null) {
-  const opts = { method, headers: { 'Content-Type': 'application/json', 'x-api-key': 'swarm-os-key-2025' } };
+async function api(path, method='GET', body=null) {
+  const opts = {method, headers:{'Content-Type':'application/json','x-api-key':KEY}};
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(API + path, opts);
+  const r = await fetch(API+path, opts);
   return r.json();
 }
 
-function platformIcon(p) { return p === 'instagram' ? '📸' : p === 'facebook' ? '👤' : p === 'tiktok' ? '🎵' : '📱'; }
-function platformColor(p) { return p === 'instagram' ? 'var(--ig)' : p === 'facebook' ? 'var(--fb)' : p === 'tiktok' ? '#69c9d0' : 'var(--muted)'; }
-
-function statusBadge(s) { return `<span class="status-badge status-${s}">${s.replace('_', ' ')}</span>`; }
-
+function plat(p) { return p==='instagram'?'📸':p==='facebook'?'👤':p==='tiktok'?'🎵':'📱'; }
+function platColor(p) { return p==='instagram'?'#e1306c':p==='facebook'?'var(--fb)':p==='tiktok'?'var(--tt-accent)':'var(--muted2)'; }
 function timeAgo(ts) {
-  const d = (Date.now() - new Date(ts)) / 1000;
-  if (d < 60) return 'just now';
-  if (d < 3600) return Math.floor(d/60) + 'm ago';
-  if (d < 86400) return Math.floor(d/3600) + 'h ago';
-  return Math.floor(d/86400) + 'd ago';
+  const d=(Date.now()-new Date(ts))/1000;
+  if(d<60)return'just now';if(d<3600)return Math.floor(d/60)+'m ago';
+  if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';
+}
+function statusBadge(s) { return `<span class="status-badge s-${s}">${s.replace('_',' ')}</span>`; }
+function fmtNum(n) { if(!n)return'0';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'K';return n.toString(); }
+function showTab(tab, btn) {
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(tab==='overview')loadOverview();
+  else if(tab==='connect')loadConnections();
+  else if(tab==='drafts')loadDrafts();
+  else if(tab==='approval')loadApproval();
+  else if(tab==='analytics')loadAnalytics();
+  else if(tab==='report')loadReport();
 }
 
+// ── HEADER DOTS ──
+function updateHeaderDots(accounts) {
+  const el = document.getElementById('conn-dots');
+  el.innerHTML = ['instagram','facebook','tiktok'].map(p => {
+    const a = accounts?.[p];
+    const color = a?.connected ? 'var(--green)' : 'var(--red)';
+    return `<div title="${p}: ${a?.connected?'✓ '+a.username:'not connected'}" style="width:10px;height:10px;border-radius:50%;background:${color};border:1px solid rgba(255,255,255,.2)"></div>`;
+  }).join('');
+}
+
+// ── OVERVIEW ──
 async function loadOverview() {
   try {
-    dashData = await apiFetch('/dashboard');
-    const posts = dashData.posts || [];
-    const pending = dashData.pending_approval || [];
+    const [dash, auth] = await Promise.all([
+      api('/dashboard'),
+      api('/auth/status')
+    ]);
+    authStatus = auth;
+    updateHeaderDots(auth.accounts);
 
-    document.getElementById('stat-drafts').textContent = posts.filter(p => p.status === 'draft').length;
-    document.getElementById('stat-pending').textContent = pending.length;
-    document.getElementById('stat-published').textContent = posts.filter(p => p.status === 'published').length;
+    const posts = dash.posts||[];
+    const pending = dash.pending_approval||[];
+    document.getElementById('s-drafts').textContent = posts.filter(p=>p.status==='draft').length;
+    document.getElementById('s-pending').textContent = pending.length;
+    document.getElementById('s-pub').textContent = posts.filter(p=>p.status==='published').length;
 
-    const totalReach = Object.values(dashData.analytics || {}).reduce((s, v) => s + (v.reach || 0), 0);
-    document.getElementById('stat-reach').textContent = totalReach > 1000 ? (totalReach/1000).toFixed(1)+'K' : totalReach;
+    const totalFollowers = Object.values(dash.followers||{}).reduce((s,v)=>s+(v||0),0);
+    document.getElementById('s-followers').textContent = fmtNum(totalFollowers);
 
-    // Connections
-    const connEl = document.getElementById('overview-connections');
-    connEl.innerHTML = ['instagram','facebook','tiktok'].map(p => {
-      const c = dashData.connections?.find(x => x.platform === p);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <span>${platformIcon(p)}</span>
-        <span style="flex:1;font-size:13px;text-transform:capitalize">${p}${c?.username ? ' (@'+c.username+')' : ''}</span>
-        <span class="conn-status ${c?.connected ? 'connected' : 'disconnected'}">${c?.connected ? '● LIVE' : '○ OFF'}</span>
-      </div>`;
-    }).join('');
+    // Update approval nav badge
+    if(pending.length>0) document.getElementById('nav-approval').textContent = `⚡ Approval Queue (${pending.length})`;
 
-    // Followers
-    const follEl = document.getElementById('overview-followers');
-    const f = dashData.followers || {};
-    follEl.innerHTML = Object.keys(f).length ? Object.entries(f).map(([p, cnt]) =>
-      `<div class="metric-row"><span class="metric-label">${platformIcon(p)} ${p}</span><span class="metric-val">${cnt?.toLocaleString()}</span></div>`
-    ).join('') : '<div style="color:var(--muted);font-size:13px">No follower data yet.<br>Go to Analytics → Snapshot Followers</div>';
+    // Account status card
+    document.getElementById('overview-accounts').innerHTML = `<h3>Account Status</h3>` +
+      ['instagram','facebook','tiktok'].map(p => {
+        const a = auth.accounts?.[p]||{};
+        const icon = p==='instagram'?'📸':p==='facebook'?'👤':'🎵';
+        const status = a.connected ? `<span class="conn-badge live">● LIVE</span>` : `<span class="conn-badge off">○ OFF</span>`;
+        const exp = a.token_expires_at ? `<div style="font-size:10px;color:var(--orange);margin-top:2px">Expires ${new Date(a.token_expires_at).toLocaleDateString()}</div>` : '';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:20px">${icon}</span>
+          <div style="flex:1"><div style="font-size:13px;text-transform:capitalize">${p}${a.username?` — @${a.username}`:''}</div>${exp}</div>
+          ${status}</div>`;
+      }).join('')+
+      `<div style="margin-top:14px"><button class="btn btn-outline btn-sm" onclick="showTab('connect',null)">Manage Connections →</button></div>`;
 
-    // Report
-    const repEl = document.getElementById('overview-report');
-    const rep = dashData.latest_report;
-    repEl.innerHTML = rep ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rep.report_date}</div>
-      <div style="font-size:13px;line-height:1.6;color:var(--text)">${rep.summary?.slice(0,250)}...</div>
-      <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="showTab('report')">Full Report →</button>`
-      : '<div style="color:var(--muted);font-size:13px">No report yet. Generate from CEO Report tab.</div>';
+    // Followers card
+    const f = dash.followers||{};
+    document.getElementById('overview-followers').innerHTML = `<h3>Followers</h3>` +
+      (Object.keys(f).length ? Object.entries(f).map(([p,cnt])=>
+        `<div class="metric-row"><span class="metric-label">${plat(p)} ${p}</span><span class="metric-val" style="color:${platColor(p)}">${fmtNum(cnt)}</span></div>`
+      ).join('') : `<div style="color:var(--muted2);font-size:13px;padding:12px 0">No follower data yet.<br>Connect accounts → Snapshot Followers.</div>`);
 
-    // Recent
+    // Report card
+    const rep = dash.latest_report;
+    document.getElementById('overview-report').innerHTML = `<h3>Latest CEO Report</h3>` +
+      (rep ? `<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">${rep.report_date}</div>
+        <div style="font-size:12px;line-height:1.6;color:var(--text)">${rep.summary?.slice(0,200)}...</div>
+        <button class="btn btn-outline btn-sm" style="margin-top:12px" onclick="showTab('report',null)">Full Report →</button>`
+      : `<div style="color:var(--muted2);font-size:13px;padding:12px 0">No report yet.<br><button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="showTab('report',null)">Generate Report →</button></div>`);
+
+    // Recent posts
     const recentEl = document.getElementById('overview-recent');
-    recentEl.innerHTML = posts.slice(0,5).map(p =>
-      `<div class="post-card">
-        <div class="post-header">
-          <span>${platformIcon(p.platform)} <strong>${p.platform}</strong></span>
-          ${statusBadge(p.status)}
-        </div>
-        <div class="post-caption">${p.caption || '(no caption)'}</div>
+    recentEl.innerHTML = posts.slice(0,5).map(p=>`
+      <div class="post-card">
+        <div class="post-header">${plat(p.platform)} <strong style="text-transform:capitalize">${p.platform}</strong> ${statusBadge(p.status)}</div>
+        <div class="post-caption">${p.caption||'(no caption)'}</div>
         <div class="post-meta"><span>by ${p.created_by}</span><span>${timeAgo(p.created_at)}</span></div>
-      </div>`
-    ).join('') || '<div class="empty-state"><div class="icon">📝</div>No posts yet. Generate content to get started.</div>';
+      </div>`).join('') || `<div class="empty-state"><div class="icon">📝</div>No posts yet. Generate content to get started.</div>`;
 
-  } catch(e) { console.error(e); }
+  } catch(e) { console.error(e); toast('Overview load error: '+e.message,'error'); }
 }
 
+// ── CONNECTIONS ──
 async function loadConnections() {
-  const data = await apiFetch('/status');
-  const el = document.getElementById('connections-list');
-  el.innerHTML = data.status?.map(p => {
-    const iconClass = {instagram:'ig',facebook:'fb',tiktok:'tt'}[p.platform];
-    const emoji = platformIcon(p.platform);
-    return `<div class="connection-card">
-      <div class="conn-icon ${iconClass}">${emoji}</div>
-      <div>
-        <div style="font-size:14px;font-weight:bold;text-transform:capitalize">${p.platform}</div>
-        <div style="font-size:12px;color:var(--muted)">${p.username ? '@' + p.username : 'Not connected'}</div>
-        ${p.token_expires_at ? `<div style="font-size:11px;color:var(--orange)">Expires: ${new Date(p.token_expires_at).toLocaleDateString()}</div>` : ''}
+  const auth = await api('/auth/status');
+  authStatus = auth;
+  updateHeaderDots(auth.accounts);
+
+  const el = document.getElementById('platform-cards');
+  const platDefs = [
+    {id:'instagram', name:'Instagram', icon:'📸', iconClass:'ig', handle:'houseofjreym', authType:'meta'},
+    {id:'facebook', name:'Facebook Page', icon:'👤', iconClass:'fb', handle:'Houseofjreym', authType:'meta'},
+    {id:'tiktok', name:'TikTok', icon:'🎵', iconClass:'tt', handle:'houseofjreym', authType:'tiktok'},
+  ];
+
+  el.innerHTML = platDefs.map(p => {
+    const a = auth.accounts?.[p.id]||{};
+    const metaReady = auth.oauth?.meta_configured;
+    const ttReady = auth.oauth?.tiktok_configured;
+    const ready = p.authType==='meta'?metaReady:ttReady;
+
+    const statsHtml = a.connected && a.meta ? `
+      <div class="plat-stats">
+        <div class="plat-stat"><div class="plat-stat-val">${fmtNum(a.meta.followers||0)}</div><div class="plat-stat-label">Followers</div></div>
+        <div class="plat-stat"><div class="plat-stat-val">${fmtNum(a.meta.media_count||a.meta.videos||0)}</div><div class="plat-stat-label">Posts</div></div>
+        <div class="plat-stat"><div class="plat-stat-val">${fmtNum(a.meta.likes||0)}</div><div class="plat-stat-label">Likes</div></div>
+      </div>` : '';
+
+    const connectBtn = p.authType==='meta'
+      ? (metaReady ? `<a href="/api/social/auth/meta" class="btn btn-${p.id==='instagram'?'ig':'fb'}">Connect with Meta</a>`
+        : `<button class="btn btn-outline" disabled title="Add META_APP_ID + META_APP_SECRET to Render env vars first">⚠ App Not Configured</button>`)
+      : (ttReady ? `<a href="/api/social/auth/tiktok" class="btn btn-tt">Connect TikTok</a>`
+        : `<button class="btn btn-outline" disabled title="Add TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET to Render env vars first">⚠ App Not Configured</button>`);
+
+    const reconnectNote = p.authType==='meta'
+      ? `<small style="color:var(--muted2);font-size:11px">Instagram + Facebook connect together via Meta OAuth</small>`
+      : '';
+
+    const expNote = a.token_expires_at
+      ? `<div style="font-size:11px;color:${a.expired?'var(--red)':'var(--orange)'}">Token ${a.expired?'EXPIRED':'expires'} ${new Date(a.token_expires_at).toLocaleDateString()}</div>`
+      : '';
+
+    return `<div class="platform-connect-card ${a.connected?'connected':''}">
+      <div class="plat-header">
+        <div class="plat-icon ${p.iconClass}">${p.icon}</div>
+        <div>
+          <div class="plat-name">${p.name}</div>
+          <div class="plat-handle">@${a.username||p.handle}</div>
+          ${expNote}
+        </div>
+        <span class="conn-badge ${a.connected?'live':'off'}">${a.connected?'● LIVE':'○ OFFLINE'}</span>
       </div>
-      <span class="conn-status ${p.connected ? 'connected' : 'disconnected'}">${p.connected ? '● CONNECTED' : '○ NOT CONNECTED'}</span>
+      ${statsHtml}
+      <div class="plat-actions">
+        ${!a.connected ? connectBtn : `<button class="btn btn-green btn-sm">✓ Connected</button>`}
+        ${a.connected ? `<button class="btn btn-outline btn-sm" onclick="refreshToken('${p.id}')">↻ Refresh Token</button>` : ''}
+        ${a.connected ? `<button class="btn btn-red btn-sm" onclick="disconnectPlatform('${p.id}')">Disconnect</button>` : ''}
+      </div>
+      <div style="margin-top:8px">${reconnectNote}</div>
     </div>`;
-  }).join('') || 'No platforms configured';
+  }).join('');
+
+  // Show OAuth config status
+  const configEl = document.createElement('div');
+  configEl.className = 'alert '+(auth.oauth?.meta_configured&&auth.oauth?.tiktok_configured?'alert-success':'alert-info');
+  configEl.style.marginBottom = '20px';
+  configEl.innerHTML = `<strong>App Configuration:</strong> Meta ${auth.oauth?.meta_configured?'✅':'❌ (add META_APP_ID + META_APP_SECRET to Render)'} &nbsp;|&nbsp; TikTok ${auth.oauth?.tiktok_configured?'✅':'❌ (add TIKTOK_CLIENT_KEY + TIKTOK_CLIENT_SECRET to Render)'}`;
+  el.parentNode.insertBefore(configEl, el);
 }
 
-async function saveCredentials() {
-  const platform = document.getElementById('cred-platform').value;
-  const access_token = document.getElementById('cred-token').value;
-  const page_id = document.getElementById('cred-page-id').value;
-  const username = document.getElementById('cred-username').value;
-  const expires = document.getElementById('cred-expires').value;
-  if (!access_token) return toast('Access token required', 'error');
-  try {
-    const r = await apiFetch('/credentials', 'POST', { platform, access_token, page_id, username, token_expires_at: expires || null });
-    if (r.ok) { toast(`${platform} credentials saved!`, 'success'); loadConnections(); }
-    else toast(r.error || 'Failed', 'error');
-  } catch(e) { toast(e.message, 'error'); }
+async function disconnectPlatform(platform) {
+  if(!confirm(`Disconnect ${platform}?`)) return;
+  await api('/credentials/'+platform, 'DELETE');
+  toast(platform+' disconnected','warn');
+  loadConnections();
 }
 
+async function refreshToken(platform) {
+  toast('Refreshing token...','info');
+  const r = await api('/token/refresh','POST',{platform});
+  if(r.ok) toast(platform+' token refreshed — expires '+new Date(r.expires_at).toLocaleDateString(),'success');
+  else toast(r.error||'Refresh failed','error');
+  loadConnections();
+}
+
+async function saveManualCred() {
+  const platform = document.getElementById('m-platform').value;
+  const access_token = document.getElementById('m-token').value;
+  const page_id = document.getElementById('m-pageid').value;
+  const username = document.getElementById('m-username').value;
+  const expires = document.getElementById('m-expires').value;
+  if(!access_token) return toast('Token required','error');
+  const r = await api('/credentials','POST',{platform,access_token,page_id:page_id||null,username:username||null,token_expires_at:expires||null});
+  if(r.ok) {toast(platform+' credentials saved!','success'); loadConnections();}
+  else toast(r.error||'Failed','error');
+}
+
+// ── DRAFTS ──
 async function loadDrafts() {
   const status = document.getElementById('drafts-filter').value;
-  const data = await apiFetch(`/drafts?status=${status}`);
+  const data = await api('/drafts?status='+status+'&limit=50');
   const el = document.getElementById('drafts-list');
-  if (!data.posts?.length) { el.innerHTML = `<div class="empty-state"><div class="icon">📝</div>No ${status} posts</div>`; return; }
-  el.innerHTML = data.posts.map(p => `
-    <div class="post-card" id="post-${p.id}">
-      <div class="post-header">
-        <span>${platformIcon(p.platform)} <strong style="text-transform:capitalize">${p.platform}</strong></span>
-        ${statusBadge(p.status)}
-      </div>
-      <div class="post-caption">${p.caption || '(no caption)'}</div>
-      ${p.hashtags?.length ? `<div class="hashtags">${p.hashtags.slice(0,8).map(h => `<span class="hashtag">#${h}</span>`).join('')}</div>` : ''}
+  if(!data.posts?.length) { el.innerHTML=`<div class="empty-state"><div class="icon">📝</div>No ${status} posts</div>`; return; }
+  el.innerHTML = data.posts.map(p=>`
+    <div class="post-card">
+      <div class="post-header">${plat(p.platform)} <strong style="text-transform:capitalize">${p.platform}</strong> ${statusBadge(p.status)}</div>
+      <div class="post-caption">${p.caption||'(no caption)'}</div>
+      ${p.hashtags?.length?`<div class="hashtags">${p.hashtags.slice(0,10).map(h=>`<span class="hashtag">#${h}</span>`).join('')}${p.hashtags.length>10?`<span class="hashtag">+${p.hashtags.length-10}</span>`:''}</div>`:''}
       <div class="post-meta" style="margin-top:10px">
-        <span>by ${p.created_by}</span>
-        <span>${timeAgo(p.created_at)}</span>
-        ${p.scheduled_for ? `<span>⏰ ${new Date(p.scheduled_for).toLocaleString()}</span>` : ''}
+        <span>by ${p.created_by}</span><span>${timeAgo(p.created_at)}</span>
+        ${p.scheduled_for?`<span>⏰ ${new Date(p.scheduled_for).toLocaleString()}</span>`:''}
+        ${p.keyword?`<span>🔑 ${p.keyword}</span>`:''}
       </div>
-      <div class="row-actions">
-        ${p.status === 'draft' ? `<button class="btn btn-outline btn-sm" onclick="submitForApproval('${p.id}')">Submit for Approval</button>` : ''}
-        ${p.status === 'pending_approval' ? `<button class="btn btn-green btn-sm" onclick="approvePost('${p.id}')">✓ Approve</button><button class="btn btn-red btn-sm" onclick="rejectPost('${p.id}')">✗ Reject</button>` : ''}
-        ${p.status === 'approved' ? `<button class="btn btn-gold btn-sm" onclick="publishPost('${p.id}')">Publish Now</button>` : ''}
-        ${['draft','rejected'].includes(p.status) ? `<button class="btn btn-red btn-sm" onclick="deleteDraft('${p.id}')">Delete</button>` : ''}
+      <div class="post-actions">
+        ${p.status==='draft'?`<button class="btn btn-outline btn-sm" onclick="submitApproval('${p.id}')">Submit for Approval</button>`:''}
+        ${p.status==='pending_approval'?`<button class="btn btn-green btn-sm" onclick="approvePost('${p.id}')">✓ Approve</button><button class="btn btn-red btn-sm" onclick="rejectPost('${p.id}')">✗ Reject</button>`:''}
+        ${p.status==='approved'?`<button class="btn btn-gold btn-sm" onclick="publishPost('${p.id}')">🚀 Publish Now</button>`:''}
+        ${['draft','rejected'].includes(p.status)?`<button class="btn btn-red btn-sm" onclick="delDraft('${p.id}')">Delete</button>`:''}
       </div>
     </div>`).join('');
 }
 
+// ── APPROVAL ──
 async function loadApproval() {
-  const data = await apiFetch('/drafts?status=pending_approval');
+  const data = await api('/drafts?status=pending_approval&limit=50');
   const el = document.getElementById('approval-list');
-  if (!data.posts?.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">✓</div>No posts awaiting approval<br><span style="font-size:12px">IBRAHIM will submit drafts here for your review</span></div>`;
+  if(!data.posts?.length){
+    el.innerHTML=`<div class="empty-state"><div class="icon">✓</div>No posts awaiting approval<br><span style="font-size:12px">IBRAHIM will submit drafts here for your review</span></div>`;
     return;
   }
-  el.innerHTML = data.posts.map(p => `
+  document.getElementById('nav-approval').textContent = `⚡ Approval Queue (${data.posts.length})`;
+  el.innerHTML = data.posts.map(p=>`
     <div class="post-card">
-      <div class="post-header">
-        <span>${platformIcon(p.platform)} <strong>${p.platform}</strong></span>
-        ${statusBadge(p.status)}
-      </div>
+      <div class="post-header">${plat(p.platform)} <strong>${p.platform}</strong> ${statusBadge(p.status)}</div>
       <div class="post-caption">${p.caption}</div>
-      ${p.hashtags?.length ? `<div class="hashtags">${p.hashtags.map(h => `<span class="hashtag">#${h}</span>`).join('')}</div>` : ''}
-      <div class="post-meta" style="margin-top:10px">
-        <span>by ${p.created_by}</span><span>${timeAgo(p.created_at)}</span>
-      </div>
-      <div class="row-actions">
+      ${p.hashtags?.length?`<div class="hashtags">${p.hashtags.map(h=>`<span class="hashtag">#${h}</span>`).join('')}</div>`:''}
+      <div class="post-meta" style="margin-top:10px"><span>by ${p.created_by}</span><span>${timeAgo(p.created_at)}</span></div>
+      <div class="post-actions">
         <button class="btn btn-green" onclick="approvePost('${p.id}')">✓ Approve</button>
-        <button class="btn btn-outline" onclick="approveSchedule('${p.id}')">⏰ Approve + Schedule</button>
+        <button class="btn btn-blue" onclick="approveSchedule('${p.id}')">⏰ Approve + Schedule</button>
         <button class="btn btn-red" onclick="rejectPost('${p.id}')">✗ Reject</button>
       </div>
     </div>`).join('');
 }
 
-async function submitForApproval(id) {
-  const r = await apiFetch(`/submit/${id}`, 'POST');
-  if (r.ok) { toast('Submitted for approval', 'success'); loadDrafts(); }
-  else toast(r.error, 'error');
+async function submitApproval(id) {
+  const r = await api('/submit/'+id,'POST');
+  if(r.ok){toast('Submitted for approval','success');loadDrafts();}else toast(r.error,'error');
 }
-
 async function approvePost(id) {
-  const r = await apiFetch(`/approve/${id}`, 'POST', { approved_by: 'CEO' });
-  if (r.ok) { toast('Post approved! Ready to publish.', 'success'); loadDrafts(); loadApproval(); }
-  else toast(r.error, 'error');
+  const r = await api('/approve/'+id,'POST',{approved_by:'CEO'});
+  if(r.ok){toast('Approved! Ready to publish.','success');loadDrafts();loadApproval();}else toast(r.error,'error');
 }
-
 async function approveSchedule(id) {
-  const dt = prompt('Schedule for (ISO format, e.g. 2026-06-10T14:00:00):');
-  if (!dt) return;
-  const r = await apiFetch(`/approve/${id}`, 'POST', { approved_by: 'CEO', scheduled_for: dt });
-  if (r.ok) { toast(`Scheduled for ${dt}`, 'success'); loadApproval(); }
-  else toast(r.error, 'error');
+  const dt = prompt('Schedule for (YYYY-MM-DDTHH:MM):');
+  if(!dt)return;
+  const r = await api('/approve/'+id,'POST',{approved_by:'CEO',scheduled_for:dt});
+  if(r.ok){toast('Scheduled for '+dt,'success');loadApproval();}else toast(r.error,'error');
 }
-
 async function rejectPost(id) {
-  const reason = prompt('Reason for rejection:') || 'Does not meet standards';
-  const r = await apiFetch(`/reject/${id}`, 'POST', { reason });
-  if (r.ok) { toast('Post rejected', 'info'); loadDrafts(); loadApproval(); }
-  else toast(r.error, 'error');
+  const reason = prompt('Rejection reason:')||'Does not meet standards';
+  const r = await api('/reject/'+id,'POST',{reason});
+  if(r.ok){toast('Post rejected','warn');loadDrafts();loadApproval();}else toast(r.error,'error');
 }
-
 async function publishPost(id) {
-  if (!confirm('Publish this post now? This will send it live to the platform.')) return;
-  toast('Publishing...', 'info');
-  const r = await apiFetch(`/publish/${id}`, 'POST');
-  if (r.ok) { toast('Published!', 'success'); loadDrafts(); }
-  else toast(r.error || 'Publish failed — check platform credentials', 'error');
+  if(!confirm('Publish this post live now? It will be sent to the platform immediately.'))return;
+  toast('Publishing...','info');
+  const r = await api('/publish/'+id,'POST');
+  if(r.ok){toast('Published!','success');loadDrafts();}
+  else toast(r.error||'Publish failed — check platform credentials','error');
+}
+async function delDraft(id) {
+  if(!confirm('Delete this draft?'))return;
+  await api('/draft/'+id,'DELETE');
+  toast('Deleted','info');loadDrafts();
 }
 
-async function deleteDraft(id) {
-  if (!confirm('Delete this draft?')) return;
-  await apiFetch(`/draft/${id}`, 'DELETE');
-  toast('Deleted', 'info');
-  loadDrafts();
-}
-
+// ── GENERATE ──
 async function generateContent() {
-  const keyword = document.getElementById('gen-keyword').value;
-  const platform = document.getElementById('gen-platform').value;
-  const style = document.getElementById('gen-style').value;
-  const count = parseInt(document.getElementById('gen-count').value) || 3;
-  const etsy_listing_id = document.getElementById('gen-listing').value;
-  if (!keyword) return toast('Enter a keyword', 'error');
-
+  const kw = document.getElementById('gen-kw').value;
+  if(!kw)return toast('Enter a keyword','error');
   const btn = document.getElementById('gen-btn');
-  btn.innerHTML = '<span class="loader"></span> Generating...';
-  btn.disabled = true;
-
+  btn.innerHTML='<span class="loader"></span> Generating...'; btn.disabled=true;
   try {
-    const r = await apiFetch('/generate', 'POST', { keyword, platform, style, count, etsy_listing_id: etsy_listing_id || undefined });
-    if (r.ok) {
-      toast(`${r.count} draft(s) created!`, 'success');
-      document.getElementById('gen-results').innerHTML = `
+    const r = await api('/generate','POST',{
+      keyword:kw, platform:document.getElementById('gen-plat').value,
+      style:document.getElementById('gen-style').value,
+      count:parseInt(document.getElementById('gen-count').value)||3,
+      etsy_listing_id:document.getElementById('gen-listing').value||undefined
+    });
+    if(r.ok){
+      toast(r.count+' draft(s) created!','success');
+      document.getElementById('gen-results').innerHTML=`
         <div class="section-title">Generated Drafts</div>
-        ${r.drafts.map(p => `
-          <div class="post-card">
-            <div class="post-header"><span>${platformIcon(p.platform)} ${p.platform}</span>${statusBadge(p.status)}</div>
-            <div class="post-caption">${p.caption}</div>
-            ${p.hashtags?.length ? `<div class="hashtags">${p.hashtags.slice(0,10).map(h=>`<span class="hashtag">#${h}</span>`).join('')}</div>` : ''}
-            <div class="row-actions"><button class="btn btn-outline btn-sm" onclick="submitForApproval('${p.id}')">Submit for Approval</button></div>
-          </div>`).join('')}`;
-    } else toast(r.error || 'Generation failed', 'error');
-  } catch(e) { toast(e.message, 'error'); }
-  btn.innerHTML = '✦ Generate Drafts'; btn.disabled = false;
+        ${r.drafts.map(p=>`<div class="post-card">
+          <div class="post-header">${plat(p.platform)} ${p.platform} ${statusBadge(p.status)}</div>
+          <div class="post-caption">${p.caption}</div>
+          ${p.hashtags?.length?`<div class="hashtags">${p.hashtags.slice(0,10).map(h=>`<span class="hashtag">#${h}</span>`).join('')}</div>`:''}
+          <div class="post-actions"><button class="btn btn-outline btn-sm" onclick="submitApproval('${p.id}')">Submit for Approval</button></div>
+        </div>`).join('')}`;
+    } else toast(r.error||'Generation failed','error');
+  } catch(e){toast(e.message,'error');}
+  btn.innerHTML='✦ Generate Drafts'; btn.disabled=false;
 }
 
 async function createManualDraft() {
-  const caption = document.getElementById('draft-caption').value;
-  if (!caption) return toast('Caption required', 'error');
-  const raw = document.getElementById('draft-hashtags').value;
-  const hashtags = raw.split(/[\s,]+/).map(h => h.replace('#','')).filter(Boolean);
-  const r = await apiFetch('/draft', 'POST', {
-    platform: document.getElementById('draft-platform').value,
-    caption, hashtags,
-    media_urls: document.getElementById('draft-media').value ? [document.getElementById('draft-media').value] : [],
-    scheduled_for: document.getElementById('draft-schedule').value || null,
-    created_by: 'CEO'
+  const caption=document.getElementById('d-cap').value;
+  if(!caption)return toast('Caption required','error');
+  const raw=document.getElementById('d-tags').value;
+  const hashtags=raw.split(/[\s,]+/).map(h=>h.replace('#','')).filter(Boolean);
+  const r = await api('/draft','POST',{
+    platform:document.getElementById('d-plat').value,
+    caption,hashtags,
+    media_urls:document.getElementById('d-media').value?[document.getElementById('d-media').value]:[],
+    scheduled_for:document.getElementById('d-sched').value||null,
+    created_by:'CEO'
   });
-  if (r.ok) { toast('Draft saved', 'success'); document.getElementById('draft-caption').value = ''; }
-  else toast(r.error, 'error');
+  if(r.ok){toast('Draft saved','success');document.getElementById('d-cap').value='';}
+  else toast(r.error,'error');
 }
 
+// ── ANALYTICS ──
 async function loadAnalytics() {
-  const data = await apiFetch('/analytics?days=30');
-  const totalsEl = document.getElementById('analytics-totals');
-  const allTotals = Object.values(data.totals || {}).reduce((acc, v) => {
-    for (const k of ['views','likes','comments','shares','saves','reach','impressions']) acc[k] = (acc[k]||0)+(v[k]||0);
+  const days=document.getElementById('analytics-days').value;
+  const data = await api('/analytics?days='+days);
+  const allT=Object.values(data.totals||{}).reduce((acc,v)=>{
+    for(const k of['impressions','reach','likes','comments','shares','saves'])acc[k]=(acc[k]||0)+(v[k]||0);
     return acc;
-  }, {});
-
-  totalsEl.innerHTML = ['impressions','reach','likes','comments','shares','saves'].map(k =>
-    `<div class="card"><h3>${k}</h3><div class="stat-val">${(allTotals[k]||0).toLocaleString()}</div><div class="stat-sub">Last 30 days</div></div>`
-  ).join('');
-
-  const platEl = document.getElementById('analytics-by-platform');
-  platEl.innerHTML = Object.entries(data.totals || {}).map(([p, v]) =>
-    `<div class="card"><h3>${platformIcon(p)} ${p}</h3>
-      ${Object.entries(v).filter(([k])=>!['posts'].includes(k)).map(([k,val]) =>
-        `<div class="metric-row"><span class="metric-label">${k}</span><span class="metric-val">${(val||0).toLocaleString()}</span></div>`
-      ).join('')}
-    </div>`
-  ).join('') || '<div class="card"><div class="empty-state">No analytics yet.<br>Publish posts and sync analytics.</div></div>';
+  },{});
+  document.getElementById('analytics-totals').innerHTML=
+    ['impressions','reach','likes','comments','shares','saves'].map(k=>
+      `<div class="card"><h3>${k}</h3><div class="stat-val">${fmtNum(allT[k]||0)}</div><div class="stat-sub">Last ${days} days</div></div>`
+    ).join('');
+  document.getElementById('analytics-platforms').innerHTML=
+    Object.entries(data.totals||{}).map(([p,v])=>`
+      <div class="card"><h3>${plat(p)} ${p}</h3>
+        ${Object.entries(v).filter(([k])=>k!=='posts').map(([k,val])=>
+          `<div class="metric-row"><span class="metric-label">${k}</span><span class="metric-val" style="color:${platColor(p)}">${fmtNum(val)}</span></div>`
+        ).join('')}
+      </div>`
+    ).join('') || `<div class="card"><div class="empty-state">No analytics data yet.<br>Connect accounts and publish posts to see data here.</div></div>`;
 }
+async function syncAnalytics(){toast('Syncing...','info');const r=await api('/analytics/sync','POST');toast('Synced '+(r.synced||0)+' records','success');loadAnalytics();}
+async function snapshotFollowers(){toast('Snapshot...','info');await api('/analytics/followers','POST');toast('Follower snapshot saved','success');loadAnalytics();}
 
-async function syncAnalytics() {
-  toast('Syncing...', 'info');
-  const r = await apiFetch('/analytics/sync', 'POST');
-  toast(`Synced ${r.synced || 0} records`, 'success');
-  loadAnalytics();
-}
-
-async function snapshotFollowers() {
-  toast('Taking snapshot...', 'info');
-  const r = await apiFetch('/analytics/followers', 'POST');
-  toast('Follower snapshot saved', 'success');
-  loadAnalytics();
-}
-
+// ── CEO REPORT ──
 async function loadReport() {
-  const data = await apiFetch('/report/latest');
-  const el = document.getElementById('report-content');
-  if (!data.report) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">📊</div>No report yet. Generate one above.</div>';
-    return;
-  }
-  const rep = data.report;
-  el.innerHTML = `
-    <div style="margin-bottom:20px;display:flex;gap:12px;align-items:center">
-      <span style="font-size:24px">📊</span>
-      <div>
-        <div style="font-size:18px;color:var(--gold)">${rep.report_date}</div>
-        <div style="font-size:12px;color:var(--muted)">Generated by ${rep.generated_by}</div>
-      </div>
+  const data = await api('/report/latest');
+  const el=document.getElementById('report-content');
+  if(!data.report){el.innerHTML=`<div class="empty-state"><div class="icon">📋</div>No report yet.</div>`;return;}
+  const rep=data.report;
+  el.innerHTML=`
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
+      <span style="font-size:32px">📊</span>
+      <div><div style="font-size:20px;color:var(--gold)">${rep.report_date}</div>
+      <div style="font-size:12px;color:var(--muted2)">Generated by ${rep.generated_by}</div></div>
     </div>
     <div class="grid-4" style="margin-bottom:20px">
       <div class="card"><h3>Posts Published</h3><div class="stat-val">${rep.total_posts_published||0}</div></div>
-      <div class="card"><h3>Total Reach</h3><div class="stat-val" style="color:var(--blue)">${(rep.total_reach||0).toLocaleString()}</div></div>
-      <div class="card"><h3>Engagement</h3><div class="stat-val" style="color:var(--green)">${(rep.total_engagement||0).toLocaleString()}</div></div>
-      <div class="card"><h3>Platforms</h3><div class="stat-val" style="font-size:24px">${Object.keys(rep.follower_delta||{}).map(platformIcon).join(' ')}</div></div>
+      <div class="card"><h3>Total Reach</h3><div class="stat-val" style="color:var(--blue)">${fmtNum(rep.total_reach||0)}</div></div>
+      <div class="card"><h3>Engagement</h3><div class="stat-val" style="color:var(--green)">${fmtNum(rep.total_engagement||0)}</div></div>
+      <div class="card"><h3>Platforms</h3><div style="font-size:28px;margin-top:8px">${Object.keys(rep.follower_delta||{}).map(plat).join(' ')}</div></div>
     </div>
-    <div class="report-box">${rep.summary || 'No summary'}</div>`;
+    <div class="report-box">${rep.summary||'No summary available'}</div>`;
+}
+async function generateReport(){
+  toast('Generating CEO report...','info');
+  const r=await api('/report/generate','POST');
+  if(r.ok){toast('Report generated!','success');loadReport();}else toast(r.error||'Failed','error');
 }
 
-async function generateReport() {
-  toast('Generating CEO report...', 'info');
-  const r = await apiFetch('/report/generate', 'POST');
-  if (r.ok) { toast('Report generated!', 'success'); loadReport(); }
-  else toast(r.error || 'Failed', 'error');
+function refreshAll(){
+  const active=document.querySelector('.tab-content.active')?.id?.replace('tab-','');
+  if(active==='overview')loadOverview();
+  else if(active==='connect')loadConnections();
+  else if(active==='drafts')loadDrafts();
+  else if(active==='approval')loadApproval();
+  else if(active==='analytics')loadAnalytics();
+  else if(active==='report')loadReport();
 }
 
-function refreshAll() {
-  const active = document.querySelector('.tab-content.active')?.id?.replace('tab-','');
-  if (active === 'overview') loadOverview();
-  else if (active === 'connections') loadConnections();
-  else if (active === 'drafts') loadDrafts();
-  else if (active === 'approval') loadApproval();
-  else if (active === 'analytics') loadAnalytics();
-  else if (active === 'report') loadReport();
-}
+// ── URL PARAMS (post-OAuth redirect) ──
+(()=>{
+  const p=new URLSearchParams(window.location.search);
+  if(p.get('meta')==='connected'){toast('Meta connected! '+(p.get('page')||''),'success'); history.replaceState({},'','/social_dashboard.html');}
+  if(p.get('tiktok')==='connected'){toast('TikTok connected as @'+(p.get('user')||'houseofjreym')+'!','success'); history.replaceState({},'','/social_dashboard.html');}
+  if(p.get('error')){toast('OAuth error: '+p.get('error'),'error'); history.replaceState({},'','/social_dashboard.html');}
+  if(p.get('warning')){toast('Warning: '+p.get('warning'),'warn'); history.replaceState({},'','/social_dashboard.html');}
+})();
 
-// Init
+// ── INIT ──
 loadOverview();
-// Auto-refresh every 60s
-setInterval(() => {
-  const active = document.querySelector('.tab-content.active')?.id?.replace('tab-','');
-  if (active === 'overview') loadOverview();
-  else if (active === 'approval') loadApproval();
-}, 60000);
+setInterval(()=>{
+  const active=document.querySelector('.tab-content.active')?.id?.replace('tab-','');
+  if(active==='overview')loadOverview();
+  else if(active==='approval')loadApproval();
+},60000);
 </script>
 </body>
 </html>
