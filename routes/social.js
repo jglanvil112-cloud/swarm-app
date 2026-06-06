@@ -549,6 +549,241 @@ socialRouter.post("/schedule/check", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── META OAUTH (Instagram + Facebook) ───────────────────────────────────────
+
+const META_APP_ID     = process.env.META_APP_ID || "";
+const META_APP_SECRET = process.env.META_APP_SECRET || "";
+const APP_URL         = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
+const META_REDIRECT   = APP_URL + "/api/social/callback/meta";
+// Meta scopes needed for Instagram Business + Facebook Page
+const META_SCOPES = [
+  "instagram_basic","instagram_content_publish","instagram_manage_insights",
+  "pages_show_list","pages_read_engagement","pages_manage_posts",
+  "pages_read_user_content","read_insights","business_management"
+].join(",");
+
+// GET /api/social/auth/meta — redirect to Meta OAuth
+socialRouter.get("/auth/meta", (req, res) => {
+  if (!META_APP_ID) return res.status(500).json({ error: "META_APP_ID not set in Render env vars" });
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
+  res.redirect(url);
+});
+
+// GET /api/social/callback/meta — handle Meta OAuth callback
+socialRouter.get("/callback/meta", async (req, res) => {
+  const { code, error, error_description } = req.query;
+  if (error) return res.redirect(`/social_dashboard.html?error=${encodeURIComponent(error_description || error)}`);
+  if (!code) return res.redirect("/social_dashboard.html?error=no_code");
+
+  try {
+    // Exchange code for short-lived token
+    const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&code=${code}`);
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) throw new Error("Token exchange failed: " + JSON.stringify(tokenData));
+
+    // Exchange for long-lived token (60 days)
+    const longRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${tokenData.access_token}`);
+    const longData = await longRes.json();
+    const longToken = longData.access_token || tokenData.access_token;
+    const expiresIn = longData.expires_in || 5183944; // ~60 days default
+
+    // Get user ID and pages
+    const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${longToken}`);
+    const meData = await meRes.json();
+
+    // Get pages the user manages
+    const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${longToken}`);
+    const pagesData = await pagesRes.json();
+    const pages = pagesData.data || [];
+
+    // Find the House of Jreym page
+    const hojPage = pages.find(p => p.name?.toLowerCase().includes("jreym") || p.name?.toLowerCase().includes("house of")) || pages[0];
+
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+    // Store Facebook Page credentials
+    if (hojPage) {
+      const pageToken = hojPage.access_token || longToken;
+      await supabase.from("social_credentials").upsert({
+        platform: "facebook",
+        access_token: pageToken,
+        page_id: hojPage.id,
+        username: hojPage.name || "Houseofjreym",
+        connected: true,
+        token_expires_at: expiresAt,
+        meta: { user_id: meData.id, page_name: hojPage.name, all_pages: pages.map(p=>p.name) },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "platform" });
+
+      // Get Instagram Business Account linked to this page
+      const igAccountId = hojPage.instagram_business_account?.id;
+      if (igAccountId) {
+        // Get IG account details
+        const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}?fields=id,username,followers_count,media_count&access_token=${pageToken}`);
+        const igData = await igRes.json();
+        await supabase.from("social_credentials").upsert({
+          platform: "instagram",
+          access_token: pageToken,
+          page_id: igAccountId,
+          account_id: igAccountId,
+          username: igData.username || "houseofjreym",
+          connected: true,
+          token_expires_at: expiresAt,
+          meta: { followers: igData.followers_count, media_count: igData.media_count, fb_page_id: hojPage.id },
+          updated_at: new Date().toISOString()
+        }, { onConflict: "platform" });
+
+        // Snapshot followers
+        if (igData.followers_count) {
+          await supabase.from("social_account_stats").insert({ platform: "instagram", followers: igData.followers_count, recorded_at: new Date().toISOString() });
+        }
+        await logAgent("IBRAHIM", `Instagram connected: @${igData.username || "houseofjreym"} (${igData.followers_count || 0} followers)`, "success");
+      }
+
+      await logAgent("IBRAHIM", `Facebook connected: ${hojPage.name} (page_id: ${hojPage.id})`, "success");
+      res.redirect("/social_dashboard.html?meta=connected&page=" + encodeURIComponent(hojPage.name));
+    } else {
+      // No pages found — store user token anyway and log
+      await logAgent("IBRAHIM", "Meta OAuth: no pages found for this account", "warn");
+      res.redirect("/social_dashboard.html?meta=connected&warning=no_pages_found");
+    }
+  } catch (e) {
+    console.error("[IBRAHIM] Meta OAuth callback error:", e.message);
+    await logAgent("IBRAHIM", "Meta OAuth failed: " + e.message, "error");
+    res.redirect("/social_dashboard.html?error=" + encodeURIComponent(e.message));
+  }
+});
+
+// ─── TIKTOK OAUTH ─────────────────────────────────────────────────────────────
+
+const TT_CLIENT_KEY    = process.env.TIKTOK_CLIENT_KEY || "";
+const TT_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET || "";
+const TT_REDIRECT      = APP_URL + "/api/social/callback/tiktok";
+const TT_SCOPES        = "user.info.basic,user.info.stats,video.upload,video.publish";
+
+// GET /api/social/auth/tiktok — redirect to TikTok OAuth
+socialRouter.get("/auth/tiktok", (req, res) => {
+  if (!TT_CLIENT_KEY) return res.status(500).json({ error: "TIKTOK_CLIENT_KEY not set in Render env vars" });
+  const csrfState = "hoj-tt-" + Date.now();
+  const url = `https://www.tiktok.com/v2/auth/authorize?client_key=${TT_CLIENT_KEY}&scope=${TT_SCOPES}&response_type=code&redirect_uri=${encodeURIComponent(TT_REDIRECT)}&state=${csrfState}`;
+  res.redirect(url);
+});
+
+// GET /api/social/callback/tiktok — handle TikTok OAuth callback
+socialRouter.get("/callback/tiktok", async (req, res) => {
+  const { code, error, error_description } = req.query;
+  if (error) return res.redirect(`/social_dashboard.html?error=${encodeURIComponent(error_description || error)}`);
+  if (!code) return res.redirect("/social_dashboard.html?error=no_tiktok_code");
+
+  try {
+    // Exchange code for access token
+    const tokenRes = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_key: TT_CLIENT_KEY, client_secret: TT_CLIENT_SECRET,
+        code, grant_type: "authorization_code", redirect_uri: TT_REDIRECT
+      })
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) throw new Error("TikTok token exchange failed: " + JSON.stringify(tokenData));
+
+    // Get user info
+    const userRes = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,display_name,avatar_url,follower_count,following_count,likes_count,video_count", {
+      headers: { "Authorization": "Bearer " + tokenData.access_token }
+    });
+    const userData = await userRes.json();
+    const user = userData.data?.user || {};
+
+    const expiresAt = new Date(Date.now() + (tokenData.expires_in || 86400) * 1000).toISOString();
+
+    await supabase.from("social_credentials").upsert({
+      platform: "tiktok",
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token || null,
+      account_id: user.open_id || null,
+      username: user.display_name || "houseofjreym",
+      connected: true,
+      token_expires_at: expiresAt,
+      meta: { followers: user.follower_count, likes: user.likes_count, videos: user.video_count, open_id: user.open_id },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "platform" });
+
+    if (user.follower_count) {
+      await supabase.from("social_account_stats").insert({ platform: "tiktok", followers: user.follower_count, recorded_at: new Date().toISOString() });
+    }
+
+    await logAgent("IBRAHIM", `TikTok connected: @${user.display_name || "houseofjreym"} (${user.follower_count || 0} followers)`, "success");
+    res.redirect("/social_dashboard.html?tiktok=connected&user=" + encodeURIComponent(user.display_name || "houseofjreym"));
+  } catch (e) {
+    console.error("[IBRAHIM] TikTok OAuth callback error:", e.message);
+    await logAgent("IBRAHIM", "TikTok OAuth failed: " + e.message, "error");
+    res.redirect("/social_dashboard.html?error=" + encodeURIComponent(e.message));
+  }
+});
+
+// GET /api/social/auth/status — detailed account info (called by dashboard on load)
+socialRouter.get("/auth/status", async (req, res) => {
+  try {
+    const { data: creds } = await supabase.from("social_credentials").select("*");
+    const result = {};
+    for (const c of creds || []) {
+      const expired = c.token_expires_at && new Date(c.token_expires_at) < new Date();
+      result[c.platform] = {
+        connected: c.connected && !expired,
+        username: c.username,
+        page_id: c.page_id,
+        token_expires_at: c.token_expires_at,
+        expired,
+        meta: c.meta
+      };
+    }
+    // Add disconnected platforms
+    for (const p of ["instagram","facebook","tiktok"]) {
+      if (!result[p]) result[p] = { connected: false, username: null };
+    }
+    res.json({ accounts: result, oauth: {
+      meta_configured: !!META_APP_ID,
+      tiktok_configured: !!TT_CLIENT_KEY,
+      meta_auth_url: META_APP_ID ? "/api/social/auth/meta" : null,
+      tiktok_auth_url: TT_CLIENT_KEY ? "/api/social/auth/tiktok" : null
+    }});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/social/token/refresh — refresh a platform token
+socialRouter.post("/token/refresh", async (req, res) => {
+  const { platform } = req.body;
+  try {
+    const cred = await getCredential(platform);
+    if (!cred) return res.status(404).json({ error: "Platform not connected" });
+
+    if (platform === "tiktok" && cred.refresh_token) {
+      const r = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_key: TT_CLIENT_KEY, client_secret: TT_CLIENT_SECRET, grant_type: "refresh_token", refresh_token: cred.refresh_token })
+      });
+      const data = await r.json();
+      if (!data.access_token) throw new Error("TikTok refresh failed: " + JSON.stringify(data));
+      const expiresAt = new Date(Date.now() + (data.expires_in || 86400) * 1000).toISOString();
+      await supabase.from("social_credentials").update({ access_token: data.access_token, refresh_token: data.refresh_token || cred.refresh_token, token_expires_at: expiresAt, updated_at: new Date().toISOString() }).eq("platform", "tiktok");
+      res.json({ ok: true, platform, expires_at: expiresAt });
+
+    } else if ((platform === "facebook" || platform === "instagram") && META_APP_ID) {
+      // Refresh Meta long-lived token
+      const r = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${cred.access_token}`);
+      const data = await r.json();
+      if (!data.access_token) throw new Error("Meta refresh failed: " + JSON.stringify(data));
+      const expiresAt = new Date(Date.now() + (data.expires_in || 5183944) * 1000).toISOString();
+      await supabase.from("social_credentials").update({ access_token: data.access_token, token_expires_at: expiresAt, updated_at: new Date().toISOString() }).eq("platform", platform);
+      res.json({ ok: true, platform, expires_at: expiresAt });
+    } else {
+      res.status(400).json({ error: "Cannot refresh: missing refresh token or app credentials" });
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── DASHBOARD DATA ENDPOINT ──────────────────────────────────────────────────
 
 // GET /api/social/dashboard — single endpoint that feeds the dashboard
