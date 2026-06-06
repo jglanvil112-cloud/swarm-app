@@ -946,7 +946,7 @@ etsyRouter.post("/add-variations",async(req,res)=>{
         const products=sizeOptions.map((opt,idx)=>({
           sku:"HOJ-"+lid+"-S"+idx,
           property_values:[{property_id:200,property_name:"Size",scale_id:null,value_ids:[],values:[opt.value]}],
-          offerings:[{price:basePrice+opt.price_adjustment,quantity:999,is_enabled:true}]
+          offerings:[{price:basePrice,quantity:999,is_enabled:true}]
         }));
         const invRes=await fetch(ETSY_BASE+"/listings/"+lid+"/inventory",{
           method:"PUT",headers:authH(t),
