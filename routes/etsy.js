@@ -197,23 +197,33 @@ etsyRouter.post("/bulk-activate",async(req,res)=>{
     for(const listing of batch){
       const lid=listing.listing_id;
       try{
-        // Step A: upload PNG image to satisfy Etsy requirement
+        // Step A: upload image via URL (Etsy accepts image_url parameter)
         let imageOk=false;
         try{
-          const {default:FD}=await import("form-data");
-          const pngBuf=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAIAAAAiOjnJAAABcUlEQVR42u3SMQ0AAAzDsPIn3aKYtMOGECWFA5EAY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGItvBsLKBp6arxoqAAAAAElFTkSuQmCC","base64");
-          const fd=new FD();
-          fd.append("image",pngBuf,{filename:"hoj_"+lid+".png",contentType:"image/png",knownLength:pngBuf.length});
-          fd.append("rank",1);
-          const imgRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{
-            method:"POST",
-            headers:{...fd.getHeaders(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},
-            body:fd
-          });
-          const imgData=await imgRes.json();
-          imageOk=imgRes.ok;
-          if(!imgRes.ok)console.error("[bulk-activate] img FAIL",lid,imgRes.status,JSON.stringify(imgData).slice(0,200));
-          else console.log("[bulk-activate] img OK",lid,imgData.listing_image_id);
+          // Use a publicly accessible PNG image URL — hosted on our own Render static
+          // Alternatively use the overwrite approach: copy image from listing 4512221027
+          // Etsy API: POST /listings/{id}/images with listing_image_id copies from another listing
+          const srcListingId=4512221027; // our one active listing with an image
+          // First get image IDs from source listing
+          const srcImgRes=await fetch(ETSY_BASE+"/listings/"+srcListingId+"/images",{headers:authH(t)});
+          if(srcImgRes.ok){
+            const srcImgData=await srcImgRes.json();
+            const srcImgId=(srcImgData.results||srcImgData)[0]?.listing_image_id;
+            if(srcImgId){
+              // Copy image to this draft listing
+              const copyRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{
+                method:"POST",
+                headers:{...authH(t),"Content-Type":"application/x-www-form-urlencoded"},
+                body:new URLSearchParams({listing_image_id:String(srcImgId),rank:"1",overwrite:"true"})
+              });
+              const copyData=await copyRes.json();
+              imageOk=copyRes.ok;
+              if(!copyRes.ok)console.error("[bulk-activate] img copy FAIL",lid,copyRes.status,JSON.stringify(copyData).slice(0,200));
+              else console.log("[bulk-activate] img OK",lid,copyData.listing_image_id||"copied");
+            }
+          }else{
+            console.error("[bulk-activate] src img fetch FAIL",srcImgRes.status);
+          }
         }catch(e){console.error("[bulk-activate] img ERR",lid,e.message);}
                 // Step B: PATCH to active
         const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
