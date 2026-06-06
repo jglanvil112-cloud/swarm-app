@@ -483,6 +483,137 @@ Return ONLY valid JSON, no markdown, no explanation:
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+etsyRouter.post("/attach-files",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
+    const ETSY_SECRET=process.env.ETSY_SECRET||"";
+    const limit=parseInt(req.body?.limit)||50;
+    const offset=parseInt(req.body?.offset)||0;
+
+    // Fetch active listings
+    let listings=[];
+    for(let off=offset;off<offset+limit;off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+      if(!r.ok)break;
+      const d=await r.json();
+      const batch=d.results||[];
+      listings=[...listings,...batch];
+      if(batch.length<100||listings.length>=limit)break;
+    }
+    listings=listings.slice(0,limit);
+    console.log("[attach-files] Processing",listings.length,"listings");
+
+    const results={attached:[],failed:[],skipped:[]};
+
+    for(const listing of listings){
+      const lid=listing.listing_id;
+      const title=listing.title||"Digital Art Print";
+      const keyword=title.split("|")[0].replace(/SVG|PNG|PDF|Digital|Download|Print|Art|Instant/gi,"").trim().slice(0,40)||"Digital Art";
+      const niche=title.includes("Portrait")?"Portrait Art":
+                  title.includes("Botanical")?"Botanical Art":
+                  title.includes("Affirmation")?"Affirmation Print":
+                  title.includes("Minimalist")?"Minimalist Art":
+                  title.includes("Holiday")||title.includes("Christmas")?"Holiday Art":
+                  "Digital Art Print";
+
+      try{
+        // Check if file already attached
+        const existRes=await fetch(ETSY_BASE+"/listings/"+lid+"/files",{headers:authH(t)});
+        if(existRes.ok){
+          const existData=await existRes.json();
+          if((existData.results||existData||[]).length>0){
+            results.skipped.push({listing_id:lid,reason:"file_exists"});
+            console.log("[attach-files] SKIP",lid,"already has file");
+            continue;
+          }
+        }
+
+        // Generate unique SVG for this listing
+        const palettes=[
+          ["#1a1a2e","#e2b04a","#f5f0e8"],["#0d1b2a","#c9a84c","#f8f4ed"],
+          ["#16213e","#d4a843","#fffff0"],["#0f0e17","#e8c547","#fffffe"],
+          ["#1c1c3a","#f0c040","#faf7f0"],["#2d1b33","#e85d9a","#fff0f5"],
+          ["#0a2342","#2ca58d","#f0fffc"],["#1b2838","#66c0f4","#f0f8ff"],
+          ["#1a2f1a","#7ec850","#f0fff0"],["#2e1503","#d4813a","#fff5e6"],
+        ];
+        const p=palettes[lid%palettes.length];
+        const safeKw=keyword.replace(/[<>&"]/g,c=>{"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]||c);
+        const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:${p[0]};stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:${p[0]}cc;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:${p[1]};stop-opacity:0.5"/>
+      <stop offset="50%" style="stop-color:${p[1]};stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:${p[1]};stop-opacity:0.5"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="800" fill="url(#bg)"/>
+  <rect x="40" y="40" width="720" height="720" fill="none" stroke="${p[1]}" stroke-width="2" opacity="0.5"/>
+  <rect x="60" y="60" width="680" height="680" fill="none" stroke="${p[1]}" stroke-width="0.5" opacity="0.2"/>
+  <line x1="80" y1="200" x2="720" y2="200" stroke="url(#gold)" stroke-width="1.5"/>
+  <line x1="80" y1="600" x2="720" y2="600" stroke="url(#gold)" stroke-width="1.5"/>
+  <text x="400" y="130" font-family="Georgia,serif" font-size="11" fill="${p[1]}" text-anchor="middle" letter-spacing="6" opacity="0.8">HOUSE OF JREYM ✦ DIGITAL PRINTS</text>
+  <text x="400" y="420" font-family="Georgia,serif" font-size="${Math.max(22,Math.min(56,Math.floor(900/Math.max(safeKw.length,1))))}" font-weight="bold" fill="${p[2]}" text-anchor="middle" dominant-baseline="middle">${safeKw}</text>
+  <text x="400" y="650" font-family="Georgia,serif" font-size="13" fill="${p[1]}" text-anchor="middle" letter-spacing="4" opacity="0.9">INSTANT DIGITAL DOWNLOAD</text>
+  <text x="400" y="672" font-family="Georgia,serif" font-size="10" fill="${p[1]}" text-anchor="middle" letter-spacing="3" opacity="0.6">SVG • PNG • DXF • EPS • Commercial License</text>
+  <circle cx="400" cy="750" r="4" fill="${p[1]}" opacity="0.6"/>
+  <circle cx="374" cy="750" r="2.5" fill="${p[1]}" opacity="0.3"/>
+  <circle cx="426" cy="750" r="2.5" fill="${p[1]}" opacity="0.3"/>
+</svg>`;
+
+        // Attach SVG file using raw multipart (same working pattern)
+        const boundary="----HoJFileBoundary"+Date.now().toString(36);
+        const fname="hoj_"+lid+"_"+keyword.replace(/[^a-z0-9]/gi,"_").slice(0,20)+".svg";
+        const svgBytes=Buffer.from(svg,"utf8");
+        const parts=[
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fname}"\r\nContent-Type: image/svg+xml\r\n\r\n`,
+          svgBytes,
+          `\r\n--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${fname}\r\n--${boundary}--\r\n`,
+        ];
+        const body=Buffer.concat(parts.map(p=>typeof p==="string"?Buffer.from(p):p));
+        const fileRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{
+          method:"POST",
+          headers:{
+            "Content-Type":`multipart/form-data; boundary=${boundary}`,
+            "Content-Length":body.length.toString(),
+            Authorization:"Bearer "+t,
+            "x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")
+          },
+          body
+        });
+        const fileText=await fileRes.text();
+        let fileData;try{fileData=JSON.parse(fileText);}catch{fileData={raw:fileText};}
+
+        if(fileRes.ok){
+          results.attached.push({listing_id:lid,file_id:fileData.listing_file_id,title:title.slice(0,50)});
+          console.log("[attach-files] ✅",lid,fileData.listing_file_id);
+        }else{
+          results.failed.push({listing_id:lid,status:fileRes.status,error:fileData.error||fileText.slice(0,80)});
+          console.error("[attach-files] ❌",lid,fileRes.status,fileText.slice(0,120));
+        }
+        await new Promise(r=>setTimeout(r,300));
+      }catch(e){
+        results.skipped.push({listing_id:lid,error:e.message});
+        console.error("[attach-files] ERR",lid,e.message);
+      }
+    }
+
+    res.json({
+      total:listings.length,
+      attached:results.attached.length,
+      failed:results.failed.length,
+      skipped:results.skipped.length,
+      failures:results.failed.slice(0,5),
+      sample:results.attached.slice(0,5).map(r=>r.title)
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
