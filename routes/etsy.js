@@ -377,6 +377,112 @@ etsyRouter.post("/upload-images",async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+etsyRouter.post("/update-listings",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    const limit=parseInt(req.body?.limit)||50;
+    const offset=parseInt(req.body?.offset)||0;
+
+    // Fetch active listings
+    let listings=[];
+    for(let off=offset;off<offset+limit;off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+      if(!r.ok)break;
+      const d=await r.json();
+      const batch=d.results||[];
+      listings=[...listings,...batch];
+      if(batch.length<100||listings.length>=limit)break;
+    }
+    listings=listings.slice(0,limit);
+    console.log("[update-listings] Processing",listings.length,"listings");
+
+    const results={updated:[],failed:[],skipped:[]};
+
+    for(const listing of listings){
+      const lid=listing.listing_id;
+      const rawTitle=listing.title||"Digital Art Print";
+      // Extract keyword from existing title — strip generic suffixes
+      const keyword=rawTitle
+        .replace(/\s*\|\s*.*/g,"")
+        .replace(/SVG Digital Download/gi,"")
+        .replace(/Digital Art Print/gi,"")
+        .replace(/Instant Download/gi,"")
+        .replace(/Digital Download/gi,"")
+        .replace(/Wall Art/gi,"")
+        .trim()||"Digital Art Print";
+
+      try{
+        // Call Claude to generate SEO-optimized content
+        const ANTHROPIC_KEY=process.env.ANTHROPIC_API_KEY||"";
+        const prompt=`You are an expert Etsy SEO copywriter. Generate optimized content for a digital art print listing about: "${keyword}"
+
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "title": "SEO title under 140 chars, include primary keyword + format (SVG PNG PDF) + use case + brand benefit",
+  "description": "400-500 char description: lead with keyword benefit, mention instant download, file formats (SVG PNG DXF EPS), print sizes, commercial license included. Warm enthusiastic tone.",
+  "tags": ["tag1","tag2",...] // exactly 13 tags, each max 20 chars, relevant to keyword, no special chars
+}`;
+
+        const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01"},
+          body:JSON.stringify({
+            model:"claude-haiku-4-5-20251001",
+            max_tokens:600,
+            messages:[{role:"user",content:prompt}]
+          })
+        });
+        const aiData=await aiRes.json();
+        const raw=aiData.content?.[0]?.text||"{}";
+        let content;
+        try{content=JSON.parse(raw.replace(/```json|```/g,"").trim());}
+        catch{console.error("[update-listings] JSON parse fail",lid,raw.slice(0,100));results.skipped.push({listing_id:lid,reason:"ai_parse_fail"});continue;}
+
+        const newTitle=(content.title||rawTitle).slice(0,140);
+        const newDesc=(content.description||listing.description||"Premium digital download. Instant access.").slice(0,2000);
+        const rawTags=Array.isArray(content.tags)?content.tags:[];
+        const newTags=[...new Set(
+          rawTags.map(t=>String(t).trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").slice(0,20)).filter(Boolean)
+        )].slice(0,13);
+
+        // PATCH listing on Etsy
+        const patchRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
+          method:"PATCH",
+          headers:authH(t),
+          body:JSON.stringify({
+            title:newTitle,
+            description:newDesc,
+            tags:newTags
+          })
+        });
+        const patchData=await patchRes.json();
+        if(patchRes.ok){
+          results.updated.push({listing_id:lid,title:newTitle.slice(0,60),tags_count:newTags.length});
+          console.log("[update-listings] ✅",lid,newTitle.slice(0,50));
+        }else{
+          results.failed.push({listing_id:lid,status:patchRes.status,error:patchData.error});
+          console.error("[update-listings] ❌",lid,patchRes.status,JSON.stringify(patchData).slice(0,100));
+        }
+        // Rate limit breathing room — Etsy allows ~5 req/sec
+        await new Promise(r=>setTimeout(r,500));
+      }catch(e){
+        results.skipped.push({listing_id:lid,error:e.message});
+        console.error("[update-listings] ERR",lid,e.message);
+      }
+    }
+
+    res.json({
+      total:listings.length,
+      updated:results.updated.length,
+      failed:results.failed.length,
+      skipped:results.skipped.length,
+      sample_titles:results.updated.slice(0,5).map(r=>r.title),
+      failures:results.failed.slice(0,3)
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
