@@ -539,7 +539,7 @@ etsyRouter.post("/attach-files",async(req,res)=>{
           ["#1a2f1a","#7ec850","#f0fff0"],["#2e1503","#d4813a","#fff5e6"],
         ];
         const p=palettes[lid%palettes.length];
-        const safeKw=keyword.replace(/[<>&"]/g,c=>{"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]||c);
+        const safeKw=keyword.replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"})[c]||c);
         const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
