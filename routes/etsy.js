@@ -295,7 +295,7 @@ etsyRouter.post("/upload-images",async(req,res)=>{
       const title=listing.title||"Digital Art Print";
       const keyword=title.split("|")[0].trim().slice(0,40);
       const p=palettes[i%palettes.length];
-      const safeKw=keyword.replace(/[<>&"]/g,c=({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"})[c]||c);
+      const safeKw=keyword.replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"})[c]||c);
 
       try{
         // Generate unique SVG for this listing
