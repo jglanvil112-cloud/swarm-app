@@ -241,7 +241,28 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
     state: "active",
   };
 
-  console.log(`[publish] Creating Etsy listing: "${title.slice(0,60)}..."`);
+  // ── DIAGNOSTIC PAYLOAD LOG ──────────────────────────────────────────────────
+  const diagPayload = {
+    shop_id:     ETSY_SHOP_ID,
+    shop_id_type: typeof ETSY_SHOP_ID,
+    token_preview: _liveToken ? _liveToken.slice(0,20)+"..." : "NONE",
+    auth_header_keys: Object.keys({ ...authH, "Content-Type": "application/json", "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_PUB}` }),
+    listing_body: {
+      ...listingBody,
+      price_type: typeof listingBody.price,
+      taxonomy_id: listingBody.taxonomy_id,
+      taxonomy_id_type: typeof listingBody.taxonomy_id,
+      tags_count: listingBody.tags.length,
+      tags_array: listingBody.tags,
+      tags_longest: Math.max(...listingBody.tags.map(t=>t.length)),
+      who_made: listingBody.who_made,
+      is_digital: listingBody.is_digital,
+      type: listingBody.type,
+      state: listingBody.state,
+    }
+  };
+  console.log("[publish:DIAG] RAW PAYLOAD:", JSON.stringify(diagPayload, null, 2));
+
   const createRes  = await fetch(
     `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings`,
     { method: "POST", headers: { ...authH, "Content-Type": "application/json", "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_PUB}` }, body: JSON.stringify(listingBody) }
@@ -250,12 +271,27 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
   let createJson;
   try { createJson = JSON.parse(createText); } catch { createJson = { raw: createText }; }
 
+  // ── FULL RESPONSE LOG — always, regardless of status ────────────────────────
+  console.log("[publish:RESP] HTTP status:", createRes.status);
+  console.log("[publish:RESP] Raw body:", createText.slice(0, 1000));
+  console.log("[publish:RESP] listing_id:", createJson.listing_id, "| type:", typeof createJson.listing_id);
+  console.log("[publish:RESP] error field:", createJson.error || "(none)");
+  console.log("[publish:RESP] full JSON keys:", Object.keys(createJson).join(", "));
+
   if (!createRes.ok) {
-    console.error(`[publish] Create listing failed ${createRes.status}:`, createText.slice(0, 400));
-    return { error: true, status: createRes.status, body: createJson };
+    console.error(`[publish:FAIL] Create listing FAILED ${createRes.status}:`, JSON.stringify(createJson));
+    console.error("[publish:FAIL] Payload was:", JSON.stringify(listingBody));
+    return { error: true, status: createRes.status, body: createJson, payload_sent: listingBody };
   }
 
+  // ── Detect silent failure: 2xx but no listing_id ────────────────────────────
   const listingId = createJson.listing_id;
+  if (!listingId) {
+    console.error("[publish:SILENT_FAIL] Got 2xx but listing_id is undefined/null");
+    console.error("[publish:SILENT_FAIL] Full response:", JSON.stringify(createJson));
+    console.error("[publish:SILENT_FAIL] Payload was:", JSON.stringify(listingBody));
+    return { error: "listing_id_missing", status: createRes.status, body: createJson, payload_sent: listingBody };
+  }
   console.log(`[publish] ✅ Listing created: ${listingId}`);
 
   const svgContent = generateSVG(keyword, niche);
