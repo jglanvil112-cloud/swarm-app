@@ -225,6 +225,22 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
     return { error: "ETSY_SHOP_ID_MISSING" };
   }
 
+  // Fetch return_policy_id dynamically so it stays current
+  let returnPolicyId = 1; // default from active listing 4512221027
+  try {
+    const rpRes = await fetch(
+      `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/return-policies`,
+      { headers: { ...authH, "x-api-key": `${ETSY_KEY}:${ETSY_SECRET_PUB}` } }
+    );
+    if (rpRes.ok) {
+      const rpData = await rpRes.json();
+      const policies = rpData.results || rpData;
+      if (Array.isArray(policies) && policies.length) returnPolicyId = policies[0].return_policy_id;
+      else if (policies.return_policy_id) returnPolicyId = policies.return_policy_id;
+    }
+    console.log(`[publish] return_policy_id resolved: ${returnPolicyId}`);
+  } catch(e) { console.warn("[publish] return_policy fetch failed, using default:", returnPolicyId); }
+
   const listingBody = {
     quantity: 999,
     title: title.slice(0, 140),
@@ -236,9 +252,9 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
     tags,
     type: "download",
     is_digital: true,
-    
     should_auto_renew: true,
     state: "active",
+    return_policy_id: returnPolicyId,
   };
 
   // ── DIAGNOSTIC PAYLOAD LOG ──────────────────────────────────────────────────
