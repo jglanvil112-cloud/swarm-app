@@ -125,47 +125,43 @@ function generateSVG(keyword, niche) {
 }
 
 
-// ── Generate PNG image for Etsy listing ───────────────────────────────────────
+// ── Generate PNG image for Etsy listing (raw multipart — same pattern as attachFileToListing) ──
 async function generateAndUploadListingImage(listingId, keyword, niche, token) {
-  const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
+  const ETSY_KEY    = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
   const ETSY_SECRET = process.env.ETSY_SECRET || "4omdt27v26";
   try {
-    // Generate unique SVG for this keyword
-    const svg = generateSVG(keyword, niche);
+    const svg    = generateSVG(keyword, niche);
     const svgBuf = Buffer.from(svg, "utf8");
-
-    // Convert SVG → PNG using sharp
     const {default: sharp} = await import("sharp");
     const pngBuf = await sharp(svgBuf, { density: 150 }).png().toBuffer();
 
-    // Upload PNG via form-data multipart
-    const {default: FormData} = await import("form-data");
-    const fd = new FormData();
-    fd.append("image", pngBuf, {
-      filename: `hoj_${listingId}.png`,
-      contentType: "image/png",
-      knownLength: pngBuf.length
-    });
-    fd.append("rank", 1);
+    // Raw multipart — same pattern that works in attachFileToListing
+    const boundary = "----HoJImgBoundary" + Date.now().toString(36);
+    const filename  = `hoj_${listingId}.png`;
+    const parts = [
+      `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${filename}"\r\nContent-Type: image/png\r\n\r\n`,
+      pngBuf,
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="rank"\r\n\r\n1\r\n--${boundary}--\r\n`,
+    ];
+    const body = Buffer.concat(parts.map(p => typeof p === "string" ? Buffer.from(p) : p));
+    const headers = {
+      "Content-Type":   `multipart/form-data; boundary=${boundary}`,
+      "Content-Length": body.length.toString(),
+      Authorization:    `Bearer ${token}`,
+      "x-api-key":      ETSY_KEY + (ETSY_SECRET ? ":" + ETSY_SECRET : ""),
+    };
 
-    const imgRes = await fetch(
-      `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/images`,
-      {
-        method: "POST",
-        headers: {
-          ...fd.getHeaders(),
-          Authorization: `Bearer ${token}`,
-          "x-api-key": ETSY_KEY + (ETSY_SECRET ? ":" + ETSY_SECRET : ""),
-        },
-        body: fd,
-      }
-    );
-    const imgData = await imgRes.json();
+    const url = `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/images`;
+    const imgRes  = await fetch(url, { method: "POST", headers, body });
+    const imgText = await imgRes.text();
+    let imgData;
+    try { imgData = JSON.parse(imgText); } catch { imgData = { raw: imgText }; }
+
     if (!imgRes.ok) {
-      console.error(`[image] upload FAIL ${listingId} ${imgRes.status}:`, JSON.stringify(imgData).slice(0, 200));
-      return { uploaded: false, error: imgData.error };
+      console.error(`[image] upload FAIL ${listingId} ${imgRes.status}:`, imgText.slice(0, 200));
+      return { uploaded: false, error: imgData.error || imgText.slice(0,100) };
     }
-    console.log(`[image] ✅ uploaded ${listingId} image_id:${imgData.listing_image_id}`);
+    console.log(`[image] ✅ ${listingId} image_id:${imgData.listing_image_id}`);
     return { uploaded: true, listing_image_id: imgData.listing_image_id };
   } catch (e) {
     console.error(`[image] ERR ${listingId}:`, e.message);

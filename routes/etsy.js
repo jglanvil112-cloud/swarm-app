@@ -331,23 +331,33 @@ etsyRouter.post("/upload-images",async(req,res)=>{
         const {default:sharp}=await import("sharp");
         const pngBuf=await sharp(svgBuf,{density:150}).png().toBuffer();
 
-        // Upload via form-data
-        const {default:FD}=await import("form-data");
-        const fd=new FD();
-        fd.append("image",pngBuf,{filename:"hoj_"+lid+".png",contentType:"image/png",knownLength:pngBuf.length});
-        fd.append("rank",1);
+        // Raw multipart — same pattern as working attachFileToListing
+        const boundary="----HoJImgBoundary"+Date.now().toString(36);
+        const fname="hoj_"+lid+".png";
+        const rawParts=[
+          `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${fname}"\r\nContent-Type: image/png\r\n\r\n`,
+          pngBuf,
+          `\r\n--${boundary}\r\nContent-Disposition: form-data; name="rank"\r\n\r\n1\r\n--${boundary}--\r\n`,
+        ];
+        const imgBody=Buffer.concat(rawParts.map(p=>typeof p==="string"?Buffer.from(p):p));
         const imgRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{
           method:"POST",
-          headers:{...fd.getHeaders(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},
-          body:fd
+          headers:{
+            "Content-Type":`multipart/form-data; boundary=${boundary}`,
+            "Content-Length":imgBody.length.toString(),
+            Authorization:"Bearer "+t,
+            "x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")
+          },
+          body:imgBody
         });
-        const imgData=await imgRes.json();
+        const imgText=await imgRes.text();
+        let imgData;try{imgData=JSON.parse(imgText);}catch{imgData={raw:imgText};}
         if(imgRes.ok){
           results.success.push({listing_id:lid,image_id:imgData.listing_image_id,title:title.slice(0,50)});
           console.log("[upload-images] ✅",lid,imgData.listing_image_id);
         }else{
-          results.failed.push({listing_id:lid,status:imgRes.status,error:imgData.error,title:title.slice(0,40)});
-          console.error("[upload-images] ❌",lid,imgRes.status,JSON.stringify(imgData).slice(0,120));
+          results.failed.push({listing_id:lid,status:imgRes.status,error:imgData.error||imgText.slice(0,80),title:title.slice(0,40)});
+          console.error("[upload-images] ❌",lid,imgRes.status,imgText.slice(0,150));
         }
         await new Promise(r=>setTimeout(r,300)); // rate limit breathing room
       }catch(e){
