@@ -205,7 +205,8 @@ etsyRouter.post("/bulk-activate",async(req,res)=>{
           const {default:FormData}=await import("form-data");
           const keyword=(listing.title||"digital art").split("|")[0].trim().slice(0,30);
           // Create a minimal valid PNG (1x1 white pixel) as placeholder — enough for Etsy
-          const png1x1=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI6QAAAABJRU5ErkJggg==","base64");
+          // Valid 200x200 white PNG — meets Etsy minimum image requirements
+          const png1x1=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAIAAAAiOjnJAAABcUlEQVR42u3SMQ0AAAzDsPIn3aKYtMOGECWFA5EAY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGItvBsLKBp6arxoqAAAAAElFTkSuQmCC","base64");
           const imgForm=new FormData();
           imgForm.append("image",png1x1,{filename:"listing_"+lid+".png",contentType:"image/png"});
           imgForm.append("rank","1");
