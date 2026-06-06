@@ -968,7 +968,6 @@ etsyRouter.post("/add-variations",async(req,res)=>{
         }
         const basePrice=listing.price?listing.price.amount/listing.price.divisor:7.99;
         const products=sizeOptions.map((opt,idx)=>({
-          sku:"HOJ-"+lid+"-S"+idx,
           property_values:[{property_id:200,property_name:"Size",scale_id:null,value_ids:[],values:[opt.value]}],
           offerings:[{price:basePrice,quantity:999,is_enabled:true}]
         }));
@@ -979,7 +978,7 @@ etsyRouter.post("/add-variations",async(req,res)=>{
         const invData=await invRes.json();
         if(invRes.ok){results.updated.push({listing_id:lid});console.log("[add-variations] ✅",lid);}
         else{results.failed.push({listing_id:lid,status:invRes.status,error:invData.error||JSON.stringify(invData).slice(0,100)});console.error("[add-variations] ❌",lid,invRes.status,JSON.stringify(invData).slice(0,120));}
-        await new Promise(r=>setTimeout(r,300));
+        await new Promise(r=>setTimeout(r,600));
       }catch(e){results.failed.push({listing_id:lid,error:e.message});}
     }
     res.json({total:listings.length,updated:results.updated.length,failed:results.failed.length,skipped:results.skipped.length,failures:results.failed.slice(0,5)});
