@@ -257,6 +257,116 @@ etsyRouter.post("/bulk-activate",async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+etsyRouter.post("/upload-images",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
+    const ETSY_SECRET=process.env.ETSY_SECRET||"";
+    const limit=parseInt(req.body?.limit)||50;
+    const offset=parseInt(req.body?.offset)||0;
+
+    // Fetch active listings
+    let allListings=[];
+    for(let off=offset;off<offset+limit;off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+      if(!r.ok){console.error("[upload-images] fetch FAIL",r.status);break;}
+      const d=await r.json();
+      const batch=d.results||[];
+      allListings=[...allListings,...batch];
+      if(batch.length<100||allListings.length>=limit)break;
+    }
+    console.log("[upload-images] Processing",allListings.length,"listings");
+
+    const results={success:[],failed:[],skipped:[]};
+
+    // Color palettes per listing for variety
+    const palettes=[
+      ["#1a1a2e","#e2b04a","#f5f0e8"],["#0d1b2a","#c9a84c","#f8f4ed"],
+      ["#16213e","#d4a843","#fffff0"],["#0f0e17","#e8c547","#fffffe"],
+      ["#1c1c3a","#f0c040","#faf7f0"],["#2d1b33","#e85d9a","#fff0f5"],
+      ["#0a2342","#2ca58d","#f0fffc"],["#1b2838","#66c0f4","#f0f8ff"],
+      ["#1a2f1a","#7ec850","#f0fff0"],["#2e1503","#d4813a","#fff5e6"],
+    ];
+
+    for(let i=0;i<allListings.length;i++){
+      const listing=allListings[i];
+      const lid=listing.listing_id;
+      const title=listing.title||"Digital Art Print";
+      const keyword=title.split("|")[0].trim().slice(0,40);
+      const p=palettes[i%palettes.length];
+      const safeKw=keyword.replace(/[<>&"]/g,c=({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"})[c]||c);
+
+      try{
+        // Generate unique SVG for this listing
+        const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bg${i}" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:${p[0]};stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:${p[0]}cc;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="gold${i}" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:${p[1]};stop-opacity:0.6"/>
+      <stop offset="50%" style="stop-color:${p[1]};stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:${p[1]};stop-opacity:0.6"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg${i})"/>
+  <rect x="40" y="40" width="720" height="520" fill="none" stroke="${p[1]}" stroke-width="2" opacity="0.5"/>
+  <rect x="55" y="55" width="690" height="490" fill="none" stroke="${p[1]}" stroke-width="0.5" opacity="0.2"/>
+  <line x1="80" y1="170" x2="720" y2="170" stroke="url(#gold${i})" stroke-width="1.5"/>
+  <line x1="80" y1="430" x2="720" y2="430" stroke="url(#gold${i})" stroke-width="1.5"/>
+  <text x="400" y="110" font-family="Georgia,serif" font-size="11" fill="${p[1]}" text-anchor="middle" letter-spacing="6" opacity="0.8">HOUSE OF JREYM ✦ DIGITAL PRINTS</text>
+  <text x="400" y="310" font-family="Georgia,serif" font-size="${Math.max(24,Math.min(52,Math.floor(800/safeKw.length*1.8)))}px" font-weight="bold" fill="${p[2]}" text-anchor="middle" dominant-baseline="middle">${safeKw}</text>
+  <text x="400" y="480" font-family="Georgia,serif" font-size="12" fill="${p[1]}" text-anchor="middle" letter-spacing="5" opacity="0.9">INSTANT DIGITAL DOWNLOAD</text>
+  <text x="400" y="505" font-family="Georgia,serif" font-size="10" fill="${p[1]}" text-anchor="middle" letter-spacing="3" opacity="0.6">SVG • PNG • DXF • EPS</text>
+  <circle cx="400" cy="560" r="4" fill="${p[1]}" opacity="0.6"/>
+  <circle cx="374" cy="560" r="2.5" fill="${p[1]}" opacity="0.3"/>
+  <circle cx="426" cy="560" r="2.5" fill="${p[1]}" opacity="0.3"/>
+</svg>`;
+
+        const svgBuf=Buffer.from(svg,"utf8");
+
+        // Convert SVG→PNG using sharp
+        const {default:sharp}=await import("sharp");
+        const pngBuf=await sharp(svgBuf,{density:150}).png().toBuffer();
+
+        // Upload via form-data
+        const {default:FD}=await import("form-data");
+        const fd=new FD();
+        fd.append("image",pngBuf,{filename:"hoj_"+lid+".png",contentType:"image/png",knownLength:pngBuf.length});
+        fd.append("rank",1);
+        const imgRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{
+          method:"POST",
+          headers:{...fd.getHeaders(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},
+          body:fd
+        });
+        const imgData=await imgRes.json();
+        if(imgRes.ok){
+          results.success.push({listing_id:lid,image_id:imgData.listing_image_id,title:title.slice(0,50)});
+          console.log("[upload-images] ✅",lid,imgData.listing_image_id);
+        }else{
+          results.failed.push({listing_id:lid,status:imgRes.status,error:imgData.error,title:title.slice(0,40)});
+          console.error("[upload-images] ❌",lid,imgRes.status,JSON.stringify(imgData).slice(0,120));
+        }
+        await new Promise(r=>setTimeout(r,300)); // rate limit breathing room
+      }catch(e){
+        results.skipped.push({listing_id:lid,error:e.message});
+        console.error("[upload-images] ERR",lid,e.message);
+      }
+    }
+
+    res.json({
+      total_processed:allListings.length,
+      success:results.success.length,
+      failed:results.failed.length,
+      skipped:results.skipped.length,
+      failures:results.failed.slice(0,5),
+      success_sample:results.success.slice(0,5)
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
