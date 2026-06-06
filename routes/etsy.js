@@ -197,31 +197,25 @@ etsyRouter.post("/bulk-activate",async(req,res)=>{
     for(const listing of batch){
       const lid=listing.listing_id;
       try{
-        // Step A: upload a PNG image (required by Etsy to activate)
+        // Step A: upload PNG image to satisfy Etsy requirement
         let imageOk=false;
         try{
-          // Generate a simple 800x800 PNG via canvas-like SVG→PNG approach
-          // Use Etsy image upload endpoint with a generated PNG buffer
-          const {default:FormData}=await import("form-data");
-          const keyword=(listing.title||"digital art").split("|")[0].trim().slice(0,30);
-          // Create a minimal valid PNG (1x1 white pixel) as placeholder — enough for Etsy
-          // Valid 200x200 white PNG — meets Etsy minimum image requirements
-          const png1x1=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAIAAAAiOjnJAAABcUlEQVR42u3SMQ0AAAzDsPIn3aKYtMOGECWFA5EAY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGItvBsLKBp6arxoqAAAAAElFTkSuQmCC","base64");
-          const imgForm=new FormData();
-          imgForm.append("image",png1x1,{filename:"listing_"+lid+".png",contentType:"image/png"});
-          imgForm.append("rank","1");
+          const {default:FD}=await import("form-data");
+          const pngBuf=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAIAAAAiOjnJAAABcUlEQVR42u3SMQ0AAAzDsPIn3aKYtMOGECWFA5EAY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbHAWBgLY4GxMBbGAmNhLIwFxsJYGAuMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGAtjYSwwFsbCWGAsjIWxwFgYC2OBsTAWxgJjYSyMBcbCWBgLjIWxMBYYC2NhLDAWxsJYYCyMhbEwFhgLY2EsMBbGwlhgLIyFscBYGAtjgbEwFsYCY2EsjAXGwlgYC4yFsTAWGItvBsLKBp6arxoqAAAAAElFTkSuQmCC","base64");
+          const fd=new FD();
+          fd.append("image",pngBuf,{filename:"hoj_"+lid+".png",contentType:"image/png",knownLength:pngBuf.length});
+          fd.append("rank",1);
           const imgRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{
             method:"POST",
-            headers:{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:""),...imgForm.getHeaders()},
-            body:imgForm
+            headers:{...fd.getHeaders(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},
+            body:fd
           });
           const imgData=await imgRes.json();
           imageOk=imgRes.ok;
-          if(!imgRes.ok)console.error("[bulk-activate] image upload failed",lid,imgRes.status,JSON.stringify(imgData).slice(0,120));
-          else console.log("[bulk-activate] image uploaded",lid,imgData.listing_image_id);
-        }catch(imgErr){console.error("[bulk-activate] image err",lid,imgErr.message);}
-
-        // Step B: PATCH to active
+          if(!imgRes.ok)console.error("[bulk-activate] img FAIL",lid,imgRes.status,JSON.stringify(imgData).slice(0,200));
+          else console.log("[bulk-activate] img OK",lid,imgData.listing_image_id);
+        }catch(e){console.error("[bulk-activate] img ERR",lid,e.message);}
+                // Step B: PATCH to active
         const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
           method:"PATCH",
           headers:authH(t),
