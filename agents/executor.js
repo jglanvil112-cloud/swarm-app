@@ -124,6 +124,55 @@ function generateSVG(keyword, niche) {
 </svg>`;
 }
 
+
+// ── Generate PNG image for Etsy listing ───────────────────────────────────────
+async function generateAndUploadListingImage(listingId, keyword, niche, token) {
+  const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
+  const ETSY_SECRET = process.env.ETSY_SECRET || "4omdt27v26";
+  try {
+    // Generate unique SVG for this keyword
+    const svg = generateSVG(keyword, niche);
+    const svgBuf = Buffer.from(svg, "utf8");
+
+    // Convert SVG → PNG using sharp
+    const {default: sharp} = await import("sharp");
+    const pngBuf = await sharp(svgBuf, { density: 150 }).png().toBuffer();
+
+    // Upload PNG via form-data multipart
+    const {default: FormData} = await import("form-data");
+    const fd = new FormData();
+    fd.append("image", pngBuf, {
+      filename: `hoj_${listingId}.png`,
+      contentType: "image/png",
+      knownLength: pngBuf.length
+    });
+    fd.append("rank", 1);
+
+    const imgRes = await fetch(
+      `https://openapi.etsy.com/v3/application/shops/${ETSY_SHOP_ID}/listings/${listingId}/images`,
+      {
+        method: "POST",
+        headers: {
+          ...fd.getHeaders(),
+          Authorization: `Bearer ${token}`,
+          "x-api-key": ETSY_KEY + (ETSY_SECRET ? ":" + ETSY_SECRET : ""),
+        },
+        body: fd,
+      }
+    );
+    const imgData = await imgRes.json();
+    if (!imgRes.ok) {
+      console.error(`[image] upload FAIL ${listingId} ${imgRes.status}:`, JSON.stringify(imgData).slice(0, 200));
+      return { uploaded: false, error: imgData.error };
+    }
+    console.log(`[image] ✅ uploaded ${listingId} image_id:${imgData.listing_image_id}`);
+    return { uploaded: true, listing_image_id: imgData.listing_image_id };
+  } catch (e) {
+    console.error(`[image] ERR ${listingId}:`, e.message);
+    return { uploaded: false, error: e.message };
+  }
+}
+
 // ── Upload SVG file to Etsy listing ───────────────────────────────────────────────
 async function attachFileToListing(listingId, svgContent, filename) {
   const ETSY_KEY   = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
@@ -314,6 +363,10 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
   const filename   = `hoj_${keyword.replace(/\s+/g,"_").toLowerCase().slice(0,30)}_${listingId}.svg`;
 
   const attachResult = await attachFileToListing(listingId, svgContent, filename);
+
+  // Upload unique PNG image for this listing
+  const imageResult = await generateAndUploadListingImage(listingId, keyword, niche, _liveToken);
+  console.log(`[publish] image upload:`, JSON.stringify(imageResult));
 
   const outputRow = await saveAgentOutput("AISHA", "publish_etsy_listing", {
     listing_id:      listingId,
