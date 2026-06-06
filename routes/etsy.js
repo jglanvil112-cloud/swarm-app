@@ -165,15 +165,19 @@ etsyRouter.post("/bulk-activate",async(req,res)=>{
     const t=await getEtsyToken();
     if(!t)return res.status(401).json({error:"Not authenticated"});
 
-    // 1. Fetch all draft listings (paginate up to 500)
+    // 1. Fetch all draft listings — Etsy v3 uses state param on /listings/inactive
+    //    Draft listings created without OAuth appear as "inactive" in the API
     let allDrafts=[];
-    for(let offset=0;offset<500;offset+=100){
-      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/draft?limit=100&offset="+offset,{headers:authH(t)});
-      if(!r.ok)break;
-      const d=await r.json();
-      const batch=d.results||[];
-      allDrafts=[...allDrafts,...batch];
-      if(batch.length<100)break;
+    for(const stateParam of ["draft","inactive"]){
+      for(let offset=0;offset<500;offset+=100){
+        const url=ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings?state="+stateParam+"&limit=100&offset="+offset;
+        const r=await fetch(url,{headers:authH(t)});
+        if(!r.ok){console.error("[bulk-activate] "+stateParam+" fetch failed:",r.status,await r.text().catch(()=>"")); break;}
+        const d=await r.json();
+        const batch=(d.results||[]).filter(l=>l.listing_id&&!allDrafts.find(e=>e.listing_id===l.listing_id));
+        allDrafts=[...allDrafts,...batch];
+        if(batch.length<100)break;
+      }
     }
     console.log("[bulk-activate] Found "+allDrafts.length+" drafts");
 
