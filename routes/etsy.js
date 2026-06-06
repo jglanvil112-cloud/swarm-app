@@ -614,6 +614,356 @@ etsyRouter.post("/attach-files",async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/etsy/add-images — upload 5 mockup image variations per listing
+// ─────────────────────────────────────────────────────────────────────────────
+etsyRouter.post("/add-images",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    const limit=parseInt(req.body?.limit)||50;
+    const offset=parseInt(req.body?.offset)||0;
+    const imagesPerListing=parseInt(req.body?.images_per_listing)||5;
+    const skipExisting=req.body?.skip_existing!==false;
+
+    let listings=[];
+    for(let off=offset;off<offset+limit;off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off+"&includes=Images",{headers:authH(t)});
+      if(!r.ok)break;
+      const d=await r.json();
+      const batch=d.results||[];
+      listings=[...listings,...batch];
+      if(batch.length<100||listings.length>=limit)break;
+    }
+    listings=listings.slice(0,limit);
+    console.log("[add-images] Processing",listings.length,"listings, up to",imagesPerListing,"images each");
+
+    const results={success:[],failed:[],skipped:[]};
+
+    // 5 mockup scene generators — each returns an SVG string
+    function makeMockups(keyword,listing_id){
+      const idx=listing_id%10;
+      const palettes=[
+        ["#1a1a2e","#e2b04a","#f5f0e8"],["#0d1b2a","#c9a84c","#f8f4ed"],
+        ["#16213e","#d4a843","#fffff0"],["#0f0e17","#e8c547","#fffffe"],
+        ["#1c1c3a","#f0c040","#faf7f0"],["#2d1b33","#e85d9a","#fff0f5"],
+        ["#0a2342","#2ca58d","#f0fffc"],["#1b2838","#66c0f4","#f0f8ff"],
+        ["#1a2f1a","#7ec850","#f0fff0"],["#2e1503","#d4813a","#fff5e6"],
+      ];
+      const p=palettes[idx];
+      const kw=keyword.replace(/[<>&"]/g,c=({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"})[c]||c);
+      const fs=Math.max(22,Math.min(52,Math.floor(900/Math.max(kw.length,1))));
+
+      // Scene 1: Product hero — dark luxury brand shot
+      const s1=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" width="2000" height="2000">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:${p[0]}"/><stop offset="100%" style="stop-color:${p[0]}cc"/></linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:${p[1]};stop-opacity:0.4"/><stop offset="50%" style="stop-color:${p[1]};stop-opacity:1"/><stop offset="100%" style="stop-color:${p[1]};stop-opacity:0.4"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="8" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="2000" height="2000" fill="url(#bg)"/>
+  <rect x="100" y="100" width="1800" height="1800" fill="none" stroke="${p[1]}" stroke-width="3" opacity="0.4"/>
+  <rect x="140" y="140" width="1720" height="1720" fill="none" stroke="${p[1]}" stroke-width="1" opacity="0.15"/>
+  <line x1="160" y1="480" x2="1840" y2="480" stroke="url(#gold)" stroke-width="2"/>
+  <line x1="160" y1="1520" x2="1840" y2="1520" stroke="url(#gold)" stroke-width="2"/>
+  <text x="1000" y="300" font-family="Georgia,serif" font-size="26" fill="${p[1]}" text-anchor="middle" letter-spacing="12" opacity="0.85">HOUSE OF JREYM</text>
+  <text x="1000" y="360" font-family="Georgia,serif" font-size="16" fill="${p[1]}" text-anchor="middle" letter-spacing="8" opacity="0.5">✦ DIGITAL PRINTS ✦</text>
+  <text x="1000" y="1050" font-family="Georgia,serif" font-size="${fs*2.5}px" font-weight="bold" fill="${p[2]}" text-anchor="middle" dominant-baseline="middle" filter="url(#glow)">${kw}</text>
+  <text x="1000" y="1640" font-family="Georgia,serif" font-size="28" fill="${p[1]}" text-anchor="middle" letter-spacing="10" opacity="0.9">INSTANT DIGITAL DOWNLOAD</text>
+  <text x="1000" y="1690" font-family="Georgia,serif" font-size="22" fill="${p[1]}" text-anchor="middle" letter-spacing="5" opacity="0.6">SVG • PNG • DXF • EPS • PDF</text>
+  <text x="1000" y="1750" font-family="Georgia,serif" font-size="18" fill="${p[1]}" text-anchor="middle" letter-spacing="4" opacity="0.5">COMMERCIAL LICENSE INCLUDED</text>
+</svg>`;
+
+      // Scene 2: Wall mockup — print framed on wall
+      const s2=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" width="2000" height="2000">
+  <rect width="2000" height="2000" fill="#e8e0d4"/>
+  <rect x="0" y="1400" width="2000" height="600" fill="#d4c9b8"/>
+  <rect x="600" y="200" width="800" height="1100" fill="#f5f0eb" rx="4"/>
+  <rect x="620" y="220" width="760" height="1060" fill="${p[0]}" rx="2"/>
+  <rect x="640" y="240" width="720" height="1020" fill="none" stroke="${p[1]}" stroke-width="2" opacity="0.4"/>
+  <text x="1000" y="680" font-family="Georgia,serif" font-size="22" fill="${p[1]}" text-anchor="middle" letter-spacing="6" opacity="0.7">HOUSE OF JREYM</text>
+  <text x="1000" y="780" font-family="Georgia,serif" font-size="${Math.max(18,Math.min(44,Math.floor(700/Math.max(kw.length,1))))}px" font-weight="bold" fill="${p[2]}" text-anchor="middle" dominant-baseline="middle">${kw}</text>
+  <text x="1000" y="1150" font-family="Georgia,serif" font-size="16" fill="${p[1]}" text-anchor="middle" opacity="0.7">DIGITAL DOWNLOAD</text>
+  <rect x="590" y="190" width="820" height="30" fill="#c0b8a8" rx="2"/>
+  <rect x="590" y="190" width="820" height="12" fill="#d8d0c0"/>
+  <rect x="590" y="1290" width="820" height="20" fill="#c0b8a8"/>
+  <text x="1000" y="1600" font-family="Arial,sans-serif" font-size="28" fill="#8a7a6a" text-anchor="middle" opacity="0.7">Print this instantly at home or at your local print shop</text>
+</svg>`;
+
+      // Scene 3: Format showcase — what files you get
+      const s3=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" width="2000" height="2000">
+  <rect width="2000" height="2000" fill="#faf8f5"/>
+  <rect x="0" y="0" width="2000" height="300" fill="${p[0]}"/>
+  <text x="1000" y="120" font-family="Georgia,serif" font-size="42" fill="${p[1]}" text-anchor="middle" letter-spacing="8">WHAT YOU GET</text>
+  <text x="1000" y="200" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">${kw}</text>
+  <rect x="80" y="360" width="520" height="620" fill="${p[0]}" rx="12"/>
+  <text x="340" y="580" font-family="Georgia,serif" font-size="64" fill="${p[1]}" text-anchor="middle">SVG</text>
+  <text x="340" y="660" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.8">Scalable Vector</text>
+  <text x="340" y="700" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.6">Any size, no blur</text>
+  <rect x="740" y="360" width="520" height="620" fill="${p[0]}" rx="12"/>
+  <text x="1000" y="580" font-family="Georgia,serif" font-size="64" fill="${p[1]}" text-anchor="middle">PNG</text>
+  <text x="1000" y="660" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.8">High Resolution</text>
+  <text x="1000" y="700" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.6">Print-ready 300 DPI</text>
+  <rect x="1400" y="360" width="520" height="620" fill="${p[0]}" rx="12"/>
+  <text x="1660" y="580" font-family="Georgia,serif" font-size="64" fill="${p[1]}" text-anchor="middle">PDF</text>
+  <text x="1660" y="660" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.8">Print File</text>
+  <text x="1660" y="700" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.6">Professional quality</text>
+  <rect x="80" y="1040" width="520" height="560" fill="${p[0]}" rx="12" opacity="0.85"/>
+  <text x="340" y="1270" font-family="Georgia,serif" font-size="64" fill="${p[1]}" text-anchor="middle">DXF</text>
+  <text x="340" y="1350" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.8">Cricut / Silhouette</text>
+  <rect x="740" y="1040" width="520" height="560" fill="${p[0]}" rx="12" opacity="0.85"/>
+  <text x="1000" y="1270" font-family="Georgia,serif" font-size="64" fill="${p[1]}" text-anchor="middle">EPS</text>
+  <text x="1000" y="1350" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.8">Illustrator Ready</text>
+  <rect x="1400" y="1040" width="520" height="560" fill="${p[0]}" rx="12" opacity="0.85"/>
+  <text x="1660" y="1270" font-family="Georgia,serif" font-size="64" fill="${p[1]}" text-anchor="middle">✓</text>
+  <text x="1660" y="1350" font-family="Georgia,serif" font-size="22" fill="${p[2]}" text-anchor="middle" opacity="0.8">Commercial</text>
+  <text x="1660" y="1390" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.7">License</text>
+  <text x="1000" y="1900" font-family="Georgia,serif" font-size="28" fill="#666" text-anchor="middle">Instant download after purchase — no waiting!</text>
+</svg>`;
+
+      // Scene 4: Size guide
+      const s4=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" width="2000" height="2000">
+  <rect width="2000" height="2000" fill="${p[0]}"/>
+  <text x="1000" y="120" font-family="Georgia,serif" font-size="40" fill="${p[1]}" text-anchor="middle" letter-spacing="10">PRINT SIZE GUIDE</text>
+  <text x="1000" y="180" font-family="Georgia,serif" font-size="22" fill="${p[2]}" text-anchor="middle" opacity="0.7">${kw}</text>
+  <line x1="100" y1="220" x2="1900" y2="220" stroke="${p[1]}" stroke-width="1" opacity="0.3"/>
+  <rect x="140" y="280" width="200" height="280" fill="${p[2]}" opacity="0.15" rx="4"/>
+  <text x="240" y="460" font-family="Georgia,serif" font-size="18" fill="${p[2]}" text-anchor="middle">4x6</text>
+  <rect x="420" y="280" width="260" height="360" fill="${p[2]}" opacity="0.15" rx="4"/>
+  <text x="550" y="480" font-family="Georgia,serif" font-size="18" fill="${p[2]}" text-anchor="middle">5x7</text>
+  <rect x="760" y="280" width="320" height="420" fill="${p[2]}" opacity="0.2" rx="4"/>
+  <text x="920" y="520" font-family="Georgia,serif" font-size="18" fill="${p[2]}" text-anchor="middle">8x10</text>
+  <rect x="1160" y="280" width="400" height="480" fill="${p[2]}" opacity="0.25" rx="4"/>
+  <text x="1360" y="570" font-family="Georgia,serif" font-size="18" fill="${p[2]}" text-anchor="middle">11x14</text>
+  <rect x="1640" y="280" width="240" height="480" fill="${p[2]}" opacity="0.2" rx="4"/>
+  <text x="1760" y="570" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle">12x16</text>
+  <text x="1000" y="860" font-family="Georgia,serif" font-size="26" fill="${p[1]}" text-anchor="middle" opacity="0.9">Scales to any size without loss of quality</text>
+  <rect x="200" y="940" width="1600" height="3" fill="${p[1]}" opacity="0.2"/>
+  <text x="1000" y="1040" font-family="Georgia,serif" font-size="36" fill="${p[1]}" text-anchor="middle">PERFECTLY SIZED FOR:</text>
+  <text x="400" y="1160" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">🏠 Home Decor</text>
+  <text x="1000" y="1160" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">🎁 Gift Giving</text>
+  <text x="1600" y="1160" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">🏢 Office Art</text>
+  <text x="400" y="1300" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">🖼 Gallery Walls</text>
+  <text x="1000" y="1300" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">📚 Classrooms</text>
+  <text x="1600" y="1300" font-family="Georgia,serif" font-size="24" fill="${p[2]}" text-anchor="middle" opacity="0.8">💝 Nurseries</text>
+  <rect x="300" y="1440" width="1400" height="200" fill="${p[1]}" opacity="0.1" rx="12"/>
+  <text x="1000" y="1540" font-family="Georgia,serif" font-size="28" fill="${p[1]}" text-anchor="middle">✦ Commercial License Included ✦</text>
+  <text x="1000" y="1590" font-family="Georgia,serif" font-size="20" fill="${p[2]}" text-anchor="middle" opacity="0.7">Use for small business products &amp; resale</text>
+  <text x="1000" y="1900" font-family="Georgia,serif" font-size="26" fill="${p[1]}" text-anchor="middle" letter-spacing="6" opacity="0.8">HOUSE OF JREYM ✦ INSTANT DOWNLOAD</text>
+</svg>`;
+
+      // Scene 5: Lifestyle / color variations card
+      const s5=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000" width="2000" height="2000">
+  <rect width="2000" height="2000" fill="#f5f0ea"/>
+  <rect x="0" y="0" width="2000" height="180" fill="${p[0]}"/>
+  <text x="1000" y="115" font-family="Georgia,serif" font-size="38" fill="${p[1]}" text-anchor="middle" letter-spacing="8">${kw} — WHY YOU'LL LOVE IT</text>
+  <rect x="60" y="220" width="580" height="580" fill="${p[0]}" rx="16"/>
+  <text x="350" y="450" font-family="Georgia,serif" font-size="20" fill="${p[1]}" text-anchor="middle" letter-spacing="4">⚡ INSTANT ACCESS</text>
+  <text x="350" y="540" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">Download immediately</text>
+  <text x="350" y="580" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">after checkout</text>
+  <rect x="710" y="220" width="580" height="580" fill="${p[0]}" rx="16"/>
+  <text x="1000" y="450" font-family="Georgia,serif" font-size="20" fill="${p[1]}" text-anchor="middle" letter-spacing="4">🖨 EASY TO PRINT</text>
+  <text x="1000" y="540" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">Home printer or</text>
+  <text x="1000" y="580" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">any print shop</text>
+  <rect x="1360" y="220" width="580" height="580" fill="${p[0]}" rx="16"/>
+  <text x="1650" y="450" font-family="Georgia,serif" font-size="20" fill="${p[1]}" text-anchor="middle" letter-spacing="4">✦ HIGH QUALITY</text>
+  <text x="1650" y="540" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">300 DPI professional</text>
+  <text x="1650" y="580" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">grade files</text>
+  <rect x="60" y="860" width="580" height="580" fill="${p[0]}" rx="16" opacity="0.9"/>
+  <text x="350" y="1090" font-family="Georgia,serif" font-size="20" fill="${p[1]}" text-anchor="middle" letter-spacing="4">📐 ANY SIZE</text>
+  <text x="350" y="1180" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">4x6 up to 24x36</text>
+  <text x="350" y="1220" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">and beyond</text>
+  <rect x="710" y="860" width="580" height="580" fill="${p[0]}" rx="16" opacity="0.9"/>
+  <text x="1000" y="1090" font-family="Georgia,serif" font-size="20" fill="${p[1]}" text-anchor="middle" letter-spacing="4">💼 COMMERCIAL USE</text>
+  <text x="1000" y="1180" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">License included for</text>
+  <text x="1000" y="1220" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">small business use</text>
+  <rect x="1360" y="860" width="580" height="580" fill="${p[0]}" rx="16" opacity="0.9"/>
+  <text x="1650" y="1090" font-family="Georgia,serif" font-size="20" fill="${p[1]}" text-anchor="middle" letter-spacing="4">🎨 6 FORMATS</text>
+  <text x="1650" y="1180" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">SVG PNG PDF DXF</text>
+  <text x="1650" y="1220" font-family="Georgia,serif" font-size="16" fill="${p[2]}" text-anchor="middle" opacity="0.8">EPS + bonus editable</text>
+  <rect x="300" y="1540" width="1400" height="260" fill="${p[0]}" rx="16"/>
+  <text x="1000" y="1660" font-family="Georgia,serif" font-size="30" fill="${p[1]}" text-anchor="middle">★ ★ ★ ★ ★</text>
+  <text x="1000" y="1720" font-family="Georgia,serif" font-size="22" fill="${p[2]}" text-anchor="middle" opacity="0.9">"Perfect for my project — downloaded instantly and printed beautifully!"</text>
+  <text x="1000" y="1900" font-family="Georgia,serif" font-size="24" fill="#888" text-anchor="middle" letter-spacing="4">HOUSE OF JREYM — DIGITAL DOWNLOADS</text>
+</svg>`;
+
+      return [s1,s2,s3,s4,s5].slice(0,imagesPerListing);
+    }
+
+    for(let i=0;i<listings.length;i++){
+      const listing=listings[i];
+      const lid=listing.listing_id;
+      const title=listing.title||"Digital Art Print";
+      const keyword=title.split("|")[0].replace(/SVG|PNG|PDF|Digital|Download|Print|Art|Instant/gi,"").trim().slice(0,40)||"Digital Art";
+
+      // Check existing image count
+      const existingImages=(listing.images||[]).length;
+      if(skipExisting&&existingImages>=imagesPerListing){
+        results.skipped.push({listing_id:lid,reason:"has_"+existingImages+"_images"});
+        console.log("[add-images] SKIP",lid,"already has",existingImages,"images");
+        continue;
+      }
+      const startRank=existingImages+1;
+
+      const svgs=makeMockups(keyword,lid);
+      let listingSuccess=0;
+      let listingFail=0;
+
+      for(let imgIdx=0;imgIdx<svgs.length;imgIdx++){
+        const rank=startRank+imgIdx;
+        const svg=svgs[imgIdx];
+        try{
+          const {default:sharp}=await import("sharp");
+          const svgBuf=Buffer.from(svg,"utf8");
+          const pngBuf=await sharp(svgBuf,{density:150}).png().toBuffer();
+          const boundary="----HoJImg"+Date.now().toString(36)+imgIdx;
+          const fname="hoj_"+lid+"_v"+rank+".png";
+          const rawParts=[
+            `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${fname}"\r\nContent-Type: image/png\r\n\r\n`,
+            pngBuf,
+            `\r\n--${boundary}\r\nContent-Disposition: form-data; name="rank"\r\n\r\n${rank}\r\n--${boundary}--\r\n`,
+          ];
+          const imgBody=Buffer.concat(rawParts.map(p=>typeof p==="string"?Buffer.from(p):p));
+          const imgRes=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{
+            method:"POST",
+            headers:{"Content-Type":`multipart/form-data; boundary=${boundary}`,"Content-Length":imgBody.length.toString(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},
+            body:imgBody
+          });
+          const imgText=await imgRes.text();
+          let imgData;try{imgData=JSON.parse(imgText);}catch{imgData={raw:imgText};}
+          if(imgRes.ok){listingSuccess++;console.log("[add-images] ✅",lid,"rank",rank,imgData.listing_image_id);}
+          else{listingFail++;console.error("[add-images] ❌",lid,"rank",rank,imgRes.status,imgText.slice(0,100));}
+          await new Promise(r=>setTimeout(r,400));
+        }catch(e){listingFail++;console.error("[add-images] ERR",lid,"rank",rank,e.message);}
+      }
+
+      if(listingSuccess>0)results.success.push({listing_id:lid,images_added:listingSuccess,title:title.slice(0,50)});
+      else results.failed.push({listing_id:lid,images_added:0,images_failed:listingFail,title:title.slice(0,40)});
+      console.log("[add-images]",i+1+"/"+listings.length,"listing",lid,"added",listingSuccess,"imgs");
+    }
+
+    res.json({
+      total_processed:listings.length,
+      listings_success:results.success.length,
+      listings_failed:results.failed.length,
+      listings_skipped:results.skipped.length,
+      images_added:results.success.reduce((a,r)=>a+r.images_added,0),
+      failures:results.failed.slice(0,5),
+      sample:results.success.slice(0,5)
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/etsy/update-prices — bulk update all listings to target price
+// ─────────────────────────────────────────────────────────────────────────────
+etsyRouter.post("/update-prices",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    const targetPrice=parseFloat(req.body?.price||7.99);
+    const limit=parseInt(req.body?.limit)||200;
+
+    let listings=[];
+    for(let off=0;off<limit;off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+      if(!r.ok)break;
+      const d=await r.json();
+      const batch=d.results||[];
+      listings=[...listings,...batch];
+      if(batch.length<100)break;
+    }
+    listings=listings.slice(0,limit);
+    console.log("[update-prices] Updating",listings.length,"listings to $"+targetPrice);
+
+    const results={updated:[],failed:[],skipped:[]};
+    for(const listing of listings){
+      const lid=listing.listing_id;
+      const currentPrice=listing.price?listing.price.amount/listing.price.divisor:0;
+      if(Math.abs(currentPrice-targetPrice)<0.01){results.skipped.push(lid);continue;}
+      try{
+        const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
+          method:"PATCH",headers:authH(t),
+          body:JSON.stringify({price:targetPrice})
+        });
+        const pd=await pr.json();
+        if(pr.ok)results.updated.push({listing_id:lid,old:currentPrice,new:targetPrice});
+        else results.failed.push({listing_id:lid,status:pr.status,error:pd.error});
+        console.log("[update-prices]",pr.ok?"✅":"❌",lid,currentPrice,"→",targetPrice);
+        await new Promise(r=>setTimeout(r,200));
+      }catch(e){results.failed.push({listing_id:lid,error:e.message});}
+    }
+    res.json({total:listings.length,updated:results.updated.length,failed:results.failed.length,skipped:results.skipped.length,price_set:targetPrice,failures:results.failed.slice(0,5)});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/etsy/add-variations — add size options to every listing
+// ─────────────────────────────────────────────────────────────────────────────
+etsyRouter.post("/add-variations",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    const limit=parseInt(req.body?.limit)||200;
+
+    // Get inventory property IDs for size variations
+    // Etsy taxonomy 2078 (digital prints) supports property_id 200 (size)
+    let listings=[];
+    for(let off=0;off<limit;off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+      if(!r.ok)break;
+      const d=await r.json();
+      listings=[...listings,...d.results||[]];
+      if((d.results||[]).length<100)break;
+    }
+    listings=listings.slice(0,limit);
+    console.log("[add-variations] Processing",listings.length,"listings");
+
+    const results={updated:[],failed:[],skipped:[]};
+    const sizeOptions=[
+      {value:"4x6 inches",price_adjustment:0},
+      {value:"5x7 inches",price_adjustment:0},
+      {value:"8x10 inches",price_adjustment:2},
+      {value:"11x14 inches",price_adjustment:3},
+      {value:"16x20 inches",price_adjustment:4},
+      {value:"24x36 inches",price_adjustment:5},
+    ];
+
+    for(const listing of listings){
+      const lid=listing.listing_id;
+      try{
+        // Check existing offerings
+        const offerRes=await fetch(ETSY_BASE+"/listings/"+lid+"/inventory",{headers:authH(t)});
+        if(offerRes.ok){
+          const offerData=await offerRes.json();
+          if(offerData.products&&offerData.products.length>1){
+            results.skipped.push({listing_id:lid,reason:"has_variations"});
+            continue;
+          }
+        }
+        const basePrice=listing.price?listing.price.amount/listing.price.divisor:7.99;
+        const products=sizeOptions.map((opt,idx)=>({
+          sku:"HOJ-"+lid+"-S"+idx,
+          property_values:[{property_id:200,property_name:"Size",scale_id:null,value_ids:[],values:[opt.value]}],
+          offerings:[{price:basePrice+opt.price_adjustment,quantity:999,is_enabled:true}]
+        }));
+        const invRes=await fetch(ETSY_BASE+"/listings/"+lid+"/inventory",{
+          method:"PUT",headers:authH(t),
+          body:JSON.stringify({products,price_on_property:[],quantity_on_property:[],sku_on_property:[]})
+        });
+        const invData=await invRes.json();
+        if(invRes.ok){results.updated.push({listing_id:lid});console.log("[add-variations] ✅",lid);}
+        else{results.failed.push({listing_id:lid,status:invRes.status,error:invData.error||JSON.stringify(invData).slice(0,100)});console.error("[add-variations] ❌",lid,invRes.status,JSON.stringify(invData).slice(0,120));}
+        await new Promise(r=>setTimeout(r,300));
+      }catch(e){results.failed.push({listing_id:lid,error:e.message});}
+    }
+    res.json({total:listings.length,updated:results.updated.length,failed:results.failed.length,skipped:results.skipped.length,failures:results.failed.slice(0,5)});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+
+
 etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
@@ -622,3 +972,4 @@ etsyRouter.get("/reviews",async(req,res)=>{
     res.json(await r.json());
   }catch(e){res.status(500).json({error:e.message});}
 });
+
