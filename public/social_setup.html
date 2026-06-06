@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Social Setup Wizard | House of Jreym</title>
+<style>
+:root{--bg:#080810;--card:#141428;--card2:#1a1a30;--border:#252545;--gold:#e2b04a;--green:#4ade80;--red:#f87171;--orange:#fb923c;--blue:#4a9eff;--text:#f0ede8;--muted:#8a87a0;--ig-grad:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);--fb:#1877f2;--tt-accent:#69c9d0;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Georgia',serif;min-height:100vh;padding:24px}
+h1{font-size:22px;letter-spacing:6px;color:var(--gold);text-align:center;margin-bottom:4px}
+.sub{text-align:center;font-size:12px;color:var(--muted);letter-spacing:2px;margin-bottom:32px}
+.wizard{max-width:800px;margin:0 auto}
+.platform-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px}
+.platform-section.done{border-color:var(--green)}
+.platform-section.error{border-color:var(--red)}
+.plat-header{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.plat-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.plat-icon.meta{background:var(--ig-grad)}
+.plat-icon.tt{background:#111;border:1px solid var(--tt-accent)}
+.plat-title{font-size:18px;font-weight:bold}
+.plat-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.conn-status{margin-left:auto;padding:5px 14px;border-radius:20px;font-size:11px;letter-spacing:2px;font-weight:bold}
+.conn-status.live{background:#052005;color:var(--green);border:1px solid var(--green)}
+.conn-status.off{background:#200505;color:var(--red);border:1px solid var(--red)}
+.steps{margin-bottom:20px}
+.step{display:flex;gap:12px;margin-bottom:12px;align-items:flex-start}
+.step-n{background:var(--gold);color:#000;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;margin-top:2px}
+.step-text{font-size:13px;line-height:1.6;color:var(--text)}
+.step-text a{color:var(--blue);text-decoration:none}
+.step-text a:hover{text-decoration:underline}
+.step-text code{background:rgba(255,255,255,.1);padding:2px 7px;border-radius:4px;font-size:12px;color:var(--blue);font-family:monospace}
+.input-row{display:flex;gap:10px;align-items:flex-end;margin-top:16px}
+input[type=text],input[type=password]{flex:1;background:#0a0a18;border:1px solid var(--border);color:var(--text);padding:11px 16px;border-radius:8px;font-size:13px;font-family:inherit;outline:none}
+input:focus{border-color:var(--gold)}
+.btn{padding:10px 22px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-family:inherit;font-weight:bold;letter-spacing:1px;transition:all .2s;white-space:nowrap}
+.btn-gold{background:var(--gold);color:#000}.btn-gold:hover{background:#f0c040}
+.btn-green{background:#052005;border:1px solid var(--green);color:var(--green)}.btn-green:hover{background:var(--green);color:#000}
+.btn-blue{background:var(--fb);color:#fff}.btn-blue:hover{opacity:.9}
+.btn-sm{padding:6px 14px;font-size:11px}
+.result-box{margin-top:16px;padding:14px 18px;border-radius:8px;font-size:13px;line-height:1.6}
+.result-ok{background:#052005;border:1px solid var(--green);color:var(--green)}
+.result-err{background:#200505;border:1px solid var(--red);color:var(--red)}
+.result-info{background:#05051a;border:1px solid var(--blue);color:var(--blue)}
+.account-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:12px}
+.account-card.connected{border-color:var(--green)}
+.loader{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.oauth-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:bold;text-decoration:none;cursor:pointer;border:none;font-family:inherit}
+.oauth-meta{background:var(--ig-grad);color:#fff}
+.oauth-fb{background:var(--fb);color:#fff}
+.oauth-tt{background:#111;border:2px solid var(--tt-accent);color:var(--tt-accent)}
+.separator{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--muted);font-size:12px}
+.separator::before,.separator::after{content:'';flex:1;border-top:1px solid var(--border)}
+.permissions-list{background:#0a0a18;border-radius:8px;padding:14px;margin-top:10px;font-size:12px;color:var(--muted);line-height:1.8}
+.permissions-list strong{color:var(--gold)}
+.nav-link{display:inline-block;margin-top:24px;text-align:center;width:100%;color:var(--muted);font-size:12px}
+.nav-link a{color:var(--blue)}
+</style>
+</head>
+<body>
+<h1>IBRAHIM SETUP WIZARD</h1>
+<div class="sub">House of Jreym — Connect Instagram, Facebook & TikTok</div>
+
+<div class="wizard">
+
+<!-- STATUS BAR -->
+<div id="status-bar" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px"></div>
+
+<!-- META (INSTAGRAM + FACEBOOK) -->
+<div class="platform-section" id="meta-section">
+  <div class="plat-header">
+    <div class="plat-icon meta">📸</div>
+    <div>
+      <div class="plat-title">Instagram + Facebook</div>
+      <div class="plat-sub">Both connect through Meta — one token covers both platforms</div>
+    </div>
+    <span class="conn-status off" id="meta-badge">○ NOT CONNECTED</span>
+  </div>
+
+  <!-- OPTION A: OAuth (if app configured) -->
+  <div id="meta-oauth-section">
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><div class="step-text">Click the button below to connect through Meta's official OAuth. You'll be redirected to Facebook to log in, then automatically returned here with both Instagram and Facebook connected.</div></div>
+      <div class="step"><div class="step-n">2</div><div class="step-text">Log in with the Facebook account that <strong>manages the Houseofjreym page and @houseofjreym Instagram</strong>.</div></div>
+      <div class="step"><div class="step-n">3</div><div class="step-text">Grant all permissions when prompted — especially <code>pages_manage_posts</code>, <code>instagram_content_publish</code>, and <code>instagram_manage_insights</code>.</div></div>
+    </div>
+    <a href="/api/social/auth/meta" class="oauth-btn oauth-meta" id="meta-oauth-btn">🔗 Connect with Meta (OAuth)</a>
+  </div>
+
+  <div class="separator">OR paste token manually (faster for testing)</div>
+
+  <!-- OPTION B: Manual token paste -->
+  <div class="steps">
+    <div class="step"><div class="step-n">A</div>
+      <div class="step-text">Go to <a href="https://developers.facebook.com/tools/explorer/" target="_blank">developers.facebook.com/tools/explorer</a><br>
+        → Click <strong>"Meta App"</strong> dropdown → pick any app (or "Meta App" default)<br>
+        → Click <strong>"Generate Access Token"</strong> → log in as <strong>Houseofjreym page admin</strong><br>
+        → Check these permissions: <code>pages_show_list</code> <code>pages_read_engagement</code> <code>pages_manage_posts</code> <code>instagram_basic</code> <code>instagram_content_publish</code> <code>instagram_manage_insights</code><br>
+        → Copy the token at the top
+      </div>
+    </div>
+  </div>
+  <div class="input-row">
+    <input type="password" id="meta-token" placeholder="Paste your Meta User Access Token here...">
+    <button class="btn btn-gold" onclick="connectMeta()">Connect</button>
+  </div>
+  <div id="meta-result"></div>
+</div>
+
+<!-- TIKTOK -->
+<div class="platform-section" id="tt-section">
+  <div class="plat-header">
+    <div class="plat-icon tt">🎵</div>
+    <div>
+      <div class="plat-title">TikTok</div>
+      <div class="plat-sub">@houseofjreym — requires TikTok for Business</div>
+    </div>
+    <span class="conn-status off" id="tt-badge">○ NOT CONNECTED</span>
+  </div>
+
+  <!-- OAuth option -->
+  <div class="steps">
+    <div class="step"><div class="step-n">1</div><div class="step-text">Try the TikTok OAuth connect first — it handles everything automatically.</div></div>
+  </div>
+  <a href="/api/social/auth/tiktok" class="oauth-btn oauth-tt" style="margin-bottom:16px;display:inline-flex">🔗 Connect TikTok (OAuth)</a>
+
+  <div class="separator">OR paste token manually</div>
+
+  <div class="steps">
+    <div class="step"><div class="step-n">A</div>
+      <div class="step-text">
+        Go to <a href="https://developers.tiktok.com/" target="_blank">developers.tiktok.com</a> → your app → <strong>Auth Code</strong> tool<br>
+        Generate an access token for <strong>@houseofjreym</strong> with scopes: <code>user.info.basic</code> <code>user.info.stats</code> <code>video.upload</code> <code>video.publish</code><br>
+        Paste the access token below.
+      </div>
+    </div>
+  </div>
+  <div class="input-row">
+    <input type="password" id="tt-token" placeholder="Paste TikTok access token...">
+    <button class="btn btn-gold" onclick="connectTikTok()">Connect</button>
+  </div>
+  <div id="tt-result"></div>
+</div>
+
+<!-- GENERATE DRAFTS -->
+<div class="platform-section" id="drafts-section">
+  <div class="plat-header">
+    <div class="plat-icon" style="background:linear-gradient(135deg,#1a1a2e,#2a2a4a);font-size:22px">✦</div>
+    <div>
+      <div class="plat-title">Generate First Drafts</div>
+      <div class="plat-sub">Let IBRAHIM create content for all 3 platforms right now</div>
+    </div>
+  </div>
+  <button class="btn btn-gold" onclick="generateDrafts()" id="gen-btn">✦ Generate 5 Drafts Now</button>
+  <div id="gen-result"></div>
+</div>
+
+<!-- DONE -->
+<div style="text-align:center;margin-top:32px">
+  <a href="/social_dashboard.html" class="btn btn-green">→ Open Social Dashboard</a>
+  <div class="nav-link" style="margin-top:12px"><a href="/swarm_shop_os_v5.html">← Back to Swarm OS</a></div>
+</div>
+
+</div><!-- /wizard -->
+
+<script>
+const API = '/api/social';
+const KEY = 'swarm-os-key-2025';
+
+async function api(path, method='GET', body=null) {
+  const opts = {method, headers:{'Content-Type':'application/json','x-api-key':KEY}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API+path, opts);
+  return r.json();
+}
+
+function loader(el) { el.innerHTML = '<div style="padding:12px;color:var(--muted)"><span class="loader"></span> Connecting...</div>'; }
+
+// Load current status
+async function loadStatus() {
+  const auth = await api('/auth/status');
+  const platforms = [
+    {id:'instagram',icon:'📸',label:'Instagram'},
+    {id:'facebook',icon:'👤',label:'Facebook'},
+    {id:'tiktok',icon:'🎵',label:'TikTok'},
+  ];
+
+  document.getElementById('status-bar').innerHTML = platforms.map(p => {
+    const a = auth.accounts?.[p.id]||{};
+    return `<div style="background:var(--card2);border:1px solid ${a.connected?'var(--green)':'var(--border)'};border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:24px;margin-bottom:6px">${p.icon}</div>
+      <div style="font-size:13px;font-weight:bold">${p.label}</div>
+      ${a.username?`<div style="font-size:11px;color:var(--muted);margin-top:2px">@${a.username}</div>`:''}
+      <div style="margin-top:8px;font-size:11px;padding:3px 10px;border-radius:20px;display:inline-block;${a.connected?'background:#052005;color:var(--green);border:1px solid var(--green)':'background:#200505;color:var(--red);border:1px solid var(--red)'}">${a.connected?'● LIVE':'○ OFF'}</div>
+    </div>`;
+  }).join('');
+
+  // Update section badges
+  const metaConn = auth.accounts?.instagram?.connected || auth.accounts?.facebook?.connected;
+  const ttConn = auth.accounts?.tiktok?.connected;
+
+  const metaBadge = document.getElementById('meta-badge');
+  const ttBadge = document.getElementById('tt-badge');
+
+  if (metaConn) {
+    metaBadge.textContent = '● CONNECTED';
+    metaBadge.className = 'conn-status live';
+    document.getElementById('meta-section').classList.add('done');
+  }
+  if (ttConn) {
+    ttBadge.textContent = '● CONNECTED';
+    ttBadge.className = 'conn-status live';
+    document.getElementById('tt-section').classList.add('done');
+  }
+
+  // Check OAuth config
+  if (!auth.oauth?.meta_configured) {
+    document.getElementById('meta-oauth-btn').style.opacity = '0.4';
+    document.getElementById('meta-oauth-btn').title = 'META_APP_ID not configured — use manual token entry';
+  }
+}
+
+async function connectMeta() {
+  const token = document.getElementById('meta-token').value.trim();
+  if (!token) { alert('Paste your Meta User Access Token first'); return; }
+  const el = document.getElementById('meta-result');
+  loader(el);
+  try {
+    const r = await api('/setup/meta', 'POST', {user_access_token: token});
+    if (r.ok) {
+      const fb = r.results.facebook;
+      const ig = r.results.instagram;
+      const errs = r.results.errors||[];
+      el.innerHTML = `<div class="result-ok">
+        ${fb?.ok ? `✅ <strong>Facebook connected:</strong> ${fb.page_name} (ID: ${fb.page_id})<br>` : `❌ Facebook: ${fb?.error||'failed'}<br>`}
+        ${ig?.ok ? `✅ <strong>Instagram connected:</strong> @${ig.username} — ${ig.followers?.toLocaleString()||0} followers<br>` : `⚠️ Instagram: ${ig?.error||'not found'}<br>`}
+        ${errs.length ? `<br>Notes: ${errs.join('<br>')}` : ''}
+      </div>`;
+      document.getElementById('meta-token').value = '';
+      await loadStatus();
+    } else {
+      el.innerHTML = `<div class="result-err">❌ ${r.error}</div>`;
+    }
+  } catch(e) { el.innerHTML = `<div class="result-err">❌ ${e.message}</div>`; }
+}
+
+async function connectTikTok() {
+  const token = document.getElementById('tt-token').value.trim();
+  if (!token) { alert('Paste your TikTok access token first'); return; }
+  const el = document.getElementById('tt-result');
+  loader(el);
+  try {
+    const r = await api('/setup/tiktok', 'POST', {access_token: token});
+    if (r.ok) {
+      el.innerHTML = `<div class="result-ok">✅ <strong>TikTok connected:</strong> @${r.username} — ${r.followers?.toLocaleString()||0} followers</div>`;
+      document.getElementById('tt-token').value = '';
+      await loadStatus();
+    } else {
+      el.innerHTML = `<div class="result-err">❌ ${r.error}</div>`;
+    }
+  } catch(e) { el.innerHTML = `<div class="result-err">❌ ${e.message}</div>`; }
+}
+
+async function generateDrafts() {
+  const btn = document.getElementById('gen-btn');
+  const el = document.getElementById('gen-result');
+  btn.innerHTML = '<span class="loader"></span> Generating...'; btn.disabled = true;
+
+  const keywords = [
+    'Black art history digital prints Brooklyn',
+    'afrocentric home decor wall art',
+    'motivational affirmation prints instant download',
+    'minimalist modern wall art SVG',
+    'custom name family portrait digital print'
+  ];
+
+  const results = [];
+  for (const kw of keywords) {
+    const r = await api('/generate', 'POST', {keyword: kw, platform: 'all', style: 'luxury_brooklyn', count: 1});
+    if (r.ok && r.drafts?.[0]) results.push({kw, draft: r.drafts[0]});
+  }
+
+  el.innerHTML = `<div class="result-ok" style="margin-top:16px">
+    ✅ ${results.length} drafts generated and saved!<br><br>
+    ${results.map(r => `<strong>${r.kw}</strong><br><small style="color:var(--muted)">${r.draft.caption?.slice(0,120)}...</small>`).join('<br><br>')}
+    <br><br><a href="/social_dashboard.html" style="color:var(--green)">→ Review drafts in Social Dashboard</a>
+  </div>`;
+  btn.innerHTML = '✦ Generate 5 Drafts Now'; btn.disabled = false;
+}
+
+// Handle post-OAuth redirect
+(()=>{
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('meta')==='connected') { alert('✅ Meta connected! ' + (p.get('page')||'')); history.replaceState({},'','/social_setup.html'); }
+  if (p.get('tiktok')==='connected') { alert('✅ TikTok connected as @' + (p.get('user')||'houseofjreym') + '!'); history.replaceState({},'','/social_setup.html'); }
+  if (p.get('error')) { alert('OAuth error: ' + p.get('error')); history.replaceState({},'','/social_setup.html'); }
+})();
+
+loadStatus();
+</script>
+</body>
+</html>
