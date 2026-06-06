@@ -881,17 +881,41 @@ etsyRouter.post("/update-prices",async(req,res)=>{
     for(const listing of listings){
       const lid=listing.listing_id;
       const currentPrice=listing.price?listing.price.amount/listing.price.divisor:0;
-      if(Math.abs(currentPrice-targetPrice)<0.01){results.skipped.push(lid);continue;}
+      if(Math.abs(currentPrice-targetPrice)<0.01){results.skipped.push(lid);console.log("[update-prices] SKIP",lid,"already",targetPrice);continue;}
       try{
-        const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
-          method:"PATCH",headers:authH(t),
-          body:JSON.stringify({price:targetPrice})
-        });
-        const pd=await pr.json();
-        if(pr.ok)results.updated.push({listing_id:lid,old:currentPrice,new:targetPrice});
-        else results.failed.push({listing_id:lid,status:pr.status,error:pd.error});
-        console.log("[update-prices]",pr.ok?"✅":"❌",lid,currentPrice,"→",targetPrice);
-        await new Promise(r=>setTimeout(r,200));
+        // Fetch current inventory to get product/offering IDs
+        const invRes=await fetch(ETSY_BASE+"/listings/"+lid+"/inventory",{headers:authH(t)});
+        let updated=false;
+        if(invRes.ok){
+          const invData=await invRes.json();
+          if(invData.products&&invData.products.length>0){
+            // Update all offerings to new price
+            const products=invData.products.map(p=>({
+              ...p,
+              offerings:p.offerings.map(o=>({...o,price:targetPrice}))
+            }));
+            const putRes=await fetch(ETSY_BASE+"/listings/"+lid+"/inventory",{
+              method:"PUT",headers:authH(t),
+              body:JSON.stringify({products,price_on_property:[],quantity_on_property:[],sku_on_property:[]})
+            });
+            const putData=await putRes.json();
+            if(putRes.ok){updated=true;console.log("[update-prices] ✅ inv",lid,currentPrice,"→",targetPrice);}
+            else{console.error("[update-prices] ❌ inv",lid,putRes.status,JSON.stringify(putData).slice(0,100));}
+          }
+        }
+        if(!updated){
+          // Fallback: try listing PATCH (works for non-inventory listings)
+          const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
+            method:"PATCH",headers:authH(t),
+            body:JSON.stringify({price:targetPrice})
+          });
+          const pd=await pr.json();
+          updated=pr.ok;
+          console.log("[update-prices]",pr.ok?"✅ patch":"❌ patch",lid,pr.status);
+        }
+        if(updated)results.updated.push({listing_id:lid,old:currentPrice,new:targetPrice});
+        else results.failed.push({listing_id:lid});
+        await new Promise(r=>setTimeout(r,250));
       }catch(e){results.failed.push({listing_id:lid,error:e.message});}
     }
     res.json({total:listings.length,updated:results.updated.length,failed:results.failed.length,skipped:results.skipped.length,price_set:targetPrice,failures:results.failed.slice(0,5)});
