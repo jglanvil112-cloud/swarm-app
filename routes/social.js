@@ -148,7 +148,7 @@ Caption: 2-4 sentences + CTA. Hashtags: 15-20 relevant tags. No markdown.`, syst
       try { content = JSON.parse(rawText.replace(/```json|```/g, "").trim()); }
       catch { content = { caption: rawText.slice(0, 500), hashtags: ["houseofjreym", "digitalart", "instantdownload"] }; }
 
-      const { data } = await supabase.from("social_posts").insert({
+      const { data: postRow, error: postErr } = await supabase.from("social_posts").insert({
         platform, status: "draft", created_by: "IBRAHIM",
         caption: content.caption, hashtags: content.hashtags || [],
         media_type: "image", keyword: topic,
@@ -157,7 +157,8 @@ Caption: 2-4 sentences + CTA. Hashtags: 15-20 relevant tags. No markdown.`, syst
         updated_at: new Date().toISOString()
       }).select().single();
 
-      posts.push(data);
+      if (postErr) { console.error("[IBRAHIM] social_posts insert error:", postErr.message, postErr.code, postErr.details); }
+      else { posts.push(postRow); }
       await saveAgentOutput({ agent: "IBRAHIM", outputType: "social_draft", socialCaption: content.caption, data: content });
     }
 
