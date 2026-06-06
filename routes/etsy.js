@@ -160,6 +160,70 @@ const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/receipts?limit=25",{heade
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+etsyRouter.post("/bulk-activate",async(req,res)=>{
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+
+    // 1. Fetch all draft listings (paginate up to 500)
+    let allDrafts=[];
+    for(let offset=0;offset<500;offset+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/draft?limit=100&offset="+offset,{headers:authH(t)});
+      if(!r.ok)break;
+      const d=await r.json();
+      const batch=d.results||[];
+      allDrafts=[...allDrafts,...batch];
+      if(batch.length<100)break;
+    }
+    console.log("[bulk-activate] Found "+allDrafts.length+" drafts");
+
+    // 2. Fetch return_policy_id
+    let returnPolicyId=1;
+    try{
+      const rp=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/return-policies",{headers:authH(t)});
+      if(rp.ok){const rpd=await rp.json();const pol=(rpd.results||rpd);if(Array.isArray(pol)&&pol.length)returnPolicyId=pol[0].return_policy_id;else if(pol.return_policy_id)returnPolicyId=pol.return_policy_id;}
+      console.log("[bulk-activate] return_policy_id:",returnPolicyId);
+    }catch(e){console.warn("[bulk-activate] rp fetch failed, using default");}
+
+    // 3. PATCH each draft to active with return_policy_id
+    const results={activated:[],failed:[],skipped:[]};
+    const limit=parseInt(req.body?.limit)||allDrafts.length;
+    const batch=allDrafts.slice(0,limit);
+
+    for(const listing of batch){
+      const lid=listing.listing_id;
+      try{
+        const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{
+          method:"PATCH",
+          headers:authH(t),
+          body:JSON.stringify({state:"active",return_policy_id:returnPolicyId})
+        });
+        const pd=await pr.json();
+        if(pr.ok&&pd.state==="active"){
+          results.activated.push({listing_id:lid,title:(listing.title||'').slice(0,60)});
+          console.log("[bulk-activate] ✅",lid,pd.state);
+        }else{
+          results.failed.push({listing_id:lid,status:pr.status,error:pd.error||pd});
+          console.error("[bulk-activate] ❌",lid,pr.status,JSON.stringify(pd).slice(0,120));
+        }
+        // Small delay to avoid rate limiting
+        await new Promise(r=>setTimeout(r,200));
+      }catch(e){results.skipped.push({listing_id:lid,error:e.message});}
+    }
+
+    res.json({
+      total_drafts:allDrafts.length,
+      processed:batch.length,
+      activated:results.activated.length,
+      failed:results.failed.length,
+      skipped:results.skipped.length,
+      activated_ids:results.activated.map(l=>l.listing_id),
+      failures:results.failed.slice(0,5),
+      return_policy_id_used:returnPolicyId
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 etsyRouter.get("/reviews",async(req,res)=>{
   try{
     const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP+"/reviews?limit=10",{headers:pubH()});
