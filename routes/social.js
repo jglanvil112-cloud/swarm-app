@@ -563,10 +563,11 @@ const META_SCOPES = [
   "instagram_business_manage_messages"
 ].join(",");
 
-// GET /api/social/auth/meta — redirect to Meta OAuth
+// GET /api/social/auth/meta — redirect to Instagram Business OAuth
 socialRouter.get("/auth/meta", (req, res) => {
   if (!META_APP_ID()) return res.status(500).json({ error: "META_APP_ID not set in Render env vars" });
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
+  // Instagram Business API uses api.instagram.com for OAuth (not facebook.com/dialog/oauth)
+  const url = `https://api.instagram.com/oauth/authorize?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
   res.redirect(url);
 });
 
@@ -578,19 +579,30 @@ socialRouter.get("/callback/meta", async (req, res) => {
 
   try {
     // Exchange code for short-lived token
-    const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&code=${code}`);
+    // Step 1: Exchange code for short-lived token (Instagram Business API)
+    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: META_APP_ID(),
+        client_secret: META_APP_SECRET(),
+        grant_type: "authorization_code",
+        redirect_uri: META_REDIRECT,
+        code
+      })
+    });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("Token exchange failed: " + JSON.stringify(tokenData));
 
-    // Exchange for long-lived token (60 days)
-    const longRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&fb_exchange_token=${tokenData.access_token}`);
+    // Step 2: Exchange for long-lived token (60 days)
+    const longRes = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${META_APP_SECRET()}&access_token=${tokenData.access_token}`);
     const longData = await longRes.json();
     const longToken = longData.access_token || tokenData.access_token;
     const expiresIn = longData.expires_in || 5183944;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Get user info + linked IG business account (Instagram Business API)
-    const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,instagram_business_account&access_token=${longToken}`);
+    // Step 3: Get IG user info
+    const meRes = await fetch(`https://graph.instagram.com/v19.0/me?fields=id,name,username,instagram_business_account&access_token=${longToken}`);
     const meData = await meRes.json();
 
     // Store Facebook user token
