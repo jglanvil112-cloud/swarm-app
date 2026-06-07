@@ -557,9 +557,10 @@ const APP_URL         = process.env.APP_URL || "https://swarm-app-3nch.onrender.
 const META_REDIRECT   = APP_URL + "/api/social/callback/meta";
 // Meta scopes needed for Instagram Business + Facebook Page
 const META_SCOPES = [
-  "instagram_content_publish",
-  "pages_show_list","pages_read_engagement","pages_manage_posts",
-  "business_management"
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+  "instagram_business_manage_comments",
+  "instagram_business_manage_messages"
 ].join(",");
 
 // GET /api/social/auth/meta — redirect to Meta OAuth
@@ -569,7 +570,7 @@ socialRouter.get("/auth/meta", (req, res) => {
   res.redirect(url);
 });
 
-// GET /api/social/callback/meta — handle Meta OAuth callback
+// GET /api/social/callback/meta — handle Meta OAuth callback (Instagram Business API)
 socialRouter.get("/callback/meta", async (req, res) => {
   const { code, error, error_description } = req.query;
   if (error) return res.redirect(`/social_dashboard.html?error=${encodeURIComponent(error_description || error)}`);
@@ -586,47 +587,64 @@ socialRouter.get("/callback/meta", async (req, res) => {
     const longData = await longRes.json();
     const longToken = longData.access_token || tokenData.access_token;
     const expiresIn = longData.expires_in || 5183944; // ~60 days default
-
-    // Get user ID and pages
-    const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${longToken}`);
-    const meData = await meRes.json();
-
-    // Get pages the user manages
-    const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${longToken}`);
-    const pagesData = await pagesRes.json();
-    const pages = pagesData.data || [];
-
-    // Find the House of Jreym page
-    const hojPage = pages.find(p => p.name?.toLowerCase().includes("jreym") || p.name?.toLowerCase().includes("house of")) || pages[0];
-
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Store Facebook Page credentials
-    if (hojPage) {
-      const pageToken = hojPage.access_token || longToken;
+    // Instagram Business API: get the user's IG business accounts directly
+    const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,instagram_business_account&access_token=${longToken}`);
+    const meData = await meRes.json();
+
+    // Try to get IG business account from user directly (Instagram Business API)
+    let igAccountId = meData.instagram_business_account?.id;
+    let igUsername = "houseofjreym";
+
+    if (igAccountId) {
+      const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}?fields=id,username,followers_count,media_count&access_token=${longToken}`);
+      const igData = await igRes.json();
+      igUsername = igData.username || igUsername;
+
+      // Store Instagram credentials via this token
       await supabase.from("social_credentials").upsert({
-        platform: "facebook",
-        access_token: pageToken,
-        page_id: hojPage.id,
-        username: hojPage.name || "Houseofjreym",
+        platform: "instagram",
+        access_token: longToken,
+        page_id: igAccountId,
+        account_id: igAccountId,
+        username: igUsername,
         connected: true,
         token_expires_at: expiresAt,
-        meta: { user_id: meData.id, page_name: hojPage.name, all_pages: pages.map(p=>p.name) },
+        meta: { user_id: meData.id, source: "instagram_business_api" },
         updated_at: new Date().toISOString()
       }, { onConflict: "platform" });
+    }
 
-      // Get Instagram Business Account linked to this page
-      const igAccountId = hojPage.instagram_business_account?.id;
-      if (igAccountId) {
-        // Get IG account details
-        const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}?fields=id,username,followers_count,media_count&access_token=${pageToken}`);
-        const igData = await igRes.json();
-        await supabase.from("social_credentials").upsert({
-          platform: "instagram",
-          access_token: pageToken,
-          page_id: igAccountId,
-          account_id: igAccountId,
-          username: igData.username || "houseofjreym",
+    // Store the user token as "facebook" for any page posting
+    await supabase.from("social_credentials").upsert({
+      platform: "facebook",
+      access_token: longToken,
+      page_id: meData.id,
+      username: meData.name || "Houseofjreym",
+      connected: true,
+      token_expires_at: expiresAt,
+      meta: { user_id: meData.id, ig_account_id: igAccountId, source: "instagram_business_api" },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "platform" });
+
+    // Fake the old structure so the rest of the handler works
+    const hojPage = { id: meData.id, name: meData.name, access_token: longToken, instagram_business_account: { id: igAccountId } };
+    const pages = [hojPage];
+    const pageToken = longToken;
+
+    // Get Instagram Business Account linked to this page
+    const igAccountId2 = igAccountId;
+    if (igAccountId2) {
+      // Get IG account details
+      const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId2}?fields=id,username,followers_count,media_count&access_token=${pageToken}`);
+      const igData = await igRes.json();
+      await supabase.from("social_credentials").upsert({
+        platform: "instagram",
+        access_token: pageToken,
+        page_id: igAccountId2,
+        account_id: igAccountId2,
+        username: igData.username || "houseofjreym",
           connected: true,
           token_expires_at: expiresAt,
           meta: { followers: igData.followers_count, media_count: igData.media_count, fb_page_id: hojPage.id },
