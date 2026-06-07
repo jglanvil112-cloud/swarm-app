@@ -171,68 +171,56 @@ cron.schedule("*/15 * * * *",runHealthCheck);
 
 console.log("SWARM OS v6.0: All cron jobs registered");
 
-// ─── IBRAHIM Social Media Agent — Phase 1 cron jobs ──────────────────────────
-const BASE_SOCIAL = process.env.BASE_URL || "https://swarm-app-3nch.onrender.com";
+// ─── IBRAHIM Social Media Agent — Phase 2 AUTO-POSTING ───────────────────────
+import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "./routes/ibrahim.js";
 
-async function callSocial(path, method="POST", body={}) {
+// Every 5 min: check for scheduled posts due and auto-publish
+cron.schedule("*/5 * * * *", async () => {
   try {
-    const r = await fetch(`${BASE_SOCIAL}/api/social${path}`, {
-      method, headers: {"Content-Type":"application/json","x-api-key": process.env.API_SECRET||"swarm-os-key-2025"},
-      body: method!=="GET" ? JSON.stringify(body) : undefined
-    });
-    return await r.json();
-  } catch(e) { console.error(`[IBRAHIM] ${path} error:`, e.message); return null; }
-}
-
-// Every 6 hours: IBRAHIM generates 3 social drafts from latest NANA trends
-cron.schedule("0 */6 * * *", async () => {
-  console.log("[IBRAHIM] Generating social drafts from trends...");
-  try {
-    const { data: trends } = await supabase.from("trends")
-      .select("keyword").order("detected_at", { ascending: false }).limit(3);
-    for (const t of trends || []) {
-      await callSocial("/generate", "POST", { keyword: t.keyword, platform: "all", count: 1 });
-      await new Promise(r => setTimeout(r, 2000));
-    }
-    await logAgent("IBRAHIM", `Draft generation cycle complete (${(trends||[]).length} keywords)`, "info");
-  } catch(e) { console.error("[IBRAHIM] Draft gen error:", e.message); }
+    const result = await runAutoPublish();
+    if (result?.published > 0) console.log(`[IBRAHIM] ✅ Auto-published ${result.published} post(s) to @houseofjreym`);
+    if (result?.paused) console.log(`[IBRAHIM] ⏸ Auto-publish paused: ${result.reason}`);
+  } catch(e) { console.error("[IBRAHIM] Auto-publish error:", e.message); }
 });
 
-// Every 4 hours: sync analytics for published posts
-cron.schedule("30 */4 * * *", async () => {
-  console.log("[IBRAHIM] Syncing social analytics...");
+// Every 6 hours: generate and schedule next 10 posts if queue is low
+cron.schedule("0 */6 * * *", async () => {
+  console.log("[IBRAHIM] Checking content queue...");
   try {
-    const result = await callSocial("/analytics/sync", "POST");
-    if (result?.synced > 0) await logAgent("IBRAHIM", `Analytics synced: ${result.synced} records`, "info");
+    const { count } = await supabase.from("social_posts")
+      .select("id", { count: "exact", head: true })
+      .eq("platform", "instagram").eq("status", "scheduled");
+    if ((count || 0) < 6) {
+      console.log(`[IBRAHIM] Queue low (${count} scheduled) — generating 10 new posts`);
+      await generateAndSchedulePosts(10);
+    } else {
+      console.log(`[IBRAHIM] Queue healthy: ${count} posts scheduled`);
+    }
+  } catch(e) { console.error("[IBRAHIM] Queue refill error:", e.message); }
+});
+
+// Daily 6 AM UTC (2am EST): follower snapshot
+cron.schedule("0 6 * * *", async () => {
+  console.log("[IBRAHIM] Taking follower snapshot...");
+  try { await takeFollowerSnapshot(); }
+  catch(e) { console.error("[IBRAHIM] Follower snapshot error:", e.message); }
+});
+
+// Daily 7 AM UTC (3am EST): CEO daily report
+cron.schedule("0 7 * * *", async () => {
+  console.log("[IBRAHIM] Generating CEO daily report...");
+  try { await generateCEOReport(); }
+  catch(e) { console.error("[IBRAHIM] CEO report error:", e.message); }
+});
+
+// Every 4 hours: sync analytics on published posts
+cron.schedule("30 */4 * * *", async () => {
+  try {
+    const { data: posts } = await supabase.from("social_posts")
+      .select("id,ig_post_id").eq("platform","instagram").eq("status","published")
+      .gte("published_at", new Date(Date.now()-86400000*3).toISOString()).limit(20);
+    if (posts?.length) console.log(`[IBRAHIM] Analytics sync: ${posts.length} posts`);
   } catch(e) { console.error("[IBRAHIM] Analytics sync error:", e.message); }
 });
 
-// Daily 7 AM: snapshot follower counts
-cron.schedule("0 7 * * *", async () => {
-  console.log("[IBRAHIM] Taking follower snapshot...");
-  try {
-    const result = await callSocial("/analytics/followers", "POST");
-    await logAgent("IBRAHIM", `Follower snapshot: ${JSON.stringify(result?.results?.map(r=>r.platform+":"+r.followers))}`, "info");
-  } catch(e) { console.error("[IBRAHIM] Follower snapshot error:", e.message); }
-});
-
-// Daily 8 AM: generate CEO report
-cron.schedule("0 8 * * *", async () => {
-  console.log("[IBRAHIM] Generating CEO daily report...");
-  try {
-    const result = await callSocial("/report/generate", "POST");
-    if (result?.ok) await logAgent("IBRAHIM", `CEO report generated: ${result.report?.report_date}`, "info");
-  } catch(e) { console.error("[IBRAHIM] Report generation error:", e.message); }
-});
-
-// Every 15 min: check schedule queue (Phase 1: dry-run only, no auto-publish)
-cron.schedule("*/15 * * * *", async () => {
-  try {
-    const result = await callSocial("/schedule/check", "POST", { force: false });
-    if (result?.due > 0 || result?.due_posts?.length) {
-      await logAgent("IBRAHIM", `[PHASE1] ${result.due_posts?.length || 0} post(s) due — awaiting manual publish`, "warn", result);
-    }
-  } catch(e) { console.error("[IBRAHIM] Schedule check error:", e.message); }
-});
-
-console.log("[IBRAHIM] Social media cron jobs registered (Phase 1 — draft-only)");
+console.log("[IBRAHIM] Phase 2 AUTO-POSTING cron jobs registered ✅");
