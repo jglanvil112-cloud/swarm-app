@@ -637,16 +637,16 @@ socialRouter.get("/callback/meta", async (req, res) => {
 
 // ─── TIKTOK OAUTH ─────────────────────────────────────────────────────────────
 
-const TT_CLIENT_KEY    = process.env.TIKTOK_CLIENT_KEY || "";
-const TT_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET || "";
+const getTTKey = () => process.env.TIKTOK_CLIENT_KEY || "";
+const getTTSecret = () => process.env.TIKTOK_CLIENT_SECRET || "";
 const TT_REDIRECT      = APP_URL + "/api/social/callback/tiktok";
 const TT_SCOPES        = "user.info.basic,video.upload";
 
 // GET /api/social/auth/tiktok — redirect to TikTok OAuth
 socialRouter.get("/auth/tiktok", (req, res) => {
-  if (!TT_CLIENT_KEY) return res.status(500).json({ error: "TIKTOK_CLIENT_KEY not set in Render env vars" });
+  if (!getTTKey()) return res.status(500).json({ error: "TIKTOK_CLIENT_KEY not set in Render env vars" });
   const csrfState = "hoj-tt-" + Date.now();
-  const url = `https://www.tiktok.com/v2/auth/authorize?client_key=${TT_CLIENT_KEY}&scope=${TT_SCOPES}&response_type=code&redirect_uri=${encodeURIComponent(TT_REDIRECT)}&state=${csrfState}`;
+  const url = `https://www.tiktok.com/v2/auth/authorize?client_key=${getTTKey()}&scope=${TT_SCOPES}&response_type=code&redirect_uri=${encodeURIComponent(TT_REDIRECT)}&state=${csrfState}`;
   res.redirect(url);
 });
 
@@ -662,7 +662,7 @@ socialRouter.get("/callback/tiktok", async (req, res) => {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_key: TT_CLIENT_KEY, client_secret: TT_CLIENT_SECRET,
+        client_key: getTTKey(), client_secret: getTTSecret(),
         code, grant_type: "authorization_code", redirect_uri: TT_REDIRECT
       })
     });
@@ -743,7 +743,7 @@ socialRouter.post("/token/refresh", async (req, res) => {
       const r = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ client_key: TT_CLIENT_KEY, client_secret: TT_CLIENT_SECRET, grant_type: "refresh_token", refresh_token: cred.refresh_token })
+        body: new URLSearchParams({ client_key: getTTKey(), client_secret: getTTSecret(), grant_type: "refresh_token", refresh_token: cred.refresh_token })
       });
       const data = await r.json();
       if (!data.access_token) throw new Error("TikTok refresh failed: " + JSON.stringify(data));
