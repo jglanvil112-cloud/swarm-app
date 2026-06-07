@@ -162,6 +162,23 @@ body{display:flex;flex-direction:column;min-height:100vh}
 <div class="sps" id="etsy-list"></div>
 </div>
 </div>
+<div class="sblock">
+<div class="sblock-hdr" style="border-color:rgba(180,0,255,.4)">
+<span style="color:#b400ff">IBRAHIM — SOCIAL</span>
+<span id="soc-st" style="font-size:7px;color:var(--mu)">LOADING...</span>
+</div>
+<div class="srow"><span class="sk">INSTAGRAM</span><span class="sv" id="soc-ig">—</span></div>
+<div class="srow"><span class="sk">FACEBOOK</span><span class="sv" id="soc-fb">—</span></div>
+<div class="srow"><span class="sk">TIKTOK</span><span class="sv" id="soc-tt">—</span></div>
+<div class="srow"><span class="sk">DRAFTS</span><span class="sv live" id="soc-drafts">—</span></div>
+<div class="srow"><span class="sk">PUBLISHED</span><span class="sv live" id="soc-pub">—</span></div>
+<div class="srow" style="margin-top:6px">
+<a href="/api/instagram/auth" style="font-size:7px;color:#e1306c;text-decoration:none;letter-spacing:.08em;border:1px solid rgba(225,48,108,.3);padding:2px 5px" id="ig-connect-btn">IG</a>
+<a href="/api/social/auth/meta" style="font-size:7px;color:#1877f2;text-decoration:none;letter-spacing:.08em;border:1px solid rgba(24,119,242,.3);padding:2px 5px;margin-left:3px" id="fb-connect-btn">FB</a>
+<a href="/api/social/callback/tiktok/auth" style="font-size:7px;color:#00d4ff;text-decoration:none;letter-spacing:.08em;border:1px solid rgba(0,212,255,.3);padding:2px 5px;margin-left:3px" id="tt-connect-btn">TT</a>
+</div>
+</div>
+</div>
 </div>
 
 <div class="agents-bar">
@@ -574,7 +591,35 @@ if(liveViews>0)document.getElementById('e-v').textContent=liveViews;
 
 fetchShopify();
 fetchEtsy();
-setInterval(()=>{fetchShopify();fetchEtsy();},30000);
+fetchSocial();
+setInterval(()=>{fetchShopify();fetchEtsy();fetchSocial();},30000);
+
+async function fetchSocial(){
+  try{
+    const r=await fetch('/api/social/status',{headers:{'x-api-key':'swarm-os-key-2025'}});
+    const j=await r.json();
+    const platforms=j.status||[];
+    const ig=platforms.find(p=>p.platform==='instagram');
+    const fb=platforms.find(p=>p.platform==='facebook');
+    const tt=platforms.find(p=>p.platform==='tiktok');
+    const fmt=p=>p&&p.connected?`<span style="color:#00ff88">● LIVE</span>`:`<span style="color:#ff4444">○ OFF</span>`;
+    document.getElementById('soc-ig').innerHTML=fmt(ig)+(ig&&ig.username?' @'+ig.username:'');
+    document.getElementById('soc-fb').innerHTML=fmt(fb)+(fb&&fb.username?' '+fb.username:'');
+    document.getElementById('soc-tt').innerHTML=fmt(tt)+(tt&&tt.username?' @'+tt.username:'');
+    // hide connect buttons if already connected
+    if(ig&&ig.connected) document.getElementById('ig-connect-btn').style.opacity='0.3';
+    if(fb&&fb.connected) document.getElementById('fb-connect-btn').style.opacity='0.3';
+    if(tt&&tt.connected) document.getElementById('tt-connect-btn').style.opacity='0.3';
+    // fetch draft counts
+    const s=await fetch('/api/social/posts?status=draft',{headers:{'x-api-key':'swarm-os-key-2025'}});
+    const sj=await s.json();
+    document.getElementById('soc-drafts').textContent=(sj.posts||[]).length||j.drafts||'—';
+    document.getElementById('soc-st').textContent='LIVE';
+    document.getElementById('soc-st').style.color='#00ff88';
+  }catch(e){
+    document.getElementById('soc-st').textContent='ERR';
+  }
+}
 
 const chatMsgs=document.getElementById('chat-msgs');
 const chatIn=document.getElementById('chat-in');
