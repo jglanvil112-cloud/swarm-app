@@ -586,37 +586,14 @@ socialRouter.get("/callback/meta", async (req, res) => {
     const longRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&fb_exchange_token=${tokenData.access_token}`);
     const longData = await longRes.json();
     const longToken = longData.access_token || tokenData.access_token;
-    const expiresIn = longData.expires_in || 5183944; // ~60 days default
+    const expiresIn = longData.expires_in || 5183944;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Instagram Business API: get the user's IG business accounts directly
+    // Get user info + linked IG business account (Instagram Business API)
     const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,instagram_business_account&access_token=${longToken}`);
     const meData = await meRes.json();
 
-    // Try to get IG business account from user directly (Instagram Business API)
-    let igAccountId = meData.instagram_business_account?.id;
-    let igUsername = "houseofjreym";
-
-    if (igAccountId) {
-      const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}?fields=id,username,followers_count,media_count&access_token=${longToken}`);
-      const igData = await igRes.json();
-      igUsername = igData.username || igUsername;
-
-      // Store Instagram credentials via this token
-      await supabase.from("social_credentials").upsert({
-        platform: "instagram",
-        access_token: longToken,
-        page_id: igAccountId,
-        account_id: igAccountId,
-        username: igUsername,
-        connected: true,
-        token_expires_at: expiresAt,
-        meta: { user_id: meData.id, source: "instagram_business_api" },
-        updated_at: new Date().toISOString()
-      }, { onConflict: "platform" });
-    }
-
-    // Store the user token as "facebook" for any page posting
+    // Store Facebook user token
     await supabase.from("social_credentials").upsert({
       platform: "facebook",
       access_token: longToken,
@@ -624,47 +601,35 @@ socialRouter.get("/callback/meta", async (req, res) => {
       username: meData.name || "Houseofjreym",
       connected: true,
       token_expires_at: expiresAt,
-      meta: { user_id: meData.id, ig_account_id: igAccountId, source: "instagram_business_api" },
+      meta: { user_id: meData.id, source: "instagram_business_api" },
       updated_at: new Date().toISOString()
     }, { onConflict: "platform" });
 
-    // Fake the old structure so the rest of the handler works
-    const hojPage = { id: meData.id, name: meData.name, access_token: longToken, instagram_business_account: { id: igAccountId } };
-    const pages = [hojPage];
-    const pageToken = longToken;
+    await logAgent("IBRAHIM", `Facebook connected: ${meData.name} (user_id: ${meData.id})`, "success");
 
-    // Get Instagram Business Account linked to this page
-    const igAccountId2 = igAccountId;
-    if (igAccountId2) {
-      // Get IG account details
-      const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId2}?fields=id,username,followers_count,media_count&access_token=${pageToken}`);
+    // Try to get IG business account
+    const igAccountId = meData.instagram_business_account?.id;
+    if (igAccountId) {
+      const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}?fields=id,username,followers_count,media_count&access_token=${longToken}`);
       const igData = await igRes.json();
       await supabase.from("social_credentials").upsert({
         platform: "instagram",
-        access_token: pageToken,
-        page_id: igAccountId2,
-        account_id: igAccountId2,
+        access_token: longToken,
+        page_id: igAccountId,
+        account_id: igAccountId,
         username: igData.username || "houseofjreym",
-          connected: true,
-          token_expires_at: expiresAt,
-          meta: { followers: igData.followers_count, media_count: igData.media_count, fb_page_id: hojPage.id },
-          updated_at: new Date().toISOString()
-        }, { onConflict: "platform" });
-
-        // Snapshot followers
-        if (igData.followers_count) {
-          await supabase.from("social_account_stats").insert({ platform: "instagram", followers: igData.followers_count, recorded_at: new Date().toISOString() });
-        }
-        await logAgent("IBRAHIM", `Instagram connected: @${igData.username || "houseofjreym"} (${igData.followers_count || 0} followers)`, "success");
+        connected: true,
+        token_expires_at: expiresAt,
+        meta: { followers: igData.followers_count, media_count: igData.media_count, source: "instagram_business_api" },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "platform" });
+      if (igData.followers_count) {
+        await supabase.from("social_account_stats").insert({ platform: "instagram", followers: igData.followers_count, recorded_at: new Date().toISOString() });
       }
-
-      await logAgent("IBRAHIM", `Facebook connected: ${hojPage.name} (page_id: ${hojPage.id})`, "success");
-      res.redirect("/social_dashboard.html?meta=connected&page=" + encodeURIComponent(hojPage.name));
-    } else {
-      // No pages found — store user token anyway and log
-      await logAgent("IBRAHIM", "Meta OAuth: no pages found for this account", "warn");
-      res.redirect("/social_dashboard.html?meta=connected&warning=no_pages_found");
+      await logAgent("IBRAHIM", `Instagram linked: @${igData.username || "houseofjreym"} (${igData.followers_count || 0} followers)`, "success");
     }
+
+    res.redirect("/social_dashboard.html?meta=connected&user=" + encodeURIComponent(meData.name || "connected"));
   } catch (e) {
     console.error("[IBRAHIM] Meta OAuth callback error:", e.message);
     await logAgent("IBRAHIM", "Meta OAuth failed: " + e.message, "error");
