@@ -557,17 +557,16 @@ const APP_URL         = process.env.APP_URL || "https://swarm-app-3nch.onrender.
 const META_REDIRECT   = APP_URL + "/api/social/callback/meta";
 // Meta scopes needed for Instagram Business + Facebook Page
 const META_SCOPES = [
-  "instagram_business_basic",
-  "instagram_business_content_publish",
-  "instagram_business_manage_comments",
-  "instagram_business_manage_messages"
+  "pages_show_list",
+  "pages_manage_posts",
+  "pages_read_engagement"
 ].join(",");
 
 // GET /api/social/auth/meta — redirect to Instagram Business OAuth
 socialRouter.get("/auth/meta", (req, res) => {
   if (!META_APP_ID()) return res.status(500).json({ error: "META_APP_ID not set in Render env vars" });
   // Instagram Business API uses api.instagram.com for OAuth (not facebook.com/dialog/oauth)
-  const url = `https://api.instagram.com/oauth/authorize?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
   res.redirect(url);
 });
 
