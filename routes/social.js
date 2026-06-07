@@ -577,70 +577,51 @@ socialRouter.get("/callback/meta", async (req, res) => {
   if (!code) return res.redirect("/swarm_shop_os_v5.html?error=no_code");
 
   try {
-    // Exchange code for short-lived token
-    // Step 1: Exchange code for short-lived token (Instagram Business API)
-    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: META_APP_ID(),
-        client_secret: META_APP_SECRET(),
-        grant_type: "authorization_code",
-        redirect_uri: META_REDIRECT,
-        code
-      })
-    });
+    // Step 1: Exchange code for short-lived user access token (Facebook Graph API)
+    const tokenRes = await fetch("https://graph.facebook.com/v19.0/oauth/access_token?" + new URLSearchParams({
+      client_id: META_APP_ID(),
+      client_secret: META_APP_SECRET(),
+      grant_type: "authorization_code",
+      redirect_uri: META_REDIRECT,
+      code
+    }));
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("Token exchange failed: " + JSON.stringify(tokenData));
 
-    // Step 2: Exchange for long-lived token (60 days)
-    const longRes = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${META_APP_SECRET()}&access_token=${tokenData.access_token}`);
+    // Step 2: Exchange short-lived for long-lived user token (60 days)
+    const longRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&fb_exchange_token=${tokenData.access_token}`);
     const longData = await longRes.json();
     const longToken = longData.access_token || tokenData.access_token;
     const expiresIn = longData.expires_in || 5183944;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Step 3: Get IG user info
-    const meRes = await fetch(`https://graph.instagram.com/v19.0/me?fields=id,name,username,instagram_business_account&access_token=${longToken}`);
+    // Step 3: Get Facebook user info + managed pages
+    const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name,accounts{id,name,access_token,category}&access_token=${longToken}`);
     const meData = await meRes.json();
 
-    // Store Facebook user token
+    // Find the Houseofjreym page from managed pages
+    const pages = meData.accounts?.data || [];
+    const hojPage = pages.find(p => p.name?.toLowerCase().includes("jreym") || p.name?.toLowerCase().includes("house")) || pages[0];
+    const pageToken = hojPage?.access_token || longToken;
+    const pageId = hojPage?.id || meData.id;
+    const pageName = hojPage?.name || meData.name || "Houseofjreym";
+
+    // Store Facebook Page token (page token is permanent for published apps)
     await supabase.from("social_credentials").upsert({
       platform: "facebook",
-      access_token: longToken,
-      page_id: meData.id,
-      username: meData.name || "Houseofjreym",
+      access_token: pageToken,
+      page_id: pageId,
+      account_id: meData.id,
+      username: pageName,
       connected: true,
       token_expires_at: expiresAt,
-      meta: { user_id: meData.id, source: "instagram_business_api" },
+      meta: { user_id: meData.id, page_id: pageId, page_name: pageName, all_pages: pages.map(p=>p.name) },
       updated_at: new Date().toISOString()
     }, { onConflict: "platform" });
 
-    await logAgent("IBRAHIM", `Facebook connected: ${meData.name} (user_id: ${meData.id})`, "success");
+    await logAgent("IBRAHIM", `Facebook Page connected: ${pageName} (page_id: ${pageId})`, "success");
 
-    // Try to get IG business account
-    const igAccountId = meData.instagram_business_account?.id;
-    if (igAccountId) {
-      const igRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}?fields=id,username,followers_count,media_count&access_token=${longToken}`);
-      const igData = await igRes.json();
-      await supabase.from("social_credentials").upsert({
-        platform: "instagram",
-        access_token: longToken,
-        page_id: igAccountId,
-        account_id: igAccountId,
-        username: igData.username || "houseofjreym",
-        connected: true,
-        token_expires_at: expiresAt,
-        meta: { followers: igData.followers_count, media_count: igData.media_count, source: "instagram_business_api" },
-        updated_at: new Date().toISOString()
-      }, { onConflict: "platform" });
-      if (igData.followers_count) {
-        await supabase.from("social_account_stats").insert({ platform: "instagram", followers: igData.followers_count, recorded_at: new Date().toISOString() });
-      }
-      await logAgent("IBRAHIM", `Instagram linked: @${igData.username || "houseofjreym"} (${igData.followers_count || 0} followers)`, "success");
-    }
-
-    res.redirect("/swarm_shop_os_v5.html?meta=connected&user=" + encodeURIComponent(meData.name || "connected"));
+    res.redirect("/swarm_shop_os_v5.html?facebook=connected&page=" + encodeURIComponent(pageName));
   } catch (e) {
     console.error("[IBRAHIM] Meta OAuth callback error:", e.message);
     await logAgent("IBRAHIM", "Meta OAuth failed: " + e.message, "error");
