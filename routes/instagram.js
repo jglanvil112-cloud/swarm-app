@@ -25,11 +25,10 @@ instagramRouter.get("/test", async (req, res) => {
     return res.json(await r.json());
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
-
-
 instagramRouter.post("/exchange-token", async (req, res) => {
     try {
           const { code } = req.body;
+          const REDIRECT = "https://developers.facebook.com/instagram/token_generator/oauth/";
           const r = await fetch("https://api.instagram.com/oauth/access_token", {
                   method: "POST",
                   headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -37,14 +36,14 @@ instagramRouter.post("/exchange-token", async (req, res) => {
                             client_id: "1018858183882731",
                             client_secret: "faf388b0ba788c5d20e949d8973f2a07",
                             grant_type: "authorization_code",
-                            redirect_uri: "https://developers.facebook.com/instagram/token_generator/oauth/",
+                            redirect_uri: REDIRECT,
                             code
                   })
-                                                                                                                                                          });
+          });
           const data = await r.json();
-          if (data.error) return res.status(400).json(data);
+          if (data.error_type || data.error) return res.status(400).json(data);
           const ll = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=faf388b0ba788c5d20e949d8973f2a07&access_token=${data.access_token}`);
           const llData = await ll.json();
           res.json({ short: data, long: llData });
     } catch (err) { res.status(500).json({ error: err.message }); }
-});
+    });
