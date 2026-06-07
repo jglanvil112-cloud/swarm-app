@@ -566,7 +566,7 @@ const META_SCOPES = [
 socialRouter.get("/auth/meta", (req, res) => {
   if (!META_APP_ID()) return res.status(500).json({ error: "META_APP_ID not set in Render env vars" });
   // Instagram Business API uses api.instagram.com for OAuth (not facebook.com/dialog/oauth)
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
+  const url = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
   res.redirect(url);
 });
 
