@@ -138,7 +138,9 @@ app.use("/api/instagram", instagramRouter);
 
                                                                                                                                                                                               app.get("/api/stats", async (req, res) => {
                                                                                                                                                                                                 try {
-                                                                                                                                                                                                    const [c,p,r,f,logs] = await Promise.all([
+                                                        
+                                                        
+                                                                                                                                                                                                  const [c,p,r,f,logs] = await Promise.all([
                                                                                                                                                                                                           supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","completed"),
                                                                                                                                                                                                                 supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","pending"),
                                                                                                                                                                                                                       supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","running"),
