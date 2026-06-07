@@ -276,14 +276,18 @@ socialRouter.post("/publish/:id", async (req, res) => {
 
         if (platform === "facebook" && cred.page_id) {
           const r = await callPlatformAPI("facebook", `/${cred.page_id}/feed`, "POST", {
-            message: `${post.caption}\n\n${(post.hashtags || []).map(t => `#${t}`).join(" ")}`,
+            message: `${post.caption}
+
+${(post.hashtags || []).map(t => `#${t}`).join(" ")}`,
             access_token: cred.access_token
           });
           publishResult = { platform, ok: r.ok, post_id: r.data?.id, error: r.ok ? null : JSON.stringify(r.data).slice(0, 200) };
 
         } else if (platform === "instagram" && cred.page_id) {
           // Instagram requires media container + publish flow
-          const caption = `${post.caption}\n\n${(post.hashtags || []).map(t => `#${t}`).join(" ")}`;
+          const caption = `${post.caption}
+
+${(post.hashtags || []).map(t => `#${t}`).join(" ")}`;
           if (post.media_urls?.length) {
             const containerR = await callPlatformAPI("instagram", `/${cred.page_id}/media`, "POST", {
               image_url: post.media_urls[0], caption, access_token: cred.access_token
@@ -499,7 +503,8 @@ Format: Executive bullet points. Include: what happened yesterday, wins, gaps, 3
       total_posts_published: reportData.posts_published,
       total_reach: totals.reach, total_engagement: totals.likes + totals.comments + totals.shares,
       follower_delta: latestFollowers, full_report: reportData,
-      recommendations: summary.split("\n").filter(l => l.includes("•") || l.includes("-")).slice(0, 5)
+      recommendations: summary.split("
+").filter(l => l.includes("•") || l.includes("-")).slice(0, 5)
     }, { onConflict: "report_date" }).select().single();
 
     if (error) throw new Error(error.message);
@@ -640,7 +645,7 @@ socialRouter.get("/callback/meta", async (req, res) => {
 const TT_CLIENT_KEY    = process.env.TIKTOK_CLIENT_KEY || "";
 const TT_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET || "";
 const TT_REDIRECT      = APP_URL + "/api/social/callback/tiktok";
-const TT_SCOPES        = "user.info.basic,user.info.stats,video.upload,video.publish";
+const TT_SCOPES        = "user.info.basic,video.upload";
 
 // GET /api/social/auth/tiktok — redirect to TikTok OAuth
 socialRouter.get("/auth/tiktok", (req, res) => {
