@@ -11,6 +11,7 @@ import { printifyRouter } from "./routes/printify.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { pipelineRouter } from "./routes/pipeline.js";
 import { socialRouter } from "./routes/social.js";
+import { instagramRouter } from "./routes/instagram.js";
 import { supabase, recordHealth, getRecentOutputs } from "./lib/supabase.js";
 import "./workers/scheduler.js";
 
@@ -59,6 +60,7 @@ const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopif
                         app.use("/api/tasks", tasksRouter);
 app.use("/api/pipeline", pipelineRouter);
 app.use("/api/social", socialRouter);
+app.use("/api/instagram", instagramRouter);
 
                         // Agent outputs — feeds dashboard AMARA output panel
                         app.get("/api/outputs", async (req, res) => {
