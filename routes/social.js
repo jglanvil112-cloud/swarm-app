@@ -577,14 +577,18 @@ socialRouter.get("/callback/meta", async (req, res) => {
   if (!code) return res.redirect("/swarm_shop_os_v5.html?error=no_code");
 
   try {
-    // Step 1: Exchange code for short-lived user access token (Facebook Graph API)
-    const tokenRes = await fetch("https://graph.facebook.com/v19.0/oauth/access_token?" + new URLSearchParams({
-      client_id: META_APP_ID(),
-      client_secret: META_APP_SECRET(),
-      grant_type: "authorization_code",
-      redirect_uri: META_REDIRECT,
-      code
-    }));
+    // Step 1: Exchange code for short-lived user access token (Facebook Graph API — POST required)
+    const tokenRes = await fetch("https://graph.facebook.com/v19.0/oauth/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: META_APP_ID(),
+        client_secret: META_APP_SECRET(),
+        grant_type: "authorization_code",
+        redirect_uri: META_REDIRECT,
+        code
+      })
+    });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("Token exchange failed: " + JSON.stringify(tokenData));
 
