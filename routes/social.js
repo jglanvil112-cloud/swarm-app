@@ -551,8 +551,8 @@ socialRouter.post("/schedule/check", async (req, res) => {
 
 // ─── META OAUTH (Instagram + Facebook) ───────────────────────────────────────
 
-const META_APP_ID     = process.env.META_APP_ID || "";
-const META_APP_SECRET = process.env.META_APP_SECRET || "";
+const META_APP_ID = () => process.env.META_APP_ID || "";
+const META_APP_SECRET = () => process.env.META_APP_SECRET || "";
 const APP_URL         = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
 const META_REDIRECT   = APP_URL + "/api/social/callback/meta";
 // Meta scopes needed for Instagram Business + Facebook Page
@@ -564,8 +564,8 @@ const META_SCOPES = [
 
 // GET /api/social/auth/meta — redirect to Meta OAuth
 socialRouter.get("/auth/meta", (req, res) => {
-  if (!META_APP_ID) return res.status(500).json({ error: "META_APP_ID not set in Render env vars" });
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
+  if (!META_APP_ID()) return res.status(500).json({ error: "META_APP_ID not set in Render env vars" });
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&scope=${META_SCOPES}&response_type=code&state=hoj-meta-${Date.now()}`;
   res.redirect(url);
 });
 
@@ -577,12 +577,12 @@ socialRouter.get("/callback/meta", async (req, res) => {
 
   try {
     // Exchange code for short-lived token
-    const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&code=${code}`);
+    const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&redirect_uri=${encodeURIComponent(META_REDIRECT)}&code=${code}`);
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("Token exchange failed: " + JSON.stringify(tokenData));
 
     // Exchange for long-lived token (60 days)
-    const longRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${tokenData.access_token}`);
+    const longRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&fb_exchange_token=${tokenData.access_token}`);
     const longData = await longRes.json();
     const longToken = longData.access_token || tokenData.access_token;
     const expiresIn = longData.expires_in || 5183944; // ~60 days default
@@ -743,9 +743,9 @@ socialRouter.get("/auth/status", async (req, res) => {
       if (!result[p]) result[p] = { connected: false, username: null };
     }
     res.json({ accounts: result, oauth: {
-      meta_configured: !!META_APP_ID,
+      meta_configured: !!META_APP_ID(),
       tiktok_configured: !!TT_CLIENT_KEY,
-      meta_auth_url: META_APP_ID ? "/api/social/auth/meta" : null,
+      meta_auth_url: META_APP_ID() ? "/api/social/auth/meta" : null,
       tiktok_auth_url: TT_CLIENT_KEY ? "/api/social/auth/tiktok" : null
     }});
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -770,9 +770,9 @@ socialRouter.post("/token/refresh", async (req, res) => {
       await supabase.from("social_credentials").update({ access_token: data.access_token, refresh_token: data.refresh_token || cred.refresh_token, token_expires_at: expiresAt, updated_at: new Date().toISOString() }).eq("platform", "tiktok");
       res.json({ ok: true, platform, expires_at: expiresAt });
 
-    } else if ((platform === "facebook" || platform === "instagram") && META_APP_ID) {
+    } else if ((platform === "facebook" || platform === "instagram") && META_APP_ID()) {
       // Refresh Meta long-lived token
-      const r = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${cred.access_token}`);
+      const r = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID()}&client_secret=${META_APP_SECRET()}&fb_exchange_token=${cred.access_token}`);
       const data = await r.json();
       if (!data.access_token) throw new Error("Meta refresh failed: " + JSON.stringify(data));
       const expiresAt = new Date(Date.now() + (data.expires_in || 5183944) * 1000).toISOString();
