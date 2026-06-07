@@ -172,7 +172,7 @@ cron.schedule("*/15 * * * *",runHealthCheck);
 console.log("SWARM OS v6.0: All cron jobs registered");
 
 // ─── IBRAHIM Social Media Agent — Phase 2 AUTO-POSTING ───────────────────────
-import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "./routes/ibrahim.js";
+import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "../routes/ibrahim.js";
 
 // Every 5 min: check for scheduled posts due and auto-publish
 cron.schedule("*/5 * * * *", async () => {
