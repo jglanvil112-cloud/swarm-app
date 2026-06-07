@@ -573,8 +573,8 @@ socialRouter.get("/auth/meta", (req, res) => {
 // GET /api/social/callback/meta — handle Meta OAuth callback (Instagram Business API)
 socialRouter.get("/callback/meta", async (req, res) => {
   const { code, error, error_description } = req.query;
-  if (error) return res.redirect(`/social_dashboard.html?error=${encodeURIComponent(error_description || error)}`);
-  if (!code) return res.redirect("/social_dashboard.html?error=no_code");
+  if (error) return res.redirect(`/swarm_shop_os_v5.html?error=${encodeURIComponent(error_description || error)}`);
+  if (!code) return res.redirect("/swarm_shop_os_v5.html?error=no_code");
 
   try {
     // Exchange code for short-lived token
@@ -640,11 +640,11 @@ socialRouter.get("/callback/meta", async (req, res) => {
       await logAgent("IBRAHIM", `Instagram linked: @${igData.username || "houseofjreym"} (${igData.followers_count || 0} followers)`, "success");
     }
 
-    res.redirect("/social_dashboard.html?meta=connected&user=" + encodeURIComponent(meData.name || "connected"));
+    res.redirect("/swarm_shop_os_v5.html?meta=connected&user=" + encodeURIComponent(meData.name || "connected"));
   } catch (e) {
     console.error("[IBRAHIM] Meta OAuth callback error:", e.message);
     await logAgent("IBRAHIM", "Meta OAuth failed: " + e.message, "error");
-    res.redirect("/social_dashboard.html?error=" + encodeURIComponent(e.message));
+    res.redirect("/swarm_shop_os_v5.html?error=" + encodeURIComponent(e.message));
   }
 });
 
@@ -666,8 +666,8 @@ socialRouter.get("/auth/tiktok", (req, res) => {
 // GET /api/social/callback/tiktok — handle TikTok OAuth callback
 socialRouter.get("/callback/tiktok", async (req, res) => {
   const { code, error, error_description } = req.query;
-  if (error) return res.redirect(`/social_dashboard.html?error=${encodeURIComponent(error_description || error)}`);
-  if (!code) return res.redirect("/social_dashboard.html?error=no_tiktok_code");
+  if (error) return res.redirect(`/swarm_shop_os_v5.html?error=${encodeURIComponent(error_description || error)}`);
+  if (!code) return res.redirect("/swarm_shop_os_v5.html?error=no_tiktok_code");
 
   try {
     // Exchange code for access token
@@ -708,11 +708,11 @@ socialRouter.get("/callback/tiktok", async (req, res) => {
     }
 
     await logAgent("IBRAHIM", `TikTok connected: @${user.display_name || "houseofjreym"} (${user.follower_count || 0} followers)`, "success");
-    res.redirect("/social_dashboard.html?tiktok=connected&user=" + encodeURIComponent(user.display_name || "houseofjreym"));
+    res.redirect("/swarm_shop_os_v5.html?tiktok=connected&user=" + encodeURIComponent(user.display_name || "houseofjreym"));
   } catch (e) {
     console.error("[IBRAHIM] TikTok OAuth callback error:", e.message);
     await logAgent("IBRAHIM", "TikTok OAuth failed: " + e.message, "error");
-    res.redirect("/social_dashboard.html?error=" + encodeURIComponent(e.message));
+    res.redirect("/swarm_shop_os_v5.html?error=" + encodeURIComponent(e.message));
   }
 });
 
@@ -930,7 +930,7 @@ socialRouter.get("/setup/meta-instructions", (req, res) => {
   res.json({
     method: hasRealApp ? "oauth" : "graph_explorer",
     steps: hasRealApp ? [
-      "1. Go to swarm-app-3nch.onrender.com/social_dashboard.html",
+      "1. Go to swarm-app-3nch.onrender.com/swarm_shop_os_v5.html",
       "2. Click Connect Accounts tab",
       "3. Click Connect with Meta button",
       "4. Log in with the Facebook account that manages Houseofjreym page",

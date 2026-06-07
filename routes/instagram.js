@@ -44,8 +44,8 @@ instagramRouter.get("/auth", (req, res) => {
 // GET /api/instagram/callback — Instagram OAuth callback, exchanges code for token
 instagramRouter.get("/callback", async (req, res) => {
   const { code, error } = req.query;
-  if (error) return res.redirect(`/social_dashboard.html?error=${encodeURIComponent(error)}`);
-  if (!code)  return res.redirect("/social_dashboard.html?error=no_ig_code");
+  if (error) return res.redirect(`/swarm_shop_os_v5.html?error=${encodeURIComponent(error)}`);
+  if (!code)  return res.redirect("/swarm_shop_os_v5.html?error=no_ig_code");
 
   try {
     // Exchange code for short-lived token
@@ -91,11 +91,11 @@ instagramRouter.get("/callback", async (req, res) => {
     }, { onConflict: "platform" });
 
     await logAgent("IBRAHIM", `Instagram OAuth connected: @${meData.username || "houseofjreym"}`, "success");
-    res.redirect(`/social_dashboard.html?instagram=connected&user=${encodeURIComponent(meData.username || "houseofjreym")}`);
+    res.redirect(`/swarm_shop_os_v5.html?instagram=connected&user=${encodeURIComponent(meData.username || "houseofjreym")}`);
   } catch (e) {
     console.error("[IG] callback error:", e.message);
     await logAgent("IBRAHIM", "Instagram OAuth callback failed: " + e.message, "error");
-    res.redirect("/social_dashboard.html?error=" + encodeURIComponent(e.message));
+    res.redirect("/swarm_shop_os_v5.html?error=" + encodeURIComponent(e.message));
   }
 });
 
