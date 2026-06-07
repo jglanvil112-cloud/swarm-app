@@ -557,9 +557,9 @@ const APP_URL         = process.env.APP_URL || "https://swarm-app-3nch.onrender.
 const META_REDIRECT   = APP_URL + "/api/social/callback/meta";
 // Meta scopes needed for Instagram Business + Facebook Page
 const META_SCOPES = [
-  "instagram_content_publish","instagram_manage_insights",
+  "instagram_content_publish",
   "pages_show_list","pages_read_engagement","pages_manage_posts",
-  "pages_read_user_content","business_management"
+  "business_management"
 ].join(",");
 
 // GET /api/social/auth/meta — redirect to Meta OAuth
