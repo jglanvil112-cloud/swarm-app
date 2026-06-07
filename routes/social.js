@@ -658,6 +658,7 @@ socialRouter.get("/callback/tiktok", async (req, res) => {
 
   try {
     // Exchange code for access token
+    console.log("[IBRAHIM] TikTok token exchange:", { key: getTTKey(), secretLen: getTTSecret().length, redirect: TT_REDIRECT, codeLen: code.length });
     const tokenRes = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -666,6 +667,8 @@ socialRouter.get("/callback/tiktok", async (req, res) => {
         code, grant_type: "authorization_code", redirect_uri: TT_REDIRECT
       })
     });
+    const rawBody = await tokenRes.clone().text();
+    console.log("[IBRAHIM] TikTok token response:", rawBody.slice(0, 200));
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) throw new Error("TikTok token exchange failed: " + JSON.stringify(tokenData));
 
