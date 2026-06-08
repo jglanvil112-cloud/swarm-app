@@ -157,6 +157,17 @@ instagramRouter.post("/post", async (req, res) => {
     const c = await fetch(`${base}/${userId}/media`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_url, caption, access_token: token }) });
     const container = await c.json();
     if (container.error) { await logAgent("INSTAGRAM","error",container.error.message); return res.status(500).json({ error: container.error.message }); }
+    if (!container.id) { await logAgent("INSTAGRAM","error","No container id: "+JSON.stringify(container)); return res.status(500).json({ error: "Container not created", detail: container }); }
+    // Poll container until Instagram finishes processing the image (avoids "Media ID is not available")
+    let ready = false;
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const s = await fetch(`${base}/${container.id}?fields=status_code,status&access_token=${token}`);
+      const sd = await s.json();
+      if (sd.status_code === "FINISHED") { ready = true; break; }
+      if (sd.status_code === "ERROR" || sd.status === "ERROR") { await logAgent("INSTAGRAM","error","Container processing failed: "+JSON.stringify(sd)); return res.status(500).json({ error: "Container processing failed", detail: sd }); }
+    }
+    if (!ready) { await logAgent("INSTAGRAM","error","Container not ready after polling"); return res.status(500).json({ error: "Container still processing after 20s — try again" }); }
     const p = await fetch(`${base}/${userId}/media_publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creation_id: container.id, access_token: token }) });
     const published = await p.json();
     if (published.error) { await logAgent("INSTAGRAM","error",published.error.message); return res.status(500).json({ error: published.error.message }); }
