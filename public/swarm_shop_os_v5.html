@@ -548,7 +548,7 @@ document.getElementById('shp-st').style.color='var(--r)';
 
 async function fetchEtsy(){
 try{
-const r=await fetch(`${RENDER}/api/etsy/shop-id`, {headers:{'x-api-key':'swarm-os-key-2025'}});
+const r=await fetch(`${RENDER}/api/etsy/shop`, {headers:{'x-api-key':'swarm-os-key-2025'}});
 if(r.ok){
 const d=await r.json();
 if(d.shop_id||d.listing_active_count!=null){
