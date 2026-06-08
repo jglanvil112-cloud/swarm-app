@@ -148,6 +148,29 @@ const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+req.params.id,
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+etsyRouter.get("/listing-image", async (req, res) => {
+  try {
+    const t = await getEtsyToken();
+    const r = await fetch(ETSY_BASE + "/shops/" + ETSY_SHOP_ID + "/listings/active?limit=100&includes=Images", { headers: t ? authH(t) : pubH() });
+    if (!r.ok) return res.redirect("https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg");
+    const data = await r.json();
+    const want = (req.query.title || "").toLowerCase();
+    let match = null;
+    if (want && data.results?.length) {
+      match = data.results.find(l => (l.title || "").toLowerCase().includes(want.slice(0, 20)))
+            || data.results.find(l => want.includes((l.title || "").toLowerCase().slice(0, 20)));
+    }
+    const listing = match || (data.results && data.results[0]);
+    const img = listing?.images?.[0];
+    const url = img?.url_fullxfull || img?.url_570xN || img?.url_680xN;
+    if (!url) return res.redirect("https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg");
+    return res.redirect(url);
+  } catch (e) {
+    return res.redirect("https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg");
+  }
+});
+
+
 etsyRouter.get("/debug-ping",async(req,res)=>{try{const r=await fetch(ETSY_BASE+"/openapi-ping",{headers:{"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")}});const t=await r.text();const tok=await getEtsyToken();res.json({ping_status:r.status,ping_body:t,key_used:ETSY_KEY.slice(0,8)+"...",secret_set:!!ETSY_SECRET,has_token:!!tok,token_preview:tok?tok.slice(0,12)+"...":null});}catch(e){res.status(500).json({error:e.message});}});
 etsyRouter.get("/orders",async(req,res)=>{
   try{
