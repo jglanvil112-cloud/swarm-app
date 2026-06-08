@@ -154,7 +154,7 @@ instagramRouter.post("/post", async (req, res) => {
     if (!userId) userId = await getLiveUserId();
     else { try { await supabase.from("social_credentials").update({ page_id: userId, account_id: userId, updated_at: new Date().toISOString() }).eq("platform","instagram"); } catch {} }
     const base   = "https://graph.instagram.com/v21.0";
-    const c = await fetch(`${base}/${userId}/media`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_url, caption, access_token: token }) });
+    const c = await fetch(`${base}/${userId}/media`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_url, caption, media_type: "IMAGE", access_token: token }) });
     const container = await c.json();
     if (container.error) { await logAgent("INSTAGRAM","error",container.error.message); return res.status(500).json({ error: container.error.message }); }
     if (!container.id) { await logAgent("INSTAGRAM","error","No container id: "+JSON.stringify(container)); return res.status(500).json({ error: "Container not created", detail: container }); }
