@@ -149,27 +149,44 @@ const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+req.params.id,
 });
 
 etsyRouter.get("/listing-image", async (req, res) => {
+  const FALLBACK = "https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg";
   try {
-    const t = await getEtsyToken();
-    const r = await fetch(ETSY_BASE + "/shops/" + ETSY_SHOP_ID + "/listings/active?limit=100&includes=Images", { headers: t ? authH(t) : pubH() });
-    if (!r.ok) return res.redirect("https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg");
+    // Pull real product images from Shopify (returns JPEGs on cdn.shopify.com that Instagram accepts)
+    let token = process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_CLIENT_SECRET || "";
+    let shopDomain = process.env.SHOPIFY_DOMAIN || "";
+    try {
+      const { data: st } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform","shopify").single();
+      if (st?.access_token) token = st.access_token;
+      if (st?.shop) shopDomain = st.shop;
+    } catch {}
+    shopDomain = String(shopDomain).replace(/^https?:\/\//, "").replace(/\/$/, "");
+    if (!shopDomain || !token) return res.redirect(FALLBACK);
+
+    const r = await fetch(`https://${shopDomain}/admin/api/2024-01/products.json?limit=50&fields=id,title,image`, {
+      headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }
+    });
+    if (!r.ok) return res.redirect(FALLBACK);
     const data = await r.json();
+    const prods = (data.products || []).filter(p => p.image && p.image.src);
+    if (!prods.length) return res.redirect(FALLBACK);
+
+    // Try to match by title; otherwise rotate deterministically so posts vary
     const want = (req.query.title || "").toLowerCase();
     let match = null;
-    if (want && data.results?.length) {
-      match = data.results.find(l => (l.title || "").toLowerCase().includes(want.slice(0, 20)))
-            || data.results.find(l => want.includes((l.title || "").toLowerCase().slice(0, 20)));
+    if (want) match = prods.find(p => (p.title || "").toLowerCase().includes(want.slice(0, 15)));
+    if (!match) {
+      // deterministic pick based on title hash so each post gets a stable image
+      let h = 0; for (const c of want) h = (h * 31 + c.charCodeAt(0)) % prods.length;
+      match = prods[h] || prods[0];
     }
-    const listing = match || (data.results && data.results[0]);
-    const img = listing?.images?.[0];
-    const url = img?.url_fullxfull || img?.url_570xN || img?.url_680xN;
-    if (!url) return res.redirect("https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg");
+    let url = match.image.src;
+    // Instagram needs a clean direct JPEG URL — strip query params
+    url = url.split("?")[0];
     return res.redirect(url);
   } catch (e) {
-    return res.redirect("https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg");
+    return res.redirect(FALLBACK);
   }
 });
-
 
 etsyRouter.get("/debug-ping",async(req,res)=>{try{const r=await fetch(ETSY_BASE+"/openapi-ping",{headers:{"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")}});const t=await r.text();const tok=await getEtsyToken();res.json({ping_status:r.status,ping_body:t,key_used:ETSY_KEY.slice(0,8)+"...",secret_set:!!ETSY_SECRET,has_token:!!tok,token_preview:tok?tok.slice(0,12)+"...":null});}catch(e){res.status(500).json({error:e.message});}});
 etsyRouter.get("/orders",async(req,res)=>{
