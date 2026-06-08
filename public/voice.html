@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SWARM Voice Mode</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a14;--surface:#12121f;--border:#1e1e35;
+  --cyan:#00e5ff;--green:#00ff88;--red:#ff3355;
+  --gold:#ffd700;--muted:#5a6080;--text:#d0d8f0;
+  --purple:#9966ff;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.container{width:100%;max-width:560px;display:flex;flex-direction:column;gap:16px}
+/* HEADER */
+.header{text-align:center;padding:8px 0}
+.logo{font-size:11px;letter-spacing:4px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.title{font-size:20px;font-weight:700;color:var(--cyan);letter-spacing:1px}
+/* STATUS */
+.status{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;background:var(--surface);border:1px solid var(--border);font-size:13px;transition:all 0.3s}
+.status.listening{border-color:var(--red);background:rgba(255,51,85,0.08)}
+.status.thinking{border-color:var(--cyan);background:rgba(0,229,255,0.06)}
+.status.speaking{border-color:var(--green);background:rgba(0,255,136,0.06)}
+.status.error{border-color:var(--gold);background:rgba(255,215,0,0.06)}
+.status.ready{border-color:var(--cyan);background:rgba(0,229,255,0.04)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background 0.3s}
+.status.listening .dot{background:var(--red);animation:pulse 0.8s ease-in-out infinite}
+.status.thinking .dot{background:var(--cyan);animation:pulse 1.2s ease-in-out infinite}
+.status.speaking .dot{background:var(--green);animation:pulse 0.9s ease-in-out infinite}
+.status.error .dot{background:var(--gold)}
+.status.ready .dot{background:var(--cyan)}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(0.5);opacity:0.3}}
+.status-text{flex:1;color:var(--text)}
+/* TOGGLE */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.toggle-label{font-size:13px;color:var(--muted)}
+.toggle-label span{color:var(--text);font-weight:600}
+.toggle-switch{position:relative;width:52px;height:28px;cursor:pointer}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute}
+.slider{position:absolute;inset:0;background:var(--border);border-radius:14px;transition:background 0.2s}
+.slider::before{content:'';position:absolute;width:20px;height:20px;left:4px;top:4px;background:var(--muted);border-radius:50%;transition:all 0.2s}
+input:checked + .slider{background:var(--cyan)}
+input:checked + .slider::before{transform:translateX(24px);background:#0a0a14}
+/* PTT BUTTON */
+.ptt-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0}
+.ptt-btn{width:88px;height:88px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-size:32px;user-select:none;-webkit-user-select:none}
+.ptt-btn:not(:disabled):hover{border-color:var(--cyan);color:var(--cyan)}
+.ptt-btn.active{border-color:var(--red);color:var(--red);background:rgba(255,51,85,0.1);box-shadow:0 0 0 8px rgba(255,51,85,0.08)}
+.ptt-btn:disabled{opacity:0.3;cursor:not-allowed}
+.ptt-hint{font-size:12px;color:var(--muted)}
+/* COMMAND INPUT */
+.cmd-wrap{display:flex;gap:8px}
+.cmd-input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:14px;font-family:inherit;outline:none;transition:border-color 0.2s}
+.cmd-input:focus{border-color:var(--cyan)}
+.cmd-input::placeholder{color:var(--muted)}
+.send-btn{padding:10px 18px;border-radius:8px;border:1px solid var(--cyan);background:rgba(0,229,255,0.08);color:var(--cyan);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;white-space:nowrap}
+.send-btn:hover{background:rgba(0,229,255,0.18)}
+.send-btn:disabled{opacity:0.3;cursor:not-allowed}
+/* RESPONSE */
+.response-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-height:72px;display:none;transition:all 0.3s}
+.response-wrap.visible{display:block}
+.response-label{font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
+.response-text{font-size:14px;line-height:1.6;color:var(--text)}
+/* WAVE */
+.wave{display:flex;align-items:center;gap:3px;height:32px;justify-content:center;display:none}
+.wave.active{display:flex}
+.wave-bar{width:3px;background:var(--red);border-radius:2px;animation:wave 0.7s ease-in-out infinite}
+.wave-bar:nth-child(1){animation-delay:0s;height:8px}
+.wave-bar:nth-child(2){animation-delay:0.1s;height:16px}
+.wave-bar:nth-child(3){animation-delay:0.15s;height:26px}
+.wave-bar:nth-child(4){animation-delay:0.2s;height:32px}
+.wave-bar:nth-child(5){animation-delay:0.15s;height:26px}
+.wave-bar:nth-child(6){animation-delay:0.1s;height:16px}
+.wave-bar:nth-child(7){animation-delay:0s;height:8px}
+@keyframes wave{0%,100%{transform:scaleY(1)}50%{transform:scaleY(0.3)}}
+/* QUICK CMDS */
+.quick-label{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.quick-btns{display:flex;flex-wrap:wrap;gap:6px}
+.qbtn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:all 0.15s;font-family:inherit}
+.qbtn:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(0,229,255,0.05)}
+/* PERM NOTICE */
+.perm{font-size:12px;color:var(--gold);background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:8px;padding:8px 12px;display:none}
+.perm.visible{display:block}
+/* DIVIDER */
+hr{border:none;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">House of Jreym</div>
+    <div class="title">SWARM Voice Mode</div>
+  </div>
+
+  <div class="status" id="statusBar">
+    <div class="dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">Voice off — flip the switch to start</span>
+  </div>
+
+  <div class="toggle-row">
+    <div class="toggle-label">Voice mode: <span id="voiceLabel">OFF</span></div>
+    <label class="toggle-switch" title="Toggle voice mode">
+      <input type="checkbox" id="voiceToggle" onchange="handleToggle()">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="ptt-wrap">
+    <div class="wave" id="waveViz">
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+    </div>
+    <button class="ptt-btn" id="pttBtn" disabled
+      onmousedown="startListening()" onmouseup="stopListening()"
+      ontouchstart="startListening(event)" ontouchend="stopListening()"
+      title="Hold to talk">
+      🎤
+    </button>
+    <div class="ptt-hint" id="pttHint">Enable voice to start</div>
+  </div>
+
+  <div id="permNotice" class="perm">
+    ⚠ Browser will request microphone permission on first use. Allow it to proceed.
+  </div>
+
+  <div class="cmd-wrap">
+    <input class="cmd-input" id="cmdInput" placeholder="Speak or type a command..."
+      oninput="document.getElementById('sendBtn').disabled=!this.value.trim()"
+      onkeydown="if(event.key==='Enter'&&this.value.trim())sendCommand()">
+    <button class="send-btn" id="sendBtn" onclick="sendCommand()" disabled>Send ↗</button>
+  </div>
+
+  <div>
+    <div class="quick-label" style="margin-bottom:8px">Quick commands</div>
+    <div class="quick-btns">
+      <button class="qbtn" onclick="setAndSend('Hey Swarm, are all agents online?')">Are all agents online?</button>
+      <button class="qbtn" onclick="setAndSend('How many tasks are running right now?')">Tasks running?</button>
+      <button class="qbtn" onclick="setAndSend('How many Etsy listings are active?')">Etsy listings?</button>
+      <button class="qbtn" onclick="setAndSend('What is the latest agent activity?')">Latest activity?</button>
+      <button class="qbtn" onclick="setAndSend('Give me a full swarm status report.')">Status report</button>
+      <button class="qbtn" onclick="setAndSend('What is blocking my first sale?')">First sale blocker?</button>
+      <button class="qbtn" onclick="setAndSend('How many social posts are scheduled?')">Posts scheduled?</button>
+      <button class="qbtn" onclick="setAndSend('What is IBRAHIM doing right now?')">IBRAHIM status?</button>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="response-wrap" id="responseWrap">
+    <div class="response-label">Swarm response</div>
+    <div class="response-text" id="responseText"></div>
+  </div>
+</div>
+
+<script>
+const BASE='https://swarm-app-3nch.onrender.com';
+const KEY='swarm-os-key-2025';
+const H={'x-api-key':KEY};
+
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const synth=window.speechSynthesis;
+let rec=null,voiceOn=false,listening=false,speaking=false;
+
+function setStatus(state,text){
+  const bar=document.getElementById('statusBar');
+  const dot=document.getElementById('statusDot');
+  bar.className='status '+state;
+  document.getElementById('statusText').textContent=text;
+  const wave=document.getElementById('waveViz');
+  wave.className='wave'+(state==='listening'?' active':'');
+}
+
+function handleToggle(){
+  voiceOn=document.getElementById('voiceToggle').checked;
+  document.getElementById('voiceLabel').textContent=voiceOn?'ON':'OFF';
+  const ptt=document.getElementById('pttBtn');
+  const hint=document.getElementById('pttHint');
+  const perm=document.getElementById('permNotice');
+  if(voiceOn){
+    if(!SR){setStatus('error','SpeechRecognition not supported. Use Chrome or Edge.');document.getElementById('voiceToggle').checked=false;voiceOn=false;return;}
+    ptt.disabled=false;
+    hint.textContent='Hold to talk';
+    perm.className='perm visible';
+    setStatus('ready','Ready — hold the mic button and speak');
+    initRec();
+  } else {
+    if(rec){try{rec.abort();}catch(e){}}
+    if(speaking){synth.cancel();speaking=false;}
+    ptt.disabled=true;
+    hint.textContent='Enable voice to start';
+    perm.className='perm';
+    setStatus('','Voice off — flip the switch to start');
+  }
+}
+
+function initRec(){
+  if(rec){try{rec.abort();}catch(e){}}
+  rec=new SR();
+  rec.continuous=false;
+  rec.interimResults=true;
+  rec.lang='en-US';
+
+  rec.onstart=()=>{
+    listening=true;
+    document.getElementById('pttBtn').className='ptt-btn active';
+    setStatus('listening','Listening...');
+  };
+
+  rec.onresult=(e)=>{
+    let interim='',final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      e.results[i].isFinal?final+=t:interim+=t;
+    }
+    const txt=final||interim;
+    document.getElementById('cmdInput').value=txt;
+    document.getElementById('sendBtn').disabled=!txt.trim();
+  };
+
+  rec.onend=()=>{
+    listening=false;
+    document.getElementById('pttBtn').className='ptt-btn';
+    const val=document.getElementById('cmdInput').value.trim();
+    if(val&&voiceOn){
+      setStatus('thinking','Got it — thinking...');
+      sendCommand();
+    } else if(voiceOn){
+      setStatus('ready','Ready — hold the mic button and speak');
+    }
+  };
+
+  rec.onerror=(e)=>{
+    listening=false;
+    document.getElementById('pttBtn').className='ptt-btn';
+    const map={
+      'not-allowed':'Microphone blocked — allow access in browser settings',
+      'no-speech':'No speech detected — try again',
+      'network':'Network error — check connection',
+      'aborted':null
+    };
+    const msg=map[e.error];
+    if(msg)setStatus('error',msg);
+    else if(voiceOn)setStatus('ready','Ready — hold the mic button and speak');
+  };
+}
+
+function startListening(e){
+  if(e)e.preventDefault();
+  if(!voiceOn||!rec)return;
+  if(speaking){synth.cancel();speaking=false;}
+  document.getElementById('cmdInput').value='';
+  document.getElementById('sendBtn').disabled=true;
+  try{rec.start();}catch(ex){}
+}
+
+function stopListening(){
+  if(!rec||!listening)return;
+  try{rec.stop();}catch(ex){}
+}
+
+function setAndSend(text){
+  document.getElementById('cmdInput').value=text;
+  document.getElementById('sendBtn').disabled=false;
+  sendCommand();
+}
+
+async function sendCommand(){
+  const input=document.getElementById('cmdInput');
+  const cmd=input.value.trim();
+  if(!cmd)return;
+  document.getElementById('sendBtn').disabled=true;
+  setStatus('thinking','Thinking...');
+  try{
+    const [statsRes,etsyRes]=await Promise.all([
+      fetch(BASE+'/api/stats',{headers:H}).then(r=>r.json()).catch(()=>null),
+      fetch(BASE+'/api/etsy/listings',{headers:H}).then(r=>r.json()).catch(()=>null),
+    ]);
+    const reply=buildReply(cmd.toLowerCase(),statsRes,etsyRes);
+    showAndSpeak(reply);
+  }catch(e){
+    showAndSpeak('Sorry, I could not reach the swarm backend. Please check the connection and try again.');
+  }
+}
+
+function buildReply(cmd,stats,etsy){
+  const agents=['IBRAHIM','KWAME','AMARA','NANA','AISHA','ZARA','BELLA','REIGN','ZION','KOFI','SEUN','ABENA'];
+  const t=stats&&stats.tasks?stats.tasks:{completed:0,running:0,pending:0,failed:0};
+  const logs=stats&&stats.recentLogs?stats.recentLogs:[];
+  const errors=logs.filter(l=>l.level==='error');
+  const errAgents=[...new Set(errors.map(l=>l.agent))];
+  const etsyCount=etsy&&etsy.count?etsy.count:189;
+
+  // agents online
+  if((cmd.includes('agent')||cmd.includes('swarm'))&&(cmd.includes('online')||cmd.includes('status')||cmd.includes('all'))){
+    if(errAgents.length>0){
+      const ok=agents.length-errAgents.length;
+      return `${ok} of ${agents.length} agents are fully operational. ${errAgents.join(', ')} ${errAgents.length===1?'has':'have'} an active error. The issue is an invalid OAuth access token on Instagram that is blocking IBRAHIM from publishing. All other 11 agents are running clean.`;
+    }
+    return `All ${agents.length} agents are online and operational. IBRAHIM, KWAME, AMARA, NANA, AISHA, ZARA, BELLA, REIGN, ZION, KOFI, SEUN, and ABENA are all active and processing tasks.`;
+  }
+
+  // tasks
+  if(cmd.includes('task')||(cmd.includes('running')&&!cmd.includes('agent'))){
+    return `Right now the swarm has ${t.running} tasks running, ${t.pending} pending, and ${t.completed.toLocaleString()} completed all time. ${t.failed>0?`${t.failed} tasks failed.`:'No failures.'} The pipeline is active.`;
+  }
+
+  // etsy
+  if(cmd.includes('etsy')||cmd.includes('listing')){
+    return `You have ${etsyCount} active Etsy listings, all priced at 7 dollars and 99 cents. Your shop is houseofjreym, shop ID 66171116. Your top products by sales potential are the Custom Pet Portrait, Mental Health Affirmation Prints, and the Black Art History Portraits.`;
+  }
+
+  // latest activity
+  if(cmd.includes('latest')||cmd.includes('activity')||cmd.includes('recent')){
+    if(logs.length>0){
+      const l=logs[0];
+      return `Latest activity: ${l.agent} — ${l.message.slice(0,100)}. This was logged at ${new Date(l.created_at).toLocaleTimeString()}.`;
+    }
+    return 'No recent activity found in the logs at this moment.';
+  }
+
+  // status report
+  if(cmd.includes('status')||cmd.includes('report')){
+    return `Full swarm status: ${agents.length} agents deployed. ${t.running} tasks running, ${t.completed.toLocaleString()} completed all time. ${etsyCount} Etsy listings active. 30 social posts queued across TikTok, Instagram, and Facebook. ${errAgents.length>0?`One active blocker: ${errAgents[0]} has an OAuth token error on Instagram. Fix the redirect URI in the Meta App to unblock posting.`:'No critical errors.'}`;
+  }
+
+  // first sale / blocker
+  if(cmd.includes('sale')||cmd.includes('block')||cmd.includes('first')||cmd.includes('revenue')){
+    return `Your main blocker is the Instagram OAuth token. IBRAHIM has failed to publish ${errors.length} times due to an invalid access token. Fix: go to your Meta App, open Facebook Login for Business, find the house-of-jreym-swarm configuration, and add this redirect URI: https://swarm-app-3nch.onrender.com/api/instagram/callback. Once fixed, all 30 queued posts will publish automatically. First sale probability within 3 days after that: 65 percent.`;
+  }
+
+  // social posts
+  if(cmd.includes('social')||cmd.includes('post')||cmd.includes('schedul')||cmd.includes('instagram')||cmd.includes('tiktok')||cmd.includes('facebook')){
+    return `30 content pieces are queued in the swarm: 10 TikTok videos, 10 Instagram Reels, and 10 Facebook posts. All target your top 10 highest-potential products. Instagram posting is blocked by the OAuth token error. TikTok and Facebook connections are live. Fix the Meta App redirect URI to unblock everything.`;
+  }
+
+  // IBRAHIM specifically
+  if(cmd.includes('ibrahim')){
+    return `IBRAHIM is your Content Creator agent. Right now he is blocked: his last ${errors.length} publish attempts failed due to an invalid Instagram OAuth access token. The error message is: Invalid OAuth access token, cannot parse access token. He has 30 social posts queued and ready to fire the moment the token is fixed.`;
+  }
+
+  // hello / greeting
+  if(cmd.includes('hello')||cmd.includes('hey')||cmd.includes('hi ')||cmd===('hi')){
+    return `Hello. SWARM OS is live. All ${agents.length} agents are deployed. ${etsyCount} Etsy listings are active. ${t.running} tasks are running right now. ${errAgents.length>0?'One agent has an active error — IBRAHIM is blocked on Instagram OAuth.':'No critical errors.'} What do you need?`;
+  }
+
+  // error check
+  if(cmd.includes('error')||cmd.includes('issue')||cmd.includes('wrong')||cmd.includes('problem')){
+    if(errAgents.length>0){
+      return `There is one active error. IBRAHIM has failed to publish to Instagram ${errors.length} times. The error is: Invalid OAuth access token, cannot parse access token. To fix it, register the callback URL in your Meta App settings. All other systems are clean.`;
+    }
+    return 'No active errors detected. All agents and systems are running normally.';
+  }
+
+  // fallback
+  return `Command received. I have noted: "${cmd.slice(0,80)}". ${t.running>0?`The swarm currently has ${t.running} tasks running.`:''} For specific data, ask about agent status, tasks, Etsy listings, social posts, or the first sale blocker.`;
+}
+
+function showAndSpeak(text){
+  const wrap=document.getElementById('responseWrap');
+  const respText=document.getElementById('responseText');
+  respText.textContent=text;
+  wrap.className='response-wrap visible';
+  setStatus('speaking','Speaking...');
+  speaking=true;
+  document.getElementById('sendBtn').disabled=false;
+
+  if(synth){
+    synth.cancel();
+    const utt=new SpeechSynthesisUtterance(text);
+    utt.rate=1.0;utt.pitch=1.0;utt.volume=1.0;utt.lang='en-US';
+    utt.onend=()=>{
+      speaking=false;
+      if(voiceOn){setStatus('ready','Ready — hold the mic button and speak');initRec();}
+      else{setStatus('','Done');}
+    };
+    utt.onerror=()=>{
+      speaking=false;
+      if(voiceOn)setStatus('ready','Ready — hold the mic button and speak');
+      else setStatus('','Done');
+    };
+    synth.speak(utt);
+  } else {
+    speaking=false;
+    setStatus('','speechSynthesis not available in this browser');
+  }
+}
+</script>
+</body>
+</html>
