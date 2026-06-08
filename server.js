@@ -21,7 +21,13 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 const ALLOWED_ORIGINS = ["https://swarm-app-3nch.onrender.com","http://localhost:5173","http://localhost:4000"];
-app.use(cors({ origin: (o, cb) => (!o || ALLOWED_ORIGINS.includes(o)) ? cb(null,true) : cb(new Error("CORS blocked")) }));
+app.use(cors({
+  origin: (o, cb) => (!o || ALLOWED_ORIGINS.includes(o)) ? cb(null, true) : cb(new Error("CORS blocked")),
+  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","x-api-key","Authorization","apikey"],
+  credentials: true
+}));
+app.options("*", cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.static(path.join(__dirname, "public")));
