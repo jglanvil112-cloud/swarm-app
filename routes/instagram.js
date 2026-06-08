@@ -140,7 +140,7 @@ instagramRouter.post("/post", async (req, res) => {
     if (!image_url || !caption) return res.status(400).json({ error: "image_url and caption required" });
     const token  = await getLiveToken();
     const userId = await getLiveUserId();
-    const base   = "https://graph.facebook.com/v21.0";
+    const base   = "https://graph.instagram.com/v21.0";
     const c = await fetch(`${base}/${userId}/media`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_url, caption, access_token: token }) });
     const container = await c.json();
     if (container.error) { await logAgent("INSTAGRAM","error",container.error.message); return res.status(500).json({ error: container.error.message }); }
