@@ -511,8 +511,8 @@ setInterval(graphTick,2000);
 async function fetchShopify(){
 try{
 const [pRes,oRes]=await Promise.all([
-fetch(`${RENDER}/api/shopify/products`),
-fetch(`${RENDER}/api/shopify/orders`),
+fetch(`${RENDER}/api/shopify/products`, {headers:{'x-api-key':'swarm-os-key-2025'}}),
+fetch(`${RENDER}/api/shopify/orders`, {headers:{'x-api-key':'swarm-os-key-2025'}}),
 ]);
 if(pRes.ok){
 const d=await pRes.json();
@@ -548,7 +548,7 @@ document.getElementById('shp-st').style.color='var(--r)';
 
 async function fetchEtsy(){
 try{
-const r=await fetch(`${RENDER}/api/etsy/shop`);
+const r=await fetch(`${RENDER}/api/etsy/shop-id`, {headers:{'x-api-key':'swarm-os-key-2025'}});
 if(r.ok){
 const d=await r.json();
 if(d.shop_id||d.listing_active_count!=null){
@@ -579,7 +579,7 @@ document.getElementById('etsy-st').style.color='var(--r)';
 
 async function fetchEtsyListings(){
 try{
-const r=await fetch(`${RENDER}/api/etsy/listings`);
+const r=await fetch(`${RENDER}/api/etsy/listings`, {headers:{'x-api-key':'swarm-os-key-2025'}});
 if(!r.ok)return;
 const d=await r.json();
 const items=d.results||[];
