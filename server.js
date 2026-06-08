@@ -35,7 +35,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KE
 
 // AUTH MIDDLEWARE — dashboard routes are always public (no API key needed)
 const API_SECRET = process.env.API_SECRET;
-const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify", "/pipeline", "/social", "/instagram", "/ibrahim"];
+const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify", "/pipeline", "/social", "/instagram", "/ibrahim", "/admin"];
   
 app.use("/api/", (req, res, next) => {
   const isPublic = PUBLIC_API_PREFIXES.some(p => req.path === p || req.path.startsWith(p + "/") || req.path.startsWith("/health"));
