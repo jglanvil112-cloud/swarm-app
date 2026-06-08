@@ -142,9 +142,9 @@ app.use("/api/ibrahim", ibrahimRouter);
 
                                                                                                                                                                                               
 // ── ADMIN: pause/resume any social post ──────────────────────────────
-app.post("/api/admin/post-status", async (req, res) => {
+app.get("/api/admin/post-status", async (req, res) => {
   try {
-    const { post_id, status } = req.body;
+    const { post_id, status } = req.query;
     if (!post_id || !status) return res.status(400).json({ error: "post_id and status required" });
     const allowed = ["paused","scheduled","draft","cancelled","failed"];
     if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid status" });
