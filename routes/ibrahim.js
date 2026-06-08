@@ -323,12 +323,19 @@ export async function runAutoPublish() {
           await new Promise(r => setTimeout(r, 5000));
         }
       } catch (e) {
-        await logAgent("IBRAHIM", `❌ Publish failed for post ${post.id}: ${e.message}`, "error");
-        await supabase.from("social_posts").update({
-          status: "failed",
+        const retryCount = (post.retry_count || 0) + 1;
+        const newStatus = retryCount >= 3 ? "paused" : "failed";
+        await logAgent("IBRAHIM", `❌ Publish failed for post ${post.id} (attempt ${retryCount}): ${e.message}`, "error");
+        const { error: updateErr } = await supabase.from("social_posts").update({
+          status: newStatus,
+          retry_count: retryCount,
           error_message: e.message,
           updated_at: new Date().toISOString()
         }).eq("id", post.id);
+        if (updateErr) console.error("[IBRAHIM] Failed to update post status:", updateErr.message);
+        if (newStatus === "paused") {
+          console.log(`[IBRAHIM] Post ${post.id} paused after ${retryCount} failed attempts. Fix OAuth token to resume.`);
+        }
       }
     }
 
