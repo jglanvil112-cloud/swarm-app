@@ -17,6 +17,17 @@ async function getLiveToken() {
   return process.env.INSTAGRAM_ACCESS_TOKEN || "";
 }
 
+// Resolve the IG Business account id directly from the token (Instagram Login)
+async function resolveIgId(token) {
+  try {
+    const r = await fetch(`https://graph.instagram.com/v21.0/me?fields=user_id,id,username&access_token=${token}`);
+    const d = await r.json();
+    if (d.user_id) return String(d.user_id);
+    if (d.id) return String(d.id);
+  } catch {}
+  return null;
+}
+
 async function getLiveUserId() {
   try {
     const { data } = await supabase.from("social_credentials")
@@ -139,7 +150,9 @@ instagramRouter.post("/post", async (req, res) => {
     const { image_url, caption } = req.body;
     if (!image_url || !caption) return res.status(400).json({ error: "image_url and caption required" });
     const token  = await getLiveToken();
-    const userId = await getLiveUserId();
+    let userId = await resolveIgId(token);
+    if (!userId) userId = await getLiveUserId();
+    else { try { await supabase.from("social_credentials").update({ page_id: userId, account_id: userId, updated_at: new Date().toISOString() }).eq("platform","instagram"); } catch {} }
     const base   = "https://graph.instagram.com/v21.0";
     const c = await fetch(`${base}/${userId}/media`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_url, caption, access_token: token }) });
     const container = await c.json();
@@ -156,11 +169,12 @@ instagramRouter.post("/post", async (req, res) => {
 instagramRouter.get("/test", async (req, res) => {
   try {
     const token  = await getLiveToken();
-    const userId = await getLiveUserId();
+    let userId = await resolveIgId(token);
+    if (!userId) userId = await getLiveUserId();
     const r = await fetch(`https://graph.instagram.com/v21.0/${userId}?fields=id,username,followers_count,media_count&access_token=${token}`);
     const data = await r.json();
-    if (data.error) return res.status(401).json({ connected: false, error: data.error.message });
-    res.json({ connected: true, ...data });
+    if (data.error) return res.status(401).json({ connected: false, error: data.error.message, resolved_id: userId });
+    res.json({ connected: true, resolved_id: userId, ...data });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
