@@ -535,34 +535,54 @@ function openAg(a){
   var als=LD.logs.filter(function(l){return l.agent===a.id;});
   var he=als.some(function(l){return l.level==='error';});
   var done=ats.filter(function(t){return t.status==='completed';}).length;
-  var run=ats.filter(function(t){return t.status==='running';}).length;
+  var run2=ats.filter(function(t){return t.status==='running';}).length;
   var fail=ats.filter(function(t){return t.status==='failed';}).length;
+  var aid=a.id;
   var latest=als[0]?'<div style="background:'+(he?'rgba(255,34,68,.08)':'rgba(0,255,136,.05)')+';border:1px solid '+(he?'rgba(255,34,68,.3)':'rgba(0,255,136,.2)')+';border-radius:4px;padding:7px 10px;margin-bottom:12px;font-size:11px"><span style="font-family:Orbitron,monospace;font-size:9px;color:var(--mt);letter-spacing:1px">LATEST: </span><span style="color:'+(he?'var(--r)':'#00ff88')+'">'+String(als[0].message||'').slice(0,130)+'</span></div>':'';
   var taskHtml=ats.length===0?'<div style="color:var(--mt);text-align:center;padding:20px;font-size:12px">'+(online?'No tasks in DB':'Hit SYNC to load live tasks')+'</div>':ats.map(function(t){return '<div class="ti"><span class="tba b'+t.status.charAt(0)+'">'+t.status.toUpperCase()+'</span><span class="tn">'+t.task_type+'</span><div class="pb"><div class="pf" style="width:'+(t.status==='completed'?100:t.status==='running'?55:15)+'%"></div></div></div>';}).join('');
-  var logHtml=als.length===0?'<div style="color:var(--mt);text-align:center;padding:20px;font-size:12px">No logs for '+a.id+'</div>':als.map(function(l){return '<div class="li '+l.level.charAt(0)+'"><span style="opacity:.55">'+new Date(l.created_at).toLocaleTimeString()+' </span>'+String(l.message||'').slice(0,160)+'</div>';}).join('');
+  var logHtml=als.length===0?'<div style="color:var(--mt);text-align:center;padding:20px;font-size:12px">No logs for '+aid+'</div>':als.map(function(l){return '<div class="li '+l.level.charAt(0)+'"><span style="opacity:.55">'+new Date(l.created_at).toLocaleTimeString()+' </span>'+String(l.message||'').slice(0,160)+'</div>';}).join('');
   var memHtml=ats.slice(0,4).map(function(t,i){return '<div style="margin-bottom:4px"><span style="color:var(--g)">MEM-'+(i+1)+'</span>: ['+t.task_type+'] '+t.status+'</div>';}).join('')+als.slice(0,3).map(function(l,i){return '<div style="margin-bottom:4px"><span style="color:'+(l.level==='error'?'var(--r)':'var(--gr)')+'">LOG-'+(i+1)+'</span>: '+String(l.message||'').slice(0,80)+'</div>';}).join('');
-  setMo(
-    '<span class="mc" onclick="closeOv()">&#10005;</span>'+
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'+
-    '<div style="width:48px;height:48px;border-radius:50%;background:'+reg.bg+';border:2px solid '+reg.color+';display:flex;align-items:center;justify-content:center;font-size:22px">'+reg.icon+'</div>'+
-    '<div><div class="mt2" style="color:'+reg.color+'">'+a.id+'</div><div class="ms">'+reg.role+' &middot; <span style="color:'+(he?'var(--r)':'var(--gr)')+'">'+( he?'&#9888; ERRORS':'&#9679; ONLINE')+'</span> &middot; '+(online?'LIVE':'CACHED')+'</div></div>'+
-    '<div style="margin-left:auto;text-align:right"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace">DB TASKS</div><div style="font-family:Orbitron,monospace;font-size:24px;color:var(--g)">'+ats.length+'</div></div></div>'+
-    latest+
-    '<div class="sr"><div class="sb"><div class="sv" style="color:var(--gr)">'+done+'</div><div class="sl">DONE</div></div><div class="sb"><div class="sv">'+run+'</div><div class="sl">RUNNING</div></div><div class="sb"><div class="sv" style="color:var(--r)">'+fail+'</div><div class="sl">FAILED</div></div></div>'+
-    '<div class="mts"><div class="mta on" onclick="swTab(this,'tp-'+a.id+'')">PROFILE</div><div class="mta" onclick="swTab(this,'tt-'+a.id+'')">TASKS ('+ats.length+')</div><div class="mta" onclick="swTab(this,'tl-'+a.id+'')">LOGS ('+als.length+')</div><div class="mta" onclick="swTab(this,'tm-'+a.id+'')">MEMORY</div><div class="mta" onclick="swTab(this,'tc2-'+a.id+'')">CHAT</div></div>'+
-    '<div id="tp-'+a.id+'" class="tc on">'+
-    '<div style="margin-bottom:10px"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace;letter-spacing:1px;margin-bottom:5px">SKILLS</div>'+(reg.sk||[]).map(function(s){return '<span class="chip" style="border-color:'+reg.color+'44;color:'+reg.color+';background:'+reg.bg+'">'+s+'</span>';}).join('')+'</div>'+
-    '<div style="margin-bottom:10px"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace;letter-spacing:1px;margin-bottom:5px">PLATFORMS</div>'+(reg.pl||[]).map(function(p){return '<span class="chip" style="border-color:rgba(0,245,255,.25);color:var(--c);background:rgba(0,245,255,.06)">'+p+'</span>';}).join('')+'</div>'+
-    '<div style="background:rgba(0,0,0,.3);border:1px solid var(--bd);border-radius:4px;padding:10px;font-family:Share Tech Mono,monospace;font-size:10px;color:var(--mt);line-height:1.8"><div>Agent: <span style="color:var(--c)">'+a.id+'</span></div><div>Building: <span style="color:'+reg.color+'">'+(reg.bld||'').toUpperCase()+'</span></div><div>Source: <span style="color:'+(online?'var(--gr)':'var(--g)')+'">'+( online?'LIVE API':'SEEDED')+'</span></div></div></div>'+
-    '<div id="tt-'+a.id+'" class="tc">'+taskHtml+'</div>'+
-    '<div id="tl-'+a.id+'" class="tc">'+logHtml+'</div>'+
-    '<div id="tm-'+a.id+'" class="tc"><div style="background:rgba(0,0,0,.3);border:1px solid var(--bd);border-radius:5px;padding:10px;font-family:Share Tech Mono,monospace;font-size:10px;line-height:1.9;color:var(--mt)"><div style="color:var(--c);font-family:Orbitron,monospace;font-size:9px;letter-spacing:2px;margin-bottom:8px">AGENT MEMORY &mdash; SUPABASE</div>'+memHtml+(ats.length===0&&als.length===0?'<div>Loads via SYNC.</div>':'')+'</div></div>'+
-    '<div id="tc2-'+a.id+'" class="tc">'+
-    '<div class="ca" id="ch-'+a.id+'"><div class="cm a"><span style="color:'+reg.color+';font-weight:700">'+a.id+':</span> '+(he?'&#9888; I have active errors. OAuth token issue blocking publishes.':'Ready. All systems operational.')+'</div></div>'+
-    '<div class="cr"><input class="ci2" id="ci3-'+a.id+'" placeholder="Message '+a.id+'..." onkeydown="if(event.key==='Enter')sChat(''+a.id+'',''+reg.color.replace(/'/g,'')+'')"/>'+
-    '<button class="csb" onclick="sChat(''+a.id+'',''+reg.color.replace(/'/g,'')+'')">SEND</button>'+
-    '<button class="csb" style="background:rgba(180,0,255,.15);border-color:var(--p);color:var(--p)" onclick="toggleVoice()">&#127908;</button></div></div>'
-  );
+  var skillsHtml=(reg.sk||[]).map(function(s){return '<span class="chip" style="border-color:'+reg.color+'44;color:'+reg.color+';background:'+reg.bg+'">'+s+'</span>';}).join('');
+  var plHtml=(reg.pl||[]).map(function(p){return '<span class="chip" style="border-color:rgba(0,245,255,.25);color:var(--c);background:rgba(0,245,255,.06)">'+p+'</span>';}).join('');
+  var html = '<span class="mc" onclick="closeOv()">&#10005;</span>';
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">';
+  html += '<div style="width:48px;height:48px;border-radius:50%;background:'+reg.bg+';border:2px solid '+reg.color+';display:flex;align-items:center;justify-content:center;font-size:22px">'+reg.icon+'</div>';
+  html += '<div><div class="mt2" style="color:'+reg.color+'">'+aid+'</div>';
+  html += '<div class="ms">'+reg.role+' &middot; <span style="color:'+(he?'var(--r)':'var(--gr)')+'">'+( he?'&#9888; ERRORS':'&#9679; ONLINE')+'</span> &middot; '+(online?'LIVE':'CACHED')+'</div></div>';
+  html += '<div style="margin-left:auto;text-align:right"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace">DB TASKS</div><div style="font-family:Orbitron,monospace;font-size:24px;color:var(--g)">'+ats.length+'</div></div></div>';
+  html += latest;
+  html += '<div class="sr"><div class="sb"><div class="sv" style="color:var(--gr)">'+done+'</div><div class="sl">DONE</div></div><div class="sb"><div class="sv">'+run2+'</div><div class="sl">RUNNING</div></div><div class="sb"><div class="sv" style="color:var(--r)">'+fail+'</div><div class="sl">FAILED</div></div></div>';
+  // TABS - use data-tab to avoid quote nesting hell
+  html += '<div class="mts">';
+  html += '<div class="mta on" data-tab="tp-'+aid+'" onclick="swTab(this,this.dataset.tab)">PROFILE</div>';
+  html += '<div class="mta" data-tab="tt-'+aid+'" onclick="swTab(this,this.dataset.tab)">TASKS ('+ats.length+')</div>';
+  html += '<div class="mta" data-tab="tl-'+aid+'" onclick="swTab(this,this.dataset.tab)">LOGS ('+als.length+')</div>';
+  html += '<div class="mta" data-tab="tm-'+aid+'" onclick="swTab(this,this.dataset.tab)">MEMORY</div>';
+  html += '<div class="mta" data-tab="tc2-'+aid+'" onclick="swTab(this,this.dataset.tab)">CHAT</div>';
+  html += '</div>';
+  // PROFILE TAB
+  html += '<div id="tp-'+aid+'" class="tc on">';
+  html += '<div style="margin-bottom:10px"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace;letter-spacing:1px;margin-bottom:5px">SKILLS</div>'+skillsHtml+'</div>';
+  html += '<div style="margin-bottom:10px"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace;letter-spacing:1px;margin-bottom:5px">PLATFORMS</div>'+plHtml+'</div>';
+  html += '<div style="background:rgba(0,0,0,.3);border:1px solid var(--bd);border-radius:4px;padding:10px;font-family:Share Tech Mono,monospace;font-size:10px;color:var(--mt);line-height:1.8">';
+  html += '<div>Agent: <span style="color:var(--c)">'+aid+'</span></div>';
+  html += '<div>Building: <span style="color:'+reg.color+'">'+(reg.bld||'').toUpperCase()+'</span></div>';
+  html += '<div>Source: <span style="color:'+(online?'var(--gr)':'var(--g)')+'">'+( online?'LIVE API':'SEEDED')+'</span></div></div></div>';
+  // TASKS TAB
+  html += '<div id="tt-'+aid+'" class="tc">'+taskHtml+'</div>';
+  // LOGS TAB
+  html += '<div id="tl-'+aid+'" class="tc">'+logHtml+'</div>';
+  // MEMORY TAB
+  html += '<div id="tm-'+aid+'" class="tc"><div style="background:rgba(0,0,0,.3);border:1px solid var(--bd);border-radius:5px;padding:10px;font-family:Share Tech Mono,monospace;font-size:10px;line-height:1.9;color:var(--mt)"><div style="color:var(--c);font-family:Orbitron,monospace;font-size:9px;letter-spacing:2px;margin-bottom:8px">AGENT MEMORY &mdash; SUPABASE</div>'+memHtml+(ats.length===0&&als.length===0?'<div>Loads via SYNC.</div>':'')+'</div></div>';
+  // CHAT TAB - store agent id in data attribute to avoid quote issues
+  html += '<div id="tc2-'+aid+'" class="tc">';
+  html += '<div class="ca" id="ch-'+aid+'"><div class="cm a"><span style="color:'+reg.color+';font-weight:700">'+aid+':</span> '+(he?'&#9888; I have active errors. OAuth token blocking publishes.':'Ready. All systems operational.')+'</div></div>';
+  html += '<div class="cr">';
+  html += '<input class="ci2" id="ci3-'+aid+'" data-agid="'+aid+'" data-color="'+reg.color+'" placeholder="Message '+aid+'..." onkeydown="if(event.key===\'Enter\'){var el=this;sChat(el.dataset.agid,el.dataset.color);}" />';
+  html += '<button class="csb" data-agid="'+aid+'" data-color="'+reg.color+'" onclick="sChat(this.dataset.agid,this.dataset.color)">SEND</button>';
+  html += '<button class="csb" style="background:rgba(180,0,255,.15);border-color:var(--p);color:var(--p)" onclick="toggleVoice()">&#127908;</button>';
+  html += '</div></div>';
+  setMo(html);
   document.getElementById('ov').classList.add('on');
 }
 
@@ -573,33 +593,43 @@ function openBld(b){
   var extra='';
   if(['etsy','treasury','sales'].indexOf(b.id)>=0){
     var ls=(LD.etsy.results||[]).slice(0,6);
-    extra='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--o);letter-spacing:2px;margin-bottom:6px">LIVE ETSY &mdash; Shop 66171116</div>'+
-    '<div class="sr"><div class="sb"><div class="sv" style="color:var(--o)">'+LD.etsy.count+'</div><div class="sl">ACTIVE</div></div><div class="sb"><div class="sv" style="color:var(--g)">$7.99</div><div class="sl">PRICE</div></div><div class="sb"><div class="sv" style="color:var(--gr)">$'+(LD.etsy.count*7.99).toFixed(0)+'</div><div class="sl">EST VALUE</div></div></div>'+
-    ls.map(function(l){return '<div class="lc"><div class="lt">'+String(l.title||'').slice(0,80)+'</div><div style="display:flex;justify-content:space-between;margin-top:3px"><span class="lp2">$'+((l.price&&l.price.amount||799)/100).toFixed(2)+' '+(l.price&&l.price.currency_code||'USD')+'</span><span style="font-size:9px;color:var(--mt)">ID:'+l.listing_id+'</span><span style="font-size:9px;padding:1px 6px;border-radius:6px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:var(--gr)">ACTIVE</span></div></div>';}).join('');
-  }else if(['content','social','marketing'].indexOf(b.id)>=0){
+    extra='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--o);letter-spacing:2px;margin-bottom:6px">LIVE ETSY &mdash; Shop 66171116</div>';
+    extra+='<div class="sr"><div class="sb"><div class="sv" style="color:var(--o)">'+LD.etsy.count+'</div><div class="sl">ACTIVE</div></div><div class="sb"><div class="sv" style="color:var(--g)">$7.99</div><div class="sl">PRICE</div></div><div class="sb"><div class="sv" style="color:var(--gr)">$'+(LD.etsy.count*7.99).toFixed(0)+'</div><div class="sl">EST VALUE</div></div></div>';
+    extra+=ls.map(function(l){return '<div class="lc"><div class="lt">'+String(l.title||'').slice(0,80)+'</div><div style="display:flex;justify-content:space-between;margin-top:3px"><span class="lp2">$'+((l.price&&l.price.amount||799)/100).toFixed(2)+' '+(l.price&&l.price.currency_code||'USD')+'</span><span style="font-size:9px;color:var(--mt)">ID:'+l.listing_id+'</span><span style="font-size:9px;padding:1px 6px;border-radius:6px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:var(--gr)">ACTIVE</span></div></div>';}).join('');
+  } else if(['content','social','marketing'].indexOf(b.id)>=0){
     var po=LD.social.posts||{};
-    extra='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--pk);letter-spacing:2px;margin-bottom:6px">SOCIAL PIPELINE</div>'+
-    '<div class="sr"><div class="sb"><div class="sv" style="color:var(--pk)">'+(po.total||0)+'</div><div class="sl">POSTS</div></div><div class="sb"><div class="sv">'+(po.by_status&&po.by_status.draft||0)+'</div><div class="sl">DRAFTS</div></div><div class="sb"><div class="sv" style="color:var(--gr)">'+(po.by_status&&po.by_status.approved||0)+'</div><div class="sl">APPROVED</div></div></div>'+
-    (he?'<div style="background:rgba(255,34,68,.08);border:1px solid rgba(255,34,68,.3);border-radius:4px;padding:8px;font-size:10px;color:var(--r);margin-bottom:8px">&#9888; '+String(als.find(function(l){return l.level==='error';})?als.find(function(l){return l.level==='error';}).message:'').slice(0,120)+'<br><span style="color:var(--g);font-size:9px">FIX: register /api/instagram/callback in Meta App redirect URIs</span></div>':'');
-  }else if(b.id==='analytics'){
-    var t=LD.tasks;
-    extra='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--g);letter-spacing:2px;margin-bottom:6px">PIPELINE ANALYTICS</div>'+
-    '<div class="sr"><div class="sb"><div class="sv" style="color:var(--gr)">'+(t.completed?t.completed.toLocaleString():0)+'</div><div class="sl">DONE</div></div><div class="sb"><div class="sv">'+(t.running||0)+'</div><div class="sl">RUNNING</div></div><div class="sb"><div class="sv" style="color:'+(t.failed>0?'var(--r)':'var(--gr)')+'">'+(t.failed||0)+'</div><div class="sl">FAILED</div></div></div>';
+    extra='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--pk);letter-spacing:2px;margin-bottom:6px">SOCIAL PIPELINE</div>';
+    extra+='<div class="sr"><div class="sb"><div class="sv" style="color:var(--pk)">'+(po.total||0)+'</div><div class="sl">POSTS</div></div><div class="sb"><div class="sv">'+(po.by_status&&po.by_status.draft||0)+'</div><div class="sl">DRAFTS</div></div><div class="sb"><div class="sv" style="color:var(--gr)">'+(po.by_status&&po.by_status.approved||0)+'</div><div class="sl">APPROVED</div></div></div>';
+    if(he){var errMsg=als.find(function(l){return l.level==='error';});extra+='<div style="background:rgba(255,34,68,.08);border:1px solid rgba(255,34,68,.3);border-radius:4px;padding:8px;font-size:10px;color:var(--r);margin-bottom:8px">&#9888; '+String(errMsg?errMsg.message:'').slice(0,120)+'<br><span style="color:var(--g);font-size:9px">FIX: register /api/instagram/callback in Meta App redirect URIs</span></div>';}
+  } else if(b.id==='analytics'){
+    var tk=LD.tasks;
+    extra='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--g);letter-spacing:2px;margin-bottom:6px">PIPELINE ANALYTICS</div>';
+    extra+='<div class="sr"><div class="sb"><div class="sv" style="color:var(--gr)">'+(tk.completed?tk.completed.toLocaleString():0)+'</div><div class="sl">DONE</div></div><div class="sb"><div class="sv">'+(tk.running||0)+'</div><div class="sl">RUNNING</div></div><div class="sb"><div class="sv" style="color:'+(tk.failed>0?'var(--r)':'var(--gr)')+'\">'+(tk.failed||0)+'</div><div class="sl">FAILED</div></div></div>';
   }
   var logHtml=als.length===0?'<div style="color:var(--mt);font-size:11px;text-align:center;padding:10px">No recent logs</div>':als.slice(0,8).map(function(l){return '<div class="li '+l.level.charAt(0)+'"><span style="opacity:.55">'+new Date(l.created_at).toLocaleTimeString()+' </span>'+String(l.message||'').slice(0,130)+'</div>';}).join('');
-  setMo(
-    '<span class="mc" onclick="closeOv()">&#10005;</span>'+
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div style="font-size:28px">'+b.icon+'</div>'+
-    '<div><div class="mt2" style="color:'+b.color+'">'+b.name+'</div><div class="ms">'+reg.id+' &middot; '+reg.role+' &middot; <span style="color:'+(he?'var(--r)':'var(--gr)')+'">'+( he?'&#9888; ERR':'&#9679; OK')+'</span> &middot; '+(online?'LIVE':'CACHED')+'</div></div>'+
-    '<div style="margin-left:auto;text-align:right"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace">METRIC</div><div style="font-family:Orbitron,monospace;font-size:13px;color:'+b.color+'">'+(b._mt||'&mdash;')+'</div></div></div>'+
-    extra+
-    '<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--c);letter-spacing:2px;margin:10px 0 6px">AGENT LOGS</div>'+
-    '<div style="max-height:130px;overflow-y:auto">'+logHtml+'</div>'+
-    '<div style="display:flex;gap:8px;margin-top:12px">'+
-    '<button onclick="closeOv();setTimeout(function(){openAg(a3.find(function(a){return a.id===\''+b.ag+'\'}));},150)" style="flex:1;background:'+reg.bg+';border:1px solid '+b.color+';color:'+b.color+';padding:7px;border-radius:4px;cursor:pointer;font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px">VIEW '+b.ag+'</button>'+
-    '<button onclick="syncData()" style="flex:1;background:rgba(0,245,255,.08);border:1px solid var(--c);color:var(--c);padding:7px;border-radius:4px;cursor:pointer;font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px">&#8635; SYNC</button></div>'
-  );
+  var html='';
+  html+='<span class="mc" onclick="closeOv()">&#10005;</span>';
+  html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">';
+  html+='<div style="font-size:28px">'+b.icon+'</div>';
+  html+='<div><div class="mt2" style="color:'+b.color+'">'+b.name+'</div>';
+  html+='<div class="ms">'+reg.id+' &middot; '+reg.role+' &middot; <span style="color:'+(he?'var(--r)':'var(--gr)')+'">'+( he?'&#9888; ERR':'&#9679; OK')+'</span> &middot; '+(online?'LIVE':'CACHED')+'</div></div>';
+  html+='<div style="margin-left:auto;text-align:right"><div style="font-size:9px;color:var(--mt);font-family:Orbitron,monospace">METRIC</div>';
+  html+='<div style="font-family:Orbitron,monospace;font-size:13px;color:'+b.color+'">'+(b._mt||'&mdash;')+'</div></div></div>';
+  html+=extra;
+  html+='<div style="font-family:Orbitron,monospace;font-size:9px;color:var(--c);letter-spacing:2px;margin:10px 0 6px">AGENT LOGS</div>';
+  html+='<div style="max-height:130px;overflow-y:auto">'+logHtml+'</div>';
+  html+='<div style="display:flex;gap:8px;margin-top:12px">';
+  html+='<button id="bldViewBtn" style="flex:1;background:'+reg.bg+';border:1px solid '+b.color+';color:'+b.color+';padding:7px;border-radius:4px;cursor:pointer;font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px">VIEW '+b.ag+'</button>';
+  html+='<button onclick="syncData()" style="flex:1;background:rgba(0,245,255,.08);border:1px solid var(--c);color:var(--c);padding:7px;border-radius:4px;cursor:pointer;font-family:Orbitron,monospace;font-size:9px;letter-spacing:1px">&#8635; SYNC</button>';
+  html+='</div>';
+  setMo(html);
   document.getElementById('ov').classList.add('on');
+  // Attach click via closure — zero agent ID in any HTML attribute
+  var _agId=b.ag;
+  setTimeout(function(){
+    var vb=document.getElementById('bldViewBtn');
+    if(vb) vb.addEventListener('click',function(){closeOv();setTimeout(function(){openAgById(_agId);},150);});
+  },0);
 }
 
 function openTasks(){
@@ -646,10 +676,14 @@ function openSocial(pl){
   document.getElementById('ov').classList.add('on');
 }
 
+
+function openAgById(id){var a=a3.find(function(x){return x.id===id;});if(a)openAg(a);}
+function openAgFromCmd(id){toggleCmd();setTimeout(function(){openAgById(id);},200);}
+
 function buildAL(){
   document.getElementById('al').innerHTML=AR.map(function(a){
     var he=LD.logs.some(function(l){return l.agent===a.id&&l.level==='error';});
-    return '<div class="am" onclick="openAg(a3.find(function(ag){return ag.id===''+a.id+'';}))"><div class="aa" style="background:'+a.bg+';border-color:'+a.color+';color:'+a.color+'">'+a.icon+'</div><div class="ai"><div class="an" style="color:'+a.color+'">'+a.id+'</div><div class="as2">'+a.role+'</div></div><div class="od '+(he?'e':'')+'"></div></div>';
+    return '<div class="am" data-agid="'+a.id+'" onclick="openAgById(this.dataset.agid)"><div class="aa" style="background:'+a.bg+';border-color:'+a.color+';color:'+a.color+'">'+a.icon+'</div><div class="ai"><div class="an" style="color:'+a.color+'">'+a.id+'</div><div class="as2">'+a.role+'</div></div><div class="od '+(he?'e':'')+'"></div></div>';
   }).join('');
 }
 
@@ -658,7 +692,7 @@ function toggleCmd(){
   if(cmdOpen){
     document.getElementById('cag').innerHTML=AR.map(function(a){
       var he=LD.logs.some(function(l){return l.agent===a.id&&l.level==='error';});
-      return '<div class="cac" onclick="toggleCmd();setTimeout(function(){openAg(a3.find(function(x){return x.id===''+a.id+'';}));},200)">'+
+      return '<div class="cac" data-agid="'+a.id+'" onclick="openAgFromCmd(this.dataset.agid)">'+
       '<div class="cat"><div class="cav" style="background:'+a.bg+';border-color:'+a.color+';color:'+a.color+'">'+a.icon+'</div><div><div class="can" style="color:'+a.color+'">'+a.id+'</div><div class="car">'+a.role+'</div></div><div style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:'+(he?'var(--r)':'var(--gr)')+';box-shadow:0 0 5px '+(he?'var(--r)':'var(--gr)')+'"></div></div>'+
       '<div class="cs">'+(he?'&#9888; Error':'Ready')+'</div>'+
       '<div class="chl"><span style="font-size:8px;color:var(--mt)">HEALTH</span><div class="chb"><div class="chf" style="width:'+(he?60:96)+'%;background:'+(he?'var(--r)':'var(--gr)')+'"></div></div></div>'+
@@ -674,8 +708,25 @@ function sendCmd(){
   setTimeout(function(){lg.innerHTML+='<div style="color:var(--g)">['+new Date().toLocaleTimeString()+'] OK &#8594; '+(Math.floor(Math.random()*5)+5)+' agents acknowledged</div>';lg.scrollTop=lg.scrollHeight;},1200);
 }
 function toggleVoice(){
-  voiceOpen=!voiceOpen;document.getElementById('vo').classList.toggle('on',voiceOpen);document.getElementById('wb2').classList.toggle('on',voiceOpen);
-  if(voiceOpen){document.getElementById('vag').innerHTML=AR.slice(0,6).map(function(a){return '<div class="vab" style="border-color:'+a.color+';color:'+a.color+'" onclick="toggleVoice();setTimeout(function(){openAg(a3.find(function(x){return x.id===''+a.id+'';}));},200)">'+a.id+'</div>';}).join('');}
+  voiceOpen=!voiceOpen;
+  document.getElementById('vo').classList.toggle('on',voiceOpen);
+  document.getElementById('wb2').classList.toggle('on',voiceOpen);
+  if(voiceOpen){
+    var html='';
+    AR.slice(0,6).forEach(function(a){
+      // data-agid only — no agent ID inside onclick string
+      html+='<div class="vab" data-agid="'+a.id+'" style="border-color:'+a.color+';color:'+a.color+'">'+a.id+'</div>';
+    });
+    var vag=document.getElementById('vag');
+    vag.innerHTML=html;
+    // Attach clicks via delegation — one listener on container
+    vag.addEventListener('click',function(e){
+      var el=e.target.closest('.vab');
+      if(!el)return;
+      toggleVoice();
+      setTimeout(function(){openAgById(el.dataset.agid);},200);
+    });
+  }
 }
 function sChat(aid,color){
   var inp=document.getElementById('ci3-'+aid),msg=inp.value.trim();if(!msg)return;
