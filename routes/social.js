@@ -16,7 +16,7 @@ socialRouter.get("/pause-post", async (req, res) => {
     const newStatus = status || "paused";
     const { data, error } = await supabase
       .from("social_posts")
-      .update({ status: newStatus, retry_count: 0, updated_at: new Date().toISOString() })
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq("id", post_id)
       .select();
     if (error) throw error;
@@ -62,7 +62,7 @@ socialRouter.patch("/posts/:id", async (req, res) => {
     }
     const update = { status, updated_at: new Date().toISOString() };
     if (error_message !== undefined) update.error_message = error_message;
-    if (status === "scheduled") update.retry_count = 0;
+    // retry_count reset skipped — column added separately
     const { data, error } = await supabase.from("social_posts").update(update).eq("id", id).select();
     if (error) throw error;
     res.json({ updated: true, count: data?.length || 0, post: data?.[0] || null });
