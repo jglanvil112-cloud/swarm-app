@@ -3,6 +3,43 @@
 // Platforms: Instagram Business, Facebook Page, TikTok Business
 import express from "express";
 import { supabase, logAgent, enqueueTask, saveAgentOutput } from "../lib/supabase.js";
+
+// ── Admin: update post status (pause/resume/reset) ──────────────────
+socialRouter.patch("/posts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const allowed = ["paused","scheduled","draft","cancelled"];
+    const { status, error_message } = req.body;
+    if (!status || !allowed.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${allowed.join(", ")}` });
+    }
+    const update = { status, updated_at: new Date().toISOString() };
+    if (error_message !== undefined) update.error_message = error_message;
+    if (status === "scheduled") update.retry_count = 0; // reset retries on reschedule
+    const { data, error } = await supabase
+      .from("social_posts")
+      .update(update)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ updated: true, post: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── List posts (admin dashboard) ─────────────────────────────────────
+socialRouter.get("/posts", async (req, res) => {
+  try {
+    const { status, platform, limit = 50 } = req.query;
+    let q = supabase.from("social_posts").select("*").order("created_at", { ascending: false }).limit(Number(limit));
+    if (status) q = q.eq("status", status);
+    if (platform) q = q.eq("platform", platform);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ posts: data, count: data.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export const socialRouter = express.Router();
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
