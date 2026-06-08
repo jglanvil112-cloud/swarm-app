@@ -132,20 +132,7 @@ async function generateAndUploadListingImage(listingId, keyword, niche, token) {
   try {
     const svg    = generateSVG(keyword, niche);
     const svgBuf = Buffer.from(svg, "utf8");
-    const {
-  if (task.task_type === 'admin_pause_post' || task.task_type === 'update_social_post_status') {
-    const { post_id, new_status, status } = task.payload || {};
-    const targetStatus = new_status || status || 'paused';
-    const { error } = await supabase.from('social_posts').update({
-      status: targetStatus,
-      error_message: 'Paused by admin task',
-      updated_at: new Date().toISOString()
-    }).eq('id', post_id);
-    if (error) throw new Error(error.message);
-    await logAgent(task.agent, `Admin: post ${post_id} set to ${targetStatus}`, 'success', null, task.id);
-    return { paused: true, post_id, status: targetStatus };
-  }
-default: sharp} = await import("sharp");
+    const { default: sharp } = await import("sharp");
     const pngBuf = await sharp(svgBuf, { density: 150 }).png().toBuffer();
 
     // Raw multipart — same pattern that works in attachFileToListing
