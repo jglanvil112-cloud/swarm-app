@@ -8,6 +8,23 @@ import { supabase, logAgent, enqueueTask, saveAgentOutput } from "../lib/supabas
 export const socialRouter = express.Router();
 
 // ── GET /api/social/posts — list posts with optional filters ─────────
+// ── Admin pause via GET (public prefix, no preflight) ────────────────
+socialRouter.get("/pause-post", async (req, res) => {
+  try {
+    const { post_id, status } = req.query;
+    if (!post_id) return res.status(400).json({ error: "post_id required" });
+    const newStatus = status || "paused";
+    const { data, error } = await supabase
+      .from("social_posts")
+      .update({ status: newStatus, retry_count: 0, updated_at: new Date().toISOString() })
+      .eq("id", post_id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ ok: true, post_id, new_status: newStatus, post: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 socialRouter.get("/posts", async (req, res) => {
   try {
     const { status, platform, limit = 50 } = req.query;
