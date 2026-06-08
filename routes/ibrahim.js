@@ -183,8 +183,16 @@ function getNextPostTimes(count = 10) {
 async function publishToInstagram(post) {
   const cred = await getIGCredentials();
   const token = cred.access_token;
-  const userId = cred.page_id || cred.account_id || "17841436491512867";
-  const base = "https://graph.facebook.com/v21.0";
+  const base = "https://graph.instagram.com/v21.0";
+
+  // Resolve the correct IG Business account id from the token (not the stale stored id)
+  let userId = null;
+  try {
+    const meRes = await fetch(`${base}/me?fields=user_id,id,username&access_token=${token}`);
+    const me = await meRes.json();
+    userId = me.user_id ? String(me.user_id) : (me.id ? String(me.id) : null);
+  } catch {}
+  if (!userId) userId = cred.page_id || cred.account_id || "17841436491512867";
 
   if (!post.media_urls?.length) {
     throw new Error("No media URL for post " + post.id);
@@ -196,6 +204,7 @@ async function publishToInstagram(post) {
   const containerPayload = {
     image_url: imageUrl,
     caption: post.caption,
+    media_type: "IMAGE",
     access_token: token
   };
 
@@ -212,9 +221,18 @@ async function publishToInstagram(post) {
   });
   const container = await cRes.json();
   if (container.error) throw new Error("Container error: " + container.error.message);
+  if (!container.id) throw new Error("No container id: " + JSON.stringify(container));
 
-  // Wait for container to process
-  await new Promise(r => setTimeout(r, 3000));
+  // Poll container until Instagram finishes processing (avoids "Media ID is not available")
+  let ready = false;
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const sRes = await fetch(`${base}/${container.id}?fields=status_code,status&access_token=${token}`);
+    const sd = await sRes.json();
+    if (sd.status_code === "FINISHED") { ready = true; break; }
+    if (sd.status_code === "ERROR" || sd.status === "ERROR") throw new Error("Container processing failed: " + JSON.stringify(sd));
+  }
+  if (!ready) throw new Error("Container still processing after 20s");
 
   // Publish
   const pRes = await fetch(`${base}/${userId}/media_publish`, {
