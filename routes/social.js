@@ -5,29 +5,9 @@ import express from "express";
 import { supabase, logAgent, enqueueTask, saveAgentOutput } from "../lib/supabase.js";
 
 // ── Admin: update post status (pause/resume/reset) ──────────────────
-socialRouter.patch("/posts/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const allowed = ["paused","scheduled","draft","cancelled"];
-    const { status, error_message } = req.body;
-    if (!status || !allowed.includes(status)) {
-      return res.status(400).json({ error: `status must be one of: ${allowed.join(", ")}` });
-    }
-    const update = { status, updated_at: new Date().toISOString() };
-    if (error_message !== undefined) update.error_message = error_message;
-    if (status === "scheduled") update.retry_count = 0; // reset retries on reschedule
-    const { data, error } = await supabase
-      .from("social_posts")
-      .update(update)
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) throw error;
-    res.json({ updated: true, post: data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+export const socialRouter = express.Router();
 
-// ── List posts (admin dashboard) ─────────────────────────────────────
+// ── GET /api/social/posts — list posts with optional filters ─────────
 socialRouter.get("/posts", async (req, res) => {
   try {
     const { status, platform, limit = 50 } = req.query;
@@ -40,7 +20,24 @@ socialRouter.get("/posts", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-export const socialRouter = express.Router();
+// ── PATCH /api/social/posts/:id — update post status (pause/resume) ──
+socialRouter.patch("/posts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const allowed = ["paused", "scheduled", "draft", "cancelled", "failed"];
+    const { status, error_message } = req.body;
+    if (!status || !allowed.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${allowed.join(", ")}` });
+    }
+    const update = { status, updated_at: new Date().toISOString() };
+    if (error_message !== undefined) update.error_message = error_message;
+    if (status === "scheduled") update.retry_count = 0;
+    const { data, error } = await supabase.from("social_posts").update(update).eq("id", id).select().single();
+    if (error) throw error;
+    res.json({ updated: true, post: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
 
