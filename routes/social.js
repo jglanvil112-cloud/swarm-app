@@ -18,6 +18,31 @@ socialRouter.get("/pause-post", async (req, res) => {
       .from("social_posts")
       .update({ status: newStatus, retry_count: 0, updated_at: new Date().toISOString() })
       .eq("id", post_id)
+      .select();
+    if (error) throw error;
+    res.json({ ok: true, post_id, new_status: newStatus, updated: (data || []).length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Bulk pause all scheduled posts for a platform ────────────────────
+socialRouter.get("/pause-all", async (req, res) => {
+  try {
+    const platform = req.query.platform || "instagram";
+    const { data, error } = await supabase
+      .from("social_posts")
+      .update({ status: "paused", updated_at: new Date().toISOString() })
+      .eq("status", "scheduled")
+      .eq("platform", platform)
+      .select();
+    if (error) throw error;
+    res.json({ ok: true, platform, paused_count: (data || []).length, ids: (data || []).map(p => p.id) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+    const newStatus = status || "paused";
+    const { data, error } = await supabase
+      .from("social_posts")
+      .update({ status: newStatus, retry_count: 0, updated_at: new Date().toISOString() })
+      .eq("id", post_id)
       .select()
       .single();
     if (error) throw error;
