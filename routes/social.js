@@ -32,9 +32,9 @@ socialRouter.patch("/posts/:id", async (req, res) => {
     const update = { status, updated_at: new Date().toISOString() };
     if (error_message !== undefined) update.error_message = error_message;
     if (status === "scheduled") update.retry_count = 0;
-    const { data, error } = await supabase.from("social_posts").update(update).eq("id", id).select().single();
+    const { data, error } = await supabase.from("social_posts").update(update).eq("id", id).select();
     if (error) throw error;
-    res.json({ updated: true, post: data });
+    res.json({ updated: true, count: data?.length || 0, post: data?.[0] || null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
