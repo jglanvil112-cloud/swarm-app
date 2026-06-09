@@ -17,7 +17,7 @@ export const IBRAHIM_CONFIG = {
   auto_posting: true,
   phase: "2-auto-posting",
   posts_per_day: 2,
-  reels_per_day: 1,
+  reels_per_day: 0,   // reels disabled until a video source is connected
   // Optimal posting times (EST → UTC)
   post_times_utc: ["14:00", "22:00"],   // 10am, 6pm EST
   reel_time_utc:  "18:00",              // 2pm EST — peak reel engagement
@@ -155,8 +155,8 @@ function getNextPostTimes(count = 10) {
       }
     }
 
-    // 1 reel per day at reel time
-    if (times.length < count) {
+    // 1 reel per day at reel time (disabled when reels_per_day === 0)
+    if (IBRAHIM_CONFIG.reels_per_day > 0 && times.length < count) {
       const [rh, rm] = IBRAHIM_CONFIG.reel_time_utc.split(":").map(Number);
       const reelTime = new Date(postDay);
       reelTime.setUTCHours(rh, rm, 0, 0);
@@ -564,7 +564,7 @@ export async function generateAndSchedulePosts(count = 10) {
         platform: "instagram",
         caption,
         media_urls: [imageUrl],
-        media_type: slot.is_reel ? "REEL" : "IMAGE",
+        media_type: "IMAGE",
         status: "scheduled",
         scheduled_for: slot.scheduled_for,
         keyword,
@@ -572,7 +572,7 @@ export async function generateAndSchedulePosts(count = 10) {
         etsy_listing_id: null,
         meta: {
           content_type: slot.type,
-          is_reel: slot.is_reel,
+          is_reel: false,
           day_label: slot.day_label,
           time_label: slot.time_label,
           reel_description: description,
@@ -778,6 +778,36 @@ ibrahimRouter.get("/test-publish-one", async (req, res) => {
       media_url: post.media_urls?.[0] || null,
       caption_preview: post.caption?.slice(0, 80)
     });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/ibrahim/convert-reels-to-images?key=... — convert all scheduled REEL posts to IMAGE (until a video source exists)
+ibrahimRouter.get("/convert-reels-to-images", async (req, res) => {
+  if (req.query.key !== "swarm-os-key-2025") return res.status(403).json({ error: "forbidden" });
+  try {
+    const { data: reels } = await supabase
+      .from("social_posts")
+      .select("*")
+      .eq("platform", "instagram")
+      .eq("status", "scheduled")
+      .eq("media_type", "REEL");
+
+    const converted = [];
+    for (const post of (reels || [])) {
+      const imageUrl = `${APP_URL}/api/etsy/listing-image?title=${encodeURIComponent(post.keyword || "digital art prints")}`;
+      const newMeta = { ...(post.meta || {}), is_reel: false, content_type: "art_showcase", reel_description: null };
+      const { error } = await supabase.from("social_posts").update({
+        media_type: "IMAGE",
+        media_urls: [imageUrl],
+        meta: newMeta,
+        updated_at: new Date().toISOString()
+      }).eq("id", post.id);
+      if (!error) converted.push(post.id);
+    }
+    await logAgent("IBRAHIM", `🔁 Converted ${converted.length} scheduled REEL post(s) to IMAGE`, "info");
+    return res.json({ ok: true, converted_count: converted.length, converted });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
