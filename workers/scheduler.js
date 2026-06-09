@@ -176,6 +176,7 @@ import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSch
 import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
 import { createQueuedBundles } from "../routes/etsy.js";
+import { generateMissingFormats } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
 cron.schedule("*/12 * * * *", () => { backfillNextListingFiles(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
@@ -183,6 +184,8 @@ cron.schedule("*/12 * * * *", () => { backfillNextListingFiles(5).catch(()=>{});
 cron.schedule("*/14 * * * *", () => { assignNextSections(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
 // Every 20 min: create queued bundle DRAFTS (dedup by draft title; 429s harmlessly until quota resets, then idles)
 cron.schedule("*/20 * * * *", () => { createQueuedBundles().catch(()=>{}); });
+// Every 8 min: generate one missing format-variant set (CDN source, no Etsy quota); idles when all 5 done
+cron.schedule("*/8 * * * *", () => { generateMissingFormats().catch(()=>{}); });
 
 // Every 5 min: check for scheduled posts due and auto-publish
 cron.schedule("*/5 * * * *", async () => {
