@@ -1461,3 +1461,17 @@ etsyRouter.get("/generate-formats",async(req,res)=>{
   if(!HOJ_FMT[f])return res.status(400).json({error:"format must be one of: "+Object.keys(HOJ_FMT).join(", ")});
   res.json(await generateFormatVariants(f));
 });
+
+// One-format-per-tick auto-generator: fills any format not yet in storage, then idles.
+export async function generateMissingFormats(){
+  try{
+    for(const f of Object.keys(HOJ_FMT)){
+      const a=HOJ_ART[0]; const folder=`${a.collection.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}/${f}`;
+      let exists=false;
+      try{ const {data}=await supabase.storage.from("hoj-assets").list(folder); exists=!!(data&&data.length); }catch(e){}
+      if(!exists) return await generateFormatVariants(f); // generate one missing format this tick
+    }
+    return {done:true,note:"all formats present in storage"};
+  }catch(e){return {error:e.message};}
+}
+etsyRouter.get("/generate-missing-run",async(req,res)=>{if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});res.json(await generateMissingFormats());});
