@@ -326,12 +326,13 @@ export async function runAutoPublish() {
 
         const postId = await publishToInstagram(post);
 
-        await supabase.from("social_posts").update({
+        const { error: updErr } = await supabase.from("social_posts").update({
           status: "published",
           published_at: new Date().toISOString(),
-          ig_post_id: postId,
+          platform_post_id: postId,
           updated_at: new Date().toISOString()
         }).eq("id", post.id);
+        if (updErr) await logAgent("IBRAHIM", `⚠️ DB mark-published failed for ${post.id}: ${updErr.message}`, "warn");
 
         await logAgent("IBRAHIM", `✅ Published to @houseofjreym: ${postId} | Type: ${post.media_type} | "${post.caption?.slice(0, 60)}..."`, "success");
         publishedCount++;
@@ -391,7 +392,7 @@ async function syncPostAnalytics(postId, igPostId, token) {
     await supabase.from("social_posts").update({
       analytics,
       updated_at: new Date().toISOString()
-    }).eq("ig_post_id", igPostId);
+    }).eq("platform_post_id", igPostId);
 
     return analytics;
   } catch (e) {
@@ -764,7 +765,7 @@ ibrahimRouter.get("/test-publish-one", async (req, res) => {
     await supabase.from("social_posts").update({
       status: "published",
       published_at: new Date().toISOString(),
-      ig_post_id: igPostId,
+      platform_post_id: igPostId,
       updated_at: new Date().toISOString()
     }).eq("id", post.id);
 
