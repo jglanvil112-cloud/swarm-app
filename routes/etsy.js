@@ -1209,12 +1209,18 @@ etsyRouter.get("/catalog-images",async(req,res)=>{
     const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
     const lim=Math.min(parseInt(req.query.limit)||12,30); const off=parseInt(req.query.offset)||0;
     const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+lim+"&offset="+off,{headers:authH(t)});
-    const ld=await lr.json(); const out=[];
-    for(const l of (ld.results||[])){
+    const ld=await lr.json();
+    const fetchImg=async(l)=>{
       let img=null;
-      try{const ir=await fetch(ETSY_BASE+"/listings/"+l.listing_id+"/images",{headers:authH(t)});if(ir.ok){const id=await ir.json();const im=(id.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0))[0];img=im&&(im.url_570xN||im.url_fullxfull||im.url_340x270);}}catch(e){}
-      out.push({listing_id:l.listing_id,title:l.title,price:(l.price&&l.price.amount?l.price.amount:799)/100,url:l.url,tags:l.tags,img});
-    }
+      try{
+        const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),4000);
+        const ir=await fetch(ETSY_BASE+"/listings/"+l.listing_id+"/images",{headers:authH(t),signal:ctrl.signal});
+        clearTimeout(to);
+        if(ir.ok){const id=await ir.json();const im=(id.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0))[0];img=im&&(im.url_570xN||im.url_fullxfull||im.url_340x270);}
+      }catch(e){}
+      return {listing_id:l.listing_id,title:l.title,price:(l.price&&l.price.amount?l.price.amount:799)/100,url:l.url,tags:l.tags,img};
+    };
+    const out=await Promise.all((ld.results||[]).map(fetchImg));
     res.json({count:ld.count,results:out});
   }catch(e){res.status(500).json({error:e.message});}
 });
