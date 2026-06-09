@@ -1095,3 +1095,63 @@ etsyRouter.get("/order-diagnose",async(req,res)=>{
     });
   }catch(e){res.status(500).json({error:e.message});}
 });
+
+// GET /api/etsy/attach-real-file?listing_id=...&key=...[&all=1&limit=N] — attach a listing's OWN primary image as its digital download (real artwork, instant-download)
+etsyRouter.get("/attach-real-file",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated"});
+    let targets=[];
+    if(req.query.all==="1"){
+      const lim=Math.min(parseInt(req.query.limit)||25,100);
+      const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+lim,{headers:authH(t)});
+      const ld=await lr.json();
+      targets=(ld.results||[]).map(l=>l.listing_id);
+    }else if(req.query.listing_id){
+      targets=[parseInt(req.query.listing_id)];
+    }else return res.status(400).json({error:"listing_id or all=1 required"});
+
+    const out=[];
+    for(const lid of targets){
+      try{
+        // skip if file already attached (unless force)
+        if(req.query.force!=="1"){
+          const ex=await fetch(ETSY_BASE+"/listings/"+lid+"/files",{headers:authH(t)});
+          if(ex.ok){const ed=await ex.json();if((ed.results||ed||[]).length>0){out.push({listing_id:lid,skipped:"already_has_file"});continue;}}
+        }
+        // get primary image (highest res)
+        const ir=await fetch(ETSY_BASE+"/listings/"+lid+"/images",{headers:authH(t)});
+        if(!ir.ok){out.push({listing_id:lid,error:"images "+ir.status});continue;}
+        const idata=await ir.json();
+        const imgs=(idata.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0));
+        const img=imgs[0];
+        const imgUrl=img&&(img.url_fullxfull||img.url_570xN||img.url_170x135);
+        if(!imgUrl){out.push({listing_id:lid,error:"no_image"});continue;}
+        // fetch image bytes
+        const bin=await fetch(imgUrl);
+        const ab=await bin.arrayBuffer();
+        const bytes=Buffer.from(ab);
+        const ext=(imgUrl.split("?")[0].match(/\.(jpe?g|png|gif)$/i)||[,"jpg"])[1].toLowerCase();
+        const ctype=ext==="png"?"image/png":ext==="gif"?"image/gif":"image/jpeg";
+        const fname=("hoj_print_"+lid+"."+ext);
+        const boundary="----HoJReal"+Date.now().toString(36);
+        const parts=[
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fname}"\r\nContent-Type: ${ctype}\r\n\r\n`,
+          bytes,
+          `\r\n--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${fname}\r\n--${boundary}--\r\n`,
+        ];
+        const body=Buffer.concat(parts.map(p=>typeof p==="string"?Buffer.from(p):p));
+        const up=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{
+          method:"POST",
+          headers:{"Content-Type":`multipart/form-data; boundary=${boundary}`,"Content-Length":body.length.toString(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},
+          body
+        });
+        const upd=await up.json().catch(()=>({}));
+        if(up.ok){out.push({listing_id:lid,attached:true,file_name:fname,listing_file_id:upd.listing_file_id,bytes:bytes.length,image_url:imgUrl});await logAgent("AISHA",`📎 Attached real artwork file to listing ${lid}`,"success");}
+        else out.push({listing_id:lid,error:"upload "+up.status,detail:JSON.stringify(upd).slice(0,200)});
+      }catch(e){out.push({listing_id:lid,error:e.message});}
+    }
+    res.json({ok:true,count:out.length,results:out});
+  }catch(e){res.status(500).json({error:e.message});}
+});
