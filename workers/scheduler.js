@@ -177,9 +177,9 @@ import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
-cron.schedule("*/2 * * * *", () => { backfillNextListingFiles(6).catch(()=>{}); });
+cron.schedule("*/12 * * * *", () => { backfillNextListingFiles(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
 // Every 3 min: organize listings into shop sections (collections), a small batch at a time
-cron.schedule("*/3 * * * *", () => { assignNextSections(8).catch(()=>{}); });
+cron.schedule("*/14 * * * *", () => { assignNextSections(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
 
 // Every 5 min: check for scheduled posts due and auto-publish
 cron.schedule("*/5 * * * *", async () => {
