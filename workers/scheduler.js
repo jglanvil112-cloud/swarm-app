@@ -174,9 +174,12 @@ console.log("SWARM OS v6.0: All cron jobs registered");
 // ─── IBRAHIM Social Media Agent — Phase 2 AUTO-POSTING ───────────────────────
 import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "../routes/ibrahim.js";
 import { backfillNextListingFiles } from "../routes/etsy.js";
+import { assignNextSections } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
 cron.schedule("*/2 * * * *", () => { backfillNextListingFiles(6).catch(()=>{}); });
+// Every 3 min: organize listings into shop sections (collections), a small batch at a time
+cron.schedule("*/3 * * * *", () => { assignNextSections(8).catch(()=>{}); });
 
 // Every 5 min: check for scheduled posts due and auto-publish
 cron.schedule("*/5 * * * *", async () => {
