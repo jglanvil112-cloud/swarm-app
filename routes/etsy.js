@@ -1300,3 +1300,75 @@ etsyRouter.get("/remove-placeholder-svgs",async(req,res)=>{
     res.json({ok:true,deleted:out.length,results:out});
   }catch(e){res.status(500).json({error:e.message});}
 });
+
+// ─── QUEUED BUNDLE AUTO-CREATION (creates DRAFTS for review; fires when Etsy quota allows) ───
+const HOJ_BUNDLES=[
+ {key:"heritage-gallery",price:24.99,section:"Black & Afrocentric Art",
+  title:"Black Heritage Gallery Wall Set | 6 Printable African American Wall Art | Afrocentric Home Decor Bundle | Digital Download",
+  tags:["gallery wall set","black wall art","african american art","afrocentric decor","black art bundle","heritage prints","melanin art","black history art","printable wall art","black owned","digital download","gallery bundle","black home decor"],
+  include:[4515831505,4515830658,4515831993,4515841541,4515841823,4515836329],
+  desc:"Build a stunning gallery wall that celebrates heritage and Black excellence. This curated set of 6 high-resolution prints mixes portraits, affirmations, and cultural art designed to hang beautifully together. 6 designs, multiple print sizes each, instant download, print at home or any print shop, personal-use license included. Save vs buying separately."},
+ {key:"affirmations-wellness",price:18.99,section:"Affirmations & Wellness",
+  title:"Black Affirmation Wall Art Set | 5 Melanin Self Love Printables | Mental Health & Black Girl Magic Quotes | Digital Download",
+  tags:["black affirmations","affirmation wall art","black girl magic","self love print","melanin art","mental health art","affirmation bundle","self care decor","black woman art","positive quotes","digital download","affirmation set","black owned"],
+  include:[4515831741,4515832757,4515839249,4515830658,4515832852],
+  desc:"A daily dose of affirmation for your space. Five uplifting prints celebrating self-love, mental wellness, and Black-girl-magic energy, coordinated to style a bedroom, office, or self-care corner. 5 designs, multiple sizes, instant download, print anywhere, personal-use license."},
+ {key:"modern-trio",price:14.99,section:"Minimalist & Modern",
+  title:"Minimalist Black Art Set | 3 Modern Afrocentric Line Art Prints | Boho Black Woman Wall Art | Digital Download Trio",
+  tags:["minimalist black art","line art print","modern black art","boho wall art","afrocentric art","black woman line art","neutral wall art","abstract african art","printable art set","black owned","digital download","modern decor","art trio"],
+  include:[4515841823,4515836329,4515831993],
+  desc:"Clean, modern, and unmistakably us. Three minimalist line-art prints in warm neutral tones that bring quiet elegance and cultural pride to any room. Coordinated as a trio. 3 designs, multiple sizes, instant download, personal-use license."},
+ {key:"natural-beauty-pride",price:16.99,section:"Natural Hair & Beauty",
+  title:"Natural Hair Wall Art Set | 4 Melanin Black Beauty Printables | Afro Celebration Art | Black Woman Digital Download Bundle",
+  tags:["natural hair art","melanin art","black beauty print","afro art","black woman wall art","natural hair print","black hair art","melanin queen","printable art set","black owned","digital download","afrocentric art","beauty wall art"],
+  include:[4515836329,4515830658,4515831993,4515831505],
+  desc:"A celebration of natural hair, melanin, and Black beauty in four coordinated prints. Bold, warm, and gallery-ready for a bedroom, salon, or living space. 4 designs, multiple sizes, instant download, personal-use license."},
+ {key:"build-your-own",price:29.99,section:"Black & Afrocentric Art",
+  title:"Build Your Own Gallery Wall | Choose 9 Black Art Prints | Custom Afrocentric Wall Art Bundle | Digital Download Set",
+  tags:["build your own","custom gallery wall","black art bundle","choose your prints","gallery wall set","african american art","afrocentric decor","custom wall art","melanin art","black owned","digital download","mix and match","9 prints"],
+  include:[4515831505],
+  desc:"Your wall, your way. Choose any 9 prints from House of Jreym and we'll deliver them as one easy download. Mix portraits, affirmations, and cultural art to design a gallery wall that's all you. Leave your 9 picks in the order note. Multiple sizes each, instant download, personal-use license."},
+];
+
+async function _hojDraftTitles(t){const out=new Set();try{const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings?state=draft&limit=100",{headers:authH(t)});if(r.ok){const d=await r.json();(d.results||[]).forEach(l=>out.add(l.title));}}catch(e){}return out;}
+
+export async function createQueuedBundles(){
+  try{
+    const t=await getEtsyToken(); if(!t) return {error:"no token"};
+    const existing=await _hojDraftTitles(t);
+    for(const b of HOJ_BUNDLES){
+      const title=b.title.slice(0,140);
+      if(existing.has(title)) continue; // already created as draft
+      const body={title,description:b.desc,price:b.price,quantity:999,who_made:"i_did",when_made:"made_to_order",is_supply:false,taxonomy_id:2078,tags:b.tags.map(x=>String(x).slice(0,20)).slice(0,13),state:"draft",type:"download",is_digital:true};
+      const cr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings",{method:"POST",headers:authH(t),body:JSON.stringify(body)});
+      if(!cr.ok){const e=await cr.text();await logAgent("BUNDLES",`⚠️ bundle "${b.key}" create failed: ${cr.status} ${e.slice(0,70)}`,"warn");return {created:0,stopped:b.key,status:cr.status};}
+      const nl=await cr.json(); const nid=nl.listing_id;
+      let files=0,cover=false;
+      for(let i=0;i<b.include.length;i++){
+        try{
+          const ir=await fetch(ETSY_BASE+"/listings/"+b.include[i]+"/images",{headers:authH(t)});
+          if(!ir.ok)continue; const idata=await ir.json(); const im=(idata.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0))[0]; const url=im&&(im.url_fullxfull||im.url_570xN); if(!url)continue;
+          const bin=await fetch(url); const bytes=Buffer.from(await bin.arrayBuffer());
+          const ext=(url.split("?")[0].match(/\.(jpe?g|png)$/i)||[,"jpg"])[1].toLowerCase(); const ctype=ext==="png"?"image/png":"image/jpeg";
+          const xk=ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"");
+          const fbn="----HoJBun"+Date.now().toString(36)+i; const fname="hoj_"+b.key+"_"+(i+1)+"."+ext;
+          const fp=[`--${fbn}\r\nContent-Disposition: form-data; name="file"; filename="${fname}"\r\nContent-Type: ${ctype}\r\n\r\n`,bytes,`\r\n--${fbn}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${fname}\r\n--${fbn}--\r\n`];
+          const fbody=Buffer.concat(fp.map(p=>typeof p==="string"?Buffer.from(p):p));
+          const up=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+nid+"/files",{method:"POST",headers:{"Content-Type":`multipart/form-data; boundary=${fbn}`,"Content-Length":fbody.length.toString(),Authorization:"Bearer "+t,"x-api-key":xk},body:fbody});
+          if(up.ok)files++;
+          if(!cover){
+            const ibn="----HoJImg"+Date.now().toString(36); const ip=[`--${ibn}\r\nContent-Disposition: form-data; name="image"; filename="cover.${ext}"\r\nContent-Type: ${ctype}\r\n\r\n`,bytes,`\r\n--${ibn}--\r\n`];
+            const ibody=Buffer.concat(ip.map(p=>typeof p==="string"?Buffer.from(p):p));
+            const ci=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+nid+"/images",{method:"POST",headers:{"Content-Type":`multipart/form-data; boundary=${ibn}`,"Content-Length":ibody.length.toString(),Authorization:"Bearer "+t,"x-api-key":xk},body:ibody});
+            if(ci.ok)cover=true;
+          }
+        }catch(e){}
+      }
+      try{const sr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/sections",{headers:authH(t)});const sd=await sr.json();const sec=(sd.results||[]).find(s=>s.title===b.section);if(sec)await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+nid,{method:"PATCH",headers:authH(t),body:JSON.stringify({shop_section_id:sec.shop_section_id})});}catch(e){}
+      await logAgent("BUNDLES",`📦 Created DRAFT bundle "${b.key}" (listing ${nid}) — ${files} files, cover:${cover}`,"success");
+      return {created:1,bundle:b.key,listing_id:nid,files,cover}; // one per run to stay gentle
+    }
+    return {created:0,done:true,note:"all 5 bundles exist as drafts"};
+  }catch(e){return {error:e.message};}
+}
+etsyRouter.get("/create-bundles-run",async(req,res)=>{if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});res.json(await createQueuedBundles());});
