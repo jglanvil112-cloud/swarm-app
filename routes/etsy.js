@@ -1118,7 +1118,7 @@ etsyRouter.get("/attach-real-file",async(req,res)=>{
         // skip if file already attached (unless force)
         if(req.query.force!=="1"){
           const ex=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{headers:authH(t)});
-          if(ex.ok){const ed=await ex.json();if((ed.results||ed||[]).length>0){out.push({listing_id:lid,skipped:"already_has_file"});continue;}}
+          if(ex.ok){const ed=await ex.json(); const bO=f=>f.size_bytes||(typeof f.filesize==="string"?parseFloat(f.filesize)*(f.filesize.includes("MB")?1e6:f.filesize.includes("KB")?1e3:1):0); if((ed.results||ed||[]).some(f=>bO(f)>20000)){out.push({listing_id:lid,skipped:"already_has_image"});continue;}}
         }
         // get primary image (highest res)
         const ir=await fetch(ETSY_BASE+"/listings/"+lid+"/images",{headers:authH(t)});
@@ -1172,7 +1172,7 @@ export async function backfillNextListingFiles(batch=6){
       const lid=l.listing_id;
       try{
         const ex=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{headers:authH(t)});
-        if(ex.ok){const ed=await ex.json(); if((ed.results||[]).length>0) continue;}
+        if(ex.ok){const ed=await ex.json(); const bO=f=>f.size_bytes||(typeof f.filesize==="string"?parseFloat(f.filesize)*(f.filesize.includes("MB")?1e6:f.filesize.includes("KB")?1e3:1):0); if((ed.results||[]).some(f=>bO(f)>20000)) continue;}
         const ir=await fetch(ETSY_BASE+"/listings/"+lid+"/images",{headers:authH(t)});
         if(!ir.ok) continue;
         const idata=await ir.json();
