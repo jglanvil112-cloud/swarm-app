@@ -179,10 +179,22 @@ etsyRouter.get("/listing-image", async (req, res) => {
       let h = 0; for (const c of want) h = (h * 31 + c.charCodeAt(0)) % prods.length;
       match = prods[h] || prods[0];
     }
-    let url = match.image.src;
-    // Instagram needs a clean direct JPEG URL — strip query params
-    url = url.split("?")[0];
-    return res.redirect(url);
+    let url = match.image.src.split("?")[0];
+    // Shopify serves WebP via content negotiation, which Instagram rejects.
+    // Fetch the image server-side and re-serve it as a guaranteed JPEG.
+    try {
+      const imgRes = await fetch(url, { headers: { "Accept": "image/jpeg" } });
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      const sharpMod = await import("sharp");
+      const sharp = sharpMod.default;
+      const jpeg = await sharp(buf).flatten({ background: "#ffffff" }).jpeg({ quality: 90 }).resize(1080, 1080, { fit: "cover" }).toBuffer();
+      res.set("Content-Type", "image/jpeg");
+      res.set("Cache-Control", "public, max-age=3600");
+      return res.send(jpeg);
+    } catch (imgErr) {
+      // Fallback: redirect to the raw url (better than nothing)
+      return res.redirect(url);
+    }
   } catch (e) {
     return res.redirect(FALLBACK);
   }
