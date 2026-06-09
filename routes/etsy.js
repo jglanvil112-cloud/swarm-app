@@ -1048,3 +1048,50 @@ etsyRouter.get("/reviews",async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+
+// GET /api/etsy/order-diagnose?receipt_id=...&key=... — diagnose a stuck order: receipt status + per-listing digital files
+etsyRouter.get("/order-diagnose",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const receiptId=req.query.receipt_id;
+  if(!receiptId)return res.status(400).json({error:"receipt_id required"});
+  try{
+    const t=await getEtsyToken();
+    if(!t)return res.status(401).json({error:"Not authenticated — visit /api/etsy/auth"});
+    const rr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/receipts/"+receiptId,{headers:authH(t)});
+    if(!rr.ok){const e=await rr.text();return res.status(rr.status).json({error:"Etsy receipt "+rr.status,detail:e.slice(0,400)});}
+    const receipt=await rr.json();
+    const txns=receipt.transactions||[];
+    const lines=[];
+    for(const tx of txns){
+      const lid=tx.listing_id;
+      let listing=null,files=[];
+      try{const lr=await fetch(ETSY_BASE+"/listings/"+lid,{headers:authH(t)});if(lr.ok)listing=await lr.json();}catch(e){}
+      try{const fr=await fetch(ETSY_BASE+"/listings/"+lid+"/files",{headers:authH(t)});if(fr.ok){const fd=await fr.json();files=(fd.results||fd||[]).map(f=>({listing_file_id:f.listing_file_id,name:f.name,size:f.filesize||f.size,rank:f.rank}));}}catch(e){}
+      lines.push({
+        listing_id:lid,
+        title:tx.title,
+        quantity:tx.quantity,
+        is_digital_txn:tx.is_digital,
+        listing_type:listing?.type,
+        listing_state:listing?.state,
+        when_made:listing?.when_made,
+        listing_is_digital:listing?.is_digital,
+        files_attached:files.length,
+        files
+      });
+    }
+    res.json({
+      receipt_id:receipt.receipt_id,
+      status:receipt.status,
+      is_paid:receipt.is_paid,
+      is_shipped:receipt.is_shipped,
+      buyer_name:receipt.name,
+      buyer_email:receipt.buyer_email||null,
+      message_from_buyer:receipt.message_from_buyer||null,
+      grandtotal:receipt.grandtotal,
+      created:receipt.create_timestamp?new Date(receipt.create_timestamp*1000).toISOString():null,
+      transaction_count:txns.length,
+      lines
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
