@@ -1201,3 +1201,95 @@ etsyRouter.get("/backfill-run",async(req,res)=>{
   const r=await backfillNextListingFiles(parseInt(req.query.batch)||6);
   res.json(r);
 });
+
+// ─── DESIGN SUPPORT: real catalog images for storefront pages ───
+etsyRouter.get("/catalog-images",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  try{
+    const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+    const lim=Math.min(parseInt(req.query.limit)||12,30); const off=parseInt(req.query.offset)||0;
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+lim+"&offset="+off,{headers:authH(t)});
+    const ld=await lr.json(); const out=[];
+    for(const l of (ld.results||[])){
+      let img=null;
+      try{const ir=await fetch(ETSY_BASE+"/listings/"+l.listing_id+"/images",{headers:authH(t)});if(ir.ok){const id=await ir.json();const im=(id.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0))[0];img=im&&(im.url_570xN||im.url_fullxfull||im.url_340x270);}}catch(e){}
+      out.push({listing_id:l.listing_id,title:l.title,price:(l.price&&l.price.amount?l.price.amount:799)/100,url:l.url,tags:l.tags,img});
+    }
+    res.json({count:ld.count,results:out});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// ─── ETSY SHOP SECTIONS (collections) ───
+const HOJ_SECTIONS=["Juneteenth & Black History","Black & Afrocentric Art","Affirmations & Wellness","Natural Hair & Beauty","Portraits & Figures","Minimalist & Modern","SVG & Cricut Bundles","Seasonal & Holiday","Custom & Personalized","Art Prints"];
+const SECTION_RULES=[
+  ["Juneteenth & Black History",/juneteenth|black history|heritage|free.?ish|1865/i],
+  ["Natural Hair & Beauty",/natural hair|afro hair|hair (art|design|celebration|care)/i],
+  ["Affirmations & Wellness",/affirmation|mental health|positive quote|wellness|self.?care|motivat|mindful|inspirational/i],
+  ["Black & Afrocentric Art",/afrocentric|melanin|black (pride|art|excellence|king|queen|love|girl|man|woman)|african|black.?owned|cultural pride|diversity/i],
+  ["Seasonal & Holiday",/christmas|halloween|holiday|valentine|easter|thanksgiving|kwanzaa|santa/i],
+  ["SVG & Cricut Bundles",/svg bundle|cricut|bundle|cut file|cutting file|t.?shirt|tshirt|apparel|sublimation|png bundle|clipart/i],
+  ["Portraits & Figures",/portrait|figures?/i],
+  ["Minimalist & Modern",/minimalist|line art|modern|abstract|geometric|contemporary/i],
+  ["Custom & Personalized",/custom|personalized|pet (portrait|art)|memorial/i],
+];
+etsyRouter.get("/setup-sections",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  try{
+    const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+    const sr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/sections",{headers:authH(t)});
+    const sd=await sr.json(); const existing=new Set((sd.results||[]).map(s=>s.title)); const created=[];
+    for(const title of HOJ_SECTIONS){
+      if(existing.has(title)){created.push({title,exists:true});continue;}
+      const cr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/sections",{method:"POST",headers:{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:""),"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({title}).toString()});
+      if(cr.ok){const cd=await cr.json();created.push({title,id:cd.shop_section_id});}else{created.push({title,error:cr.status,detail:(await cr.text()).slice(0,120)});}
+    }
+    res.json({ok:true,created});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+let _asOffset=0;
+export async function assignNextSections(batch=8){
+  try{
+    const t=await getEtsyToken(); if(!t)return {error:"no token"};
+    const sr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/sections",{headers:authH(t)});
+    const sd=await sr.json(); const map={}; for(const s of (sd.results||[])) map[s.title]=s.shop_section_id;
+    if(!Object.keys(map).length) return {error:"no sections yet — run setup-sections"};
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+_asOffset,{headers:authH(t)});
+    const ld=await lr.json(); const results=ld.results||[];
+    if(results.length===0){_asOffset=0;return {wrapped:true};}
+    let assigned=0;
+    for(const l of results){
+      if(assigned>=batch)break;
+      if(l.shop_section_id)continue;
+      const hay=((l.title||"")+" "+((l.tags||[]).join(" "))).toLowerCase();
+      let sect="Art Prints"; for(const r of SECTION_RULES){ if(r[1].test(hay)){sect=r[0];break;} }
+      const sid=map[sect]||map["Art Prints"]; if(!sid)continue;
+      const ur=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id,{method:"PATCH",headers:authH(t),body:JSON.stringify({shop_section_id:sid})});
+      if(ur.ok)assigned++;
+    }
+    if(assigned===0){_asOffset+=100;if(_asOffset>=300)_asOffset=0;}
+    await logAgent("KWAME",`🗂️ Sections: assigned ${assigned} listing(s) (offset ${_asOffset})`,"info");
+    return {assigned,offset:_asOffset};
+  }catch(e){return {error:e.message};}
+}
+etsyRouter.get("/assign-sections-run",async(req,res)=>{if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});res.json(await assignNextSections(parseInt(req.query.batch)||8));});
+
+// ─── PLACEHOLDER SVG REMOVER (HELD — irreversible; requires &confirm=DELETE) ───
+etsyRouter.get("/remove-placeholder-svgs",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  if(req.query.confirm!=="DELETE")return res.json({held:true,note:"Deletion is irreversible. Re-call with &confirm=DELETE to execute. Held pending owner approval."});
+  try{
+    const t=await getEtsyToken(); const lim=Math.min(parseInt(req.query.limit)||25,100); const off=parseInt(req.query.offset)||0;
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+lim+"&offset="+off,{headers:authH(t)});
+    const ld=await lr.json(); const out=[];
+    for(const l of (ld.results||[])){
+      const fr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id+"/files",{headers:authH(t)});
+      if(!fr.ok)continue; const fd=await fr.json();
+      for(const f of (fd.results||[])){
+        const bytes=f.size_bytes||(typeof f.filesize==="string"?parseFloat(f.filesize)*(f.filesize.includes("KB")?1e3:1):0);
+        const isSvg=/svg/i.test(f.filetype||"")||/\.svg$/i.test(f.filename||"");
+        if(isSvg&&bytes<5000){const dr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id+"/files/"+f.listing_file_id,{method:"DELETE",headers:authH(t)});if(dr.ok)out.push({listing_id:l.listing_id,deleted:f.listing_file_id});}
+      }
+    }
+    res.json({ok:true,deleted:out.length,results:out});
+  }catch(e){res.status(500).json({error:e.message});}
+});
