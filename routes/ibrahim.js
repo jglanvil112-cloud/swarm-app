@@ -309,6 +309,12 @@ export async function runAutoPublish() {
     let publishedCount = 0;
     for (const post of duePosts) {
       try {
+        // Reels disabled until a working video source exists — skip any reel that slipped through
+        if (post.media_type === "REEL" || post.is_reel || post.meta?.is_reel) {
+          await supabase.from("social_posts").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", post.id);
+          await logAgent("IBRAHIM", `⏭️ Skipped REEL ${post.id} — reels disabled until video source`, "info");
+          continue;
+        }
         // Check we haven't already hit daily limit
         const today = new Date().toISOString().split("T")[0];
         const { count: todayCount } = await supabase
