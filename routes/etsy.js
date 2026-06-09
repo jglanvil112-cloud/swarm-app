@@ -1226,9 +1226,9 @@ etsyRouter.get("/catalog-images",async(req,res)=>{
 });
 
 // ─── ETSY SHOP SECTIONS (collections) ───
-const HOJ_SECTIONS=["Juneteenth & Black History","Black & Afrocentric Art","Affirmations & Wellness","Natural Hair & Beauty","Portraits & Figures","Minimalist & Modern","SVG & Cricut Bundles","Seasonal & Holiday","Custom & Personalized","Art Prints"];
+const HOJ_SECTIONS=["Juneteenth & Heritage","Black & Afrocentric Art","Affirmations & Wellness","Natural Hair & Beauty","Portraits & Figures","Minimalist & Modern","SVG & Cricut Bundles","Seasonal & Holiday","Custom & Personalized","Art Prints"];
 const SECTION_RULES=[
-  ["Juneteenth & Black History",/juneteenth|black history|heritage|free.?ish|1865/i],
+  ["Juneteenth & Heritage",/juneteenth|black history|heritage|free.?ish|1865/i],
   ["Natural Hair & Beauty",/natural hair|afro hair|hair (art|design|celebration|care)/i],
   ["Affirmations & Wellness",/affirmation|mental health|positive quote|wellness|self.?care|motivat|mindful|inspirational/i],
   ["Black & Afrocentric Art",/afrocentric|melanin|black (pride|art|excellence|king|queen|love|girl|man|woman)|african|black.?owned|cultural pride|diversity/i],
@@ -1246,6 +1246,7 @@ etsyRouter.get("/setup-sections",async(req,res)=>{
     const sd=await sr.json(); const existing=new Set((sd.results||[]).map(s=>s.title)); const created=[];
     for(const title of HOJ_SECTIONS){
       if(existing.has(title)){created.push({title,exists:true});continue;}
+      await new Promise(r=>setTimeout(r,600));
       const cr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/sections",{method:"POST",headers:{Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:""),"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({title}).toString()});
       if(cr.ok){const cd=await cr.json();created.push({title,id:cd.shop_section_id});}else{created.push({title,error:cr.status,detail:(await cr.text()).slice(0,120)});}
     }
