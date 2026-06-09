@@ -1392,3 +1392,72 @@ export async function createQueuedBundles(){
   }catch(e){return {error:e.message};}
 }
 etsyRouter.get("/create-bundles-run",async(req,res)=>{if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});res.json(await createQueuedBundles());});
+
+// ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
+const HOJ_ART=[
+ {slug:"black-art-history-portraits",collection:"Portraits & Figures",url:"https://i.etsystatic.com/66171116/r/il/bf7ea6/8151607459/il_1080xN.8151607459_swyc.jpg"},
+ {slug:"melanin-celebration",collection:"Black & Afrocentric Art",url:"https://i.etsystatic.com/66171116/r/il/563357/8103702370/il_1080xN.8103702370_c2zp.jpg"},
+ {slug:"afrocentric-home-decor",collection:"Black & Afrocentric Art",url:"https://i.etsystatic.com/66171116/r/il/299fd3/8151607563/il_1080xN.8151607563_ot56.jpg"},
+ {slug:"daily-affirmation",collection:"Affirmations & Wellness",url:"https://i.etsystatic.com/66171116/r/il/1a19c5/8103702138/il_1080xN.8103702138_gwua.jpg"},
+ {slug:"natural-hair-celebration",collection:"Natural Hair & Beauty",url:"https://i.etsystatic.com/66171116/r/il/74c44c/8151607937/il_1080xN.8151607937_d5l7.jpg"},
+ {slug:"mental-health-affirmations",collection:"Affirmations & Wellness",url:"https://i.etsystatic.com/66171116/r/il/8f6cee/8103702328/il_1080xN.8103702328_qn3d.jpg"},
+ {slug:"minimalist-line-art",collection:"Minimalist & Modern",url:"https://i.etsystatic.com/66171116/r/il/9e881e/8103702770/il_1080xN.8103702770_78xe.jpg"},
+ {slug:"affirmation-card-deck",collection:"Affirmations & Wellness",url:"https://i.etsystatic.com/66171116/r/il/55f0e4/8151608009/il_1080xN.8151608009_t9ld.jpg"},
+];
+const HOJ_FMT={
+ wallpaper:{w:1080,h:1920,pad:90,wm:48},
+ desktop:{w:1920,h:1080,pad:80,wm:40},
+ card:{w:1500,h:2100,pad:120,wm:54},
+ bookmark:{w:600,h:1800,pad:48,wm:30},
+ sticker:{w:1700,h:2200,tile:true},
+};
+const COCOA="#1d140f", GOLD="#c9a24b";
+function _wm(W,H,fs){return Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><rect x="${Math.round(W*0.03)}" y="${Math.round(H*0.02)}" width="${W-Math.round(W*0.06)}" height="${H-Math.round(H*0.04)}" fill="none" stroke="${GOLD}" stroke-opacity="0.5" stroke-width="2"/><text x="${W/2}" y="${H-Math.round(fs*0.9)}" text-anchor="middle" font-family="Georgia,serif" font-weight="600" font-size="${fs}" letter-spacing="${Math.round(fs*0.12)}" fill="${GOLD}">HOUSE OF JREYM</text></svg>`);}
+
+async function _hojCanvas(srcBuf,fmt){
+  const sharp=(await import("sharp")).default;
+  const c=HOJ_FMT[fmt];
+  if(c.tile){ // sticker sheet: 2x3 grid on white
+    const cols=2,rows=3,gx=Math.round(c.w*0.06),gy=Math.round(c.h*0.05);
+    const cw=Math.round((c.w-gx*(cols+1))/cols), ch=Math.round((c.h-gy*(rows+1))/rows);
+    const tile=await sharp(srcBuf).resize(cw,ch,{fit:"cover"}).png().toBuffer();
+    const comps=[]; for(let r=0;r<rows;r++)for(let col=0;col<cols;col++)comps.push({input:tile,top:gy+r*(ch+gy),left:gx+col*(cw+gx)});
+    const wm=Buffer.from(`<svg width="${c.w}" height="${c.h}" xmlns="http://www.w3.org/2000/svg"><text x="${c.w/2}" y="${c.h-20}" text-anchor="middle" font-family="Georgia,serif" font-weight="600" font-size="34" letter-spacing="4" fill="${COCOA}">HOUSE OF JREYM · sticker sheet</text></svg>`);
+    comps.push({input:wm});
+    return await sharp({create:{width:c.w,height:c.h,channels:4,background:"#ffffff"}}).composite(comps).png().toBuffer();
+  }
+  const innerW=c.w-c.pad*2, innerH=c.h-Math.round(c.pad*2.6);
+  const art=await sharp(srcBuf).resize(innerW,innerH,{fit:"inside"}).toBuffer();
+  const m=await sharp(art).metadata();
+  const top=Math.round((c.h-Math.round(c.pad*1.4)-m.height)/2)+(fmt==="card"?-Math.round(c.pad*0.4):0);
+  const left=Math.round((c.w-m.width)/2);
+  return await sharp({create:{width:c.w,height:c.h,channels:4,background:COCOA}})
+    .composite([{input:art,top:Math.max(c.pad,top),left:left},{input:_wm(c.w,c.h,c.wm||44)}]).png().toBuffer();
+}
+
+async function generateFormatVariants(format){
+  const out={format,bucket:"hoj-assets",items:[]};
+  try{ await supabase.storage.createBucket("hoj-assets",{public:true}); }catch(e){}
+  // verify/create bucket (ignore "already exists")
+  for(const a of HOJ_ART){
+    try{
+      const r=await fetch(a.url); if(!r.ok){out.items.push({slug:a.slug,error:"src "+r.status});continue;}
+      const src=Buffer.from(await r.arrayBuffer());
+      const png=await _hojCanvas(src,format);
+      const path=`${a.collection.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}/${format}/${a.slug}-${format}.png`;
+      const up=await supabase.storage.from("hoj-assets").upload(path,png,{contentType:"image/png",upsert:true});
+      if(up.error){out.items.push({slug:a.slug,error:"upload: "+up.error.message});continue;}
+      const pub=supabase.storage.from("hoj-assets").getPublicUrl(path);
+      out.items.push({slug:a.slug,collection:a.collection,path,url:pub.data.publicUrl,bytes:png.length});
+    }catch(e){ out.items.push({slug:a.slug,error:e.message}); }
+  }
+  out.ok=out.items.filter(i=>i.url).length; out.failed=out.items.filter(i=>i.error).length;
+  await logAgent("ASSETS",`🎨 format=${format}: ${out.ok} ok, ${out.failed} failed`, out.ok?"success":"warn");
+  return out;
+}
+etsyRouter.get("/generate-formats",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const f=String(req.query.format||"");
+  if(!HOJ_FMT[f])return res.status(400).json({error:"format must be one of: "+Object.keys(HOJ_FMT).join(", ")});
+  res.json(await generateFormatVariants(f));
+});
