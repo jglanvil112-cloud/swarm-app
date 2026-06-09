@@ -228,3 +228,11 @@ app.get("/api/stats", async (req, res) => {
 
                                                                                                                                                                                                                                                                                                                                                       const PORT = process.env.PORT||4000;
                                                                                                                                                                                                                                                                                                                                                       app.listen(PORT, () => console.log(`SWARM OS v5.2 :${PORT} | Anthropic:${process.env.ANTHROPIC_API_KEY?"OK":"MISSING"} Supabase:${SUPABASE_URL?"OK":"MISSING"}`));
+
+// ── KEEP-ALIVE: self-ping to keep Render free tier from idling to sleep ──
+const KEEPALIVE_URL = (process.env.RENDER_EXTERNAL_URL || "https://swarm-app-3nch.onrender.com").replace(/\/$/, "") + "/api/health";
+setInterval(() => {
+  fetch(KEEPALIVE_URL)
+    .then(r => { if (r.ok) console.log("[keepalive] ok"); })
+    .catch(e => console.log("[keepalive] failed:", e.message));
+}, 13 * 60 * 1000); // every 13 min, under Render's ~15-min idle window
