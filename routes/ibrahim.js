@@ -731,4 +731,55 @@ ibrahimRouter.get("/analytics", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/ibrahim/test-publish-one?key=... — force-publish the single earliest scheduled IMAGE post (manual test)
+ibrahimRouter.get("/test-publish-one", async (req, res) => {
+  if (req.query.key !== "swarm-os-key-2025") {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  try {
+    const { data: posts } = await supabase
+      .from("social_posts")
+      .select("*")
+      .eq("platform", "instagram")
+      .eq("status", "scheduled")
+      .eq("media_type", "IMAGE")
+      .order("scheduled_for", { ascending: true })
+      .limit(1);
+
+    const post = posts?.[0];
+    if (!post) return res.json({ ok: false, error: "no scheduled IMAGE post found" });
+
+    let igPostId, error;
+    try {
+      igPostId = await publishToInstagram(post);
+    } catch (e) {
+      error = e.message;
+    }
+
+    if (error) {
+      await logAgent("IBRAHIM", `❌ TEST publish failed for post ${post.id}: ${error}`, "error");
+      return res.status(500).json({ ok: false, post_id: post.id, media_url: post.media_urls?.[0] || null, error });
+    }
+
+    await supabase.from("social_posts").update({
+      status: "published",
+      published_at: new Date().toISOString(),
+      ig_post_id: igPostId,
+      updated_at: new Date().toISOString()
+    }).eq("id", post.id);
+
+    await logAgent("IBRAHIM", `✅ TEST published to @houseofjreym: ${igPostId} | "${post.caption?.slice(0, 60)}..."`, "success");
+
+    return res.json({
+      ok: true,
+      post_id: post.id,
+      ig_post_id: igPostId,
+      media_url: post.media_urls?.[0] || null,
+      caption_preview: post.caption?.slice(0, 80)
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 export default ibrahimRouter;
