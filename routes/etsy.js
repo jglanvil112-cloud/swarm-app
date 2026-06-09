@@ -1066,7 +1066,7 @@ etsyRouter.get("/order-diagnose",async(req,res)=>{
       const lid=tx.listing_id;
       let listing=null,files=[];
       try{const lr=await fetch(ETSY_BASE+"/listings/"+lid,{headers:authH(t)});if(lr.ok)listing=await lr.json();}catch(e){}
-      try{const fr=await fetch(ETSY_BASE+"/listings/"+lid+"/files",{headers:authH(t)});if(fr.ok){const fd=await fr.json();files=(fd.results||fd||[]).map(f=>({listing_file_id:f.listing_file_id,name:f.name,size:f.filesize||f.size,rank:f.rank}));}}catch(e){}
+      try{const fr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{headers:authH(t)});if(fr.ok){const fd=await fr.json();files=(fd.results||fd||[]).map(f=>({listing_file_id:f.listing_file_id,name:f.name,size:f.filesize||f.size,rank:f.rank}));}}catch(e){}
       lines.push({
         listing_id:lid,
         title:tx.title,
@@ -1117,7 +1117,7 @@ etsyRouter.get("/attach-real-file",async(req,res)=>{
       try{
         // skip if file already attached (unless force)
         if(req.query.force!=="1"){
-          const ex=await fetch(ETSY_BASE+"/listings/"+lid+"/files",{headers:authH(t)});
+          const ex=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{headers:authH(t)});
           if(ex.ok){const ed=await ex.json();if((ed.results||ed||[]).length>0){out.push({listing_id:lid,skipped:"already_has_file"});continue;}}
         }
         // get primary image (highest res)
@@ -1154,4 +1154,50 @@ etsyRouter.get("/attach-real-file",async(req,res)=>{
     }
     res.json({ok:true,count:out.length,results:out});
   }catch(e){res.status(500).json({error:e.message});}
+});
+
+// ─── OVERNIGHT BACKFILL: attach each active listing's own artwork as its digital download ───
+let _bfOffset=0;
+export async function backfillNextListingFiles(batch=6){
+  try{
+    const t=await getEtsyToken(); if(!t) return {error:"no token"};
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+_bfOffset,{headers:authH(t)});
+    if(!lr.ok) return {error:"listings "+lr.status};
+    const ld=await lr.json();
+    const results=ld.results||[];
+    if(results.length===0){ _bfOffset=0; return {wrapped:true,attached:0}; }
+    let attached=0;
+    for(const l of results){
+      if(attached>=batch) break;
+      const lid=l.listing_id;
+      try{
+        const ex=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{headers:authH(t)});
+        if(ex.ok){const ed=await ex.json(); if((ed.results||[]).length>0) continue;}
+        const ir=await fetch(ETSY_BASE+"/listings/"+lid+"/images",{headers:authH(t)});
+        if(!ir.ok) continue;
+        const idata=await ir.json();
+        const imgs=(idata.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0));
+        const imgUrl=imgs[0]&&(imgs[0].url_fullxfull||imgs[0].url_570xN); if(!imgUrl) continue;
+        const bin=await fetch(imgUrl); const bytes=Buffer.from(await bin.arrayBuffer());
+        const ext=(imgUrl.split("?")[0].match(/\.(jpe?g|png|gif)$/i)||[,"jpg"])[1].toLowerCase();
+        const ctype=ext==="png"?"image/png":ext==="gif"?"image/gif":"image/jpeg";
+        const fname="hoj_print_"+lid+"."+ext;
+        const boundary="----HoJBF"+Date.now().toString(36);
+        const parts=[`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fname}"\r\nContent-Type: ${ctype}\r\n\r\n`,bytes,`\r\n--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${fname}\r\n--${boundary}--\r\n`];
+        const body=Buffer.concat(parts.map(p=>typeof p==="string"?Buffer.from(p):p));
+        const up=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/files",{method:"POST",headers:{"Content-Type":`multipart/form-data; boundary=${boundary}`,"Content-Length":body.length.toString(),Authorization:"Bearer "+t,"x-api-key":ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"")},body});
+        if(up.ok) attached++;
+      }catch(e){}
+    }
+    if(attached===0){ _bfOffset+=100; if(_bfOffset>=300) _bfOffset=0; }
+    await logAgent("AISHA",`📎 Backfill run: attached ${attached} file(s) (page offset ${_bfOffset})`,"info");
+    return {attached,offset:_bfOffset,page_size:results.length};
+  }catch(e){return {error:e.message};}
+}
+
+// Manual trigger / status for the backfill
+etsyRouter.get("/backfill-run",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const r=await backfillNextListingFiles(parseInt(req.query.batch)||6);
+  res.json(r);
 });
