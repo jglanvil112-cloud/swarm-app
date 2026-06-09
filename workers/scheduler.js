@@ -175,11 +175,14 @@ console.log("SWARM OS v6.0: All cron jobs registered");
 import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "../routes/ibrahim.js";
 import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
+import { createQueuedBundles } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
 cron.schedule("*/12 * * * *", () => { backfillNextListingFiles(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
 // Every 3 min: organize listings into shop sections (collections), a small batch at a time
 cron.schedule("*/14 * * * *", () => { assignNextSections(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
+// Every 20 min: create queued bundle DRAFTS (dedup by draft title; 429s harmlessly until quota resets, then idles)
+cron.schedule("*/20 * * * *", () => { createQueuedBundles().catch(()=>{}); });
 
 // Every 5 min: check for scheduled posts due and auto-publish
 cron.schedule("*/5 * * * *", async () => {
