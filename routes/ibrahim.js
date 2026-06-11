@@ -706,6 +706,30 @@ ibrahimRouter.post("/resume", async (req, res) => {
   res.json({ ok: true, auto_posting: true });
 });
 
+// GET /api/ibrahim/_diag/writecheck — read-safe probe: why don't social_posts writes persist?
+ibrahimRouter.get("/_diag/writecheck", async (req, res) => {
+  if (req.query.key !== "swarm-os-key-2025") return res.status(403).json({ error: "forbidden" });
+  const ZERO = "00000000-0000-0000-0000-000000000000";
+  const out = {};
+  const errOr = (r, ok) => (r.error ? { message: r.error.message, code: r.error.code, details: r.error.details } : (ok || "ok"));
+  // 1. full-column no-op update on a non-matching id (reveals missing columns without mutating data)
+  out.full_update = errOr(await supabase.from("social_posts").update({ status: "failed", error_message: "probe", platform_post_id: "probe", published_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", ZERO));
+  // 2. minimal no-op update (reveals permission/RLS independent of columns)
+  out.min_update = errOr(await supabase.from("social_posts").update({ status: "scheduled" }).eq("id", ZERO));
+  // 3. real insert -> update -> read-back -> delete on a throwaway row the cron will never select
+  try {
+    const ins = await supabase.from("social_posts").insert({ platform: "instagram", caption: "__PROBE__ safe to ignore", media_urls: ["https://example.com/probe.png"], media_type: "IMAGE", status: "probe", scheduled_for: new Date(Date.now() + 31536000000).toISOString(), keyword: "__probe__", created_by: "DIAG", meta: { probe: true } }).select().single();
+    out.insert = ins.error ? errOr(ins) : { ok: true, id: ins.data.id };
+    if (ins.data?.id) {
+      out.update_persist = errOr(await supabase.from("social_posts").update({ status: "probe2" }).eq("id", ins.data.id));
+      const read = await supabase.from("social_posts").select("status").eq("id", ins.data.id).single();
+      out.read_back = read.error ? errOr(read) : read.data.status; // "probe2" => writes persist
+      out.cleanup = (await supabase.from("social_posts").delete().eq("id", ins.data.id)).error ? "delete_failed" : "deleted";
+    }
+  } catch (e) { out.probe_exc = e.message; }
+  res.json(out);
+});
+
 // GET /api/ibrahim/analytics — follower + engagement summary
 ibrahimRouter.get("/analytics", async (req, res) => {
   try {
