@@ -734,52 +734,33 @@ ibrahimRouter.get("/_diag/writecheck", async (req, res) => {
 ibrahimRouter.get("/_backfill-media", async (req, res) => {
   if (req.query.key !== "swarm-os-key-2025") return res.status(403).json({ error: "forbidden" });
   const dry = req.query.dry === "1" || req.query.dry === "true";
-  const deriveKeyword = (caption = "") => {
+  // Real House of Jreym artwork (direct i.etsystatic.com 1080px JPEGs — IG-safe, no Etsy API, no Shopify)
+  const ART = {
+    portraits:   { slug: "black-art-history-portraits", url: "https://i.etsystatic.com/66171116/r/il/bf7ea6/8151607459/il_1080xN.8151607459_swyc.jpg" },
+    melanin:     { slug: "melanin-celebration",         url: "https://i.etsystatic.com/66171116/r/il/563357/8103702370/il_1080xN.8103702370_c2zp.jpg" },
+    afrocentric: { slug: "afrocentric-home-decor",      url: "https://i.etsystatic.com/66171116/r/il/299fd3/8151607563/il_1080xN.8151607563_ot56.jpg" },
+    affirmation: { slug: "daily-affirmation",           url: "https://i.etsystatic.com/66171116/r/il/1a19c5/8103702138/il_1080xN.8103702138_gwua.jpg" },
+    hair:        { slug: "natural-hair-celebration",    url: "https://i.etsystatic.com/66171116/r/il/74c44c/8151607937/il_1080xN.8151607937_d5l7.jpg" },
+  };
+  const pick = (caption = "") => {
     const c = caption.toLowerCase();
-    if (/juneteenth|freedom day|june 19|the 19th/.test(c)) return "Juneteenth";
-    if (/melanin/.test(c)) return "Melanin";
-    if (/affirmation|i am the legacy|i come from greatness|speak it/.test(c)) return "Affirmation";
-    if (/brooklyn|\bbk\b|borough/.test(c)) return "Brooklyn";
-    if (/portrait|history|icons|legends|greats|trailblaz|visionaries|leaders/.test(c)) return "Black History";
-    return "Black Art";
+    if (/melanin/.test(c)) return { theme: "Melanin", ...ART.melanin };
+    if (/affirmation|i am the legacy|i come from greatness|speak it|rest is not|i move with|my existence|rooted in leg|put your power/.test(c)) return { theme: "Affirmation", ...ART.affirmation };
+    if (/juneteenth|freedom day|june 19|the 19th|portrait|history|icons|legends|greats|trailblaz|visionaries|leaders|augusta savage|aaron douglas|representation|ancestors/.test(c)) return { theme: "Heritage/Portraits", ...ART.portraits };
+    if (/natural hair|\bhair\b/.test(c)) return { theme: "Natural Hair", ...ART.hair };
+    if (/brooklyn|\bbk\b|borough|culture bel/.test(c)) return { theme: "Brooklyn/Afrocentric", ...ART.afrocentric };
+    return { theme: "Afrocentric", ...ART.afrocentric };
   };
   try {
-    // Shopify connectivity check (so we know images will be real, not the cat fallback)
-    let token = process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_CLIENT_SECRET || "";
-    let shopDomain = process.env.SHOPIFY_DOMAIN || "";
-    try {
-      const { data: st } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform", "shopify").single();
-      if (st?.access_token) token = st.access_token;
-      if (st?.shop) shopDomain = st.shop;
-    } catch {}
-    shopDomain = String(shopDomain).replace(/^https?:\/\//, "").replace(/\/$/, "");
-    let products = [];
-    let shopify_ok = false;
-    if (shopDomain && token) {
-      try {
-        const r = await fetch(`https://${shopDomain}/admin/api/2024-01/products.json?limit=50&fields=id,title,image`, {
-          headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }
-        });
-        if (r.ok) {
-          const d = await r.json();
-          products = (d.products || []).filter(p => p.image && p.image.src).map(p => p.title);
-          shopify_ok = products.length > 0;
-        }
-      } catch {}
-    }
-
     const { data: posts } = await supabase.from("social_posts")
-      .select("id,caption,media_urls,meta,scheduled_for")
+      .select("id,caption,media_urls,scheduled_for")
       .eq("platform", "instagram").eq("status", "scheduled")
       .order("scheduled_for", { ascending: true });
     const need = (posts || []).filter(p => !p.media_urls || !p.media_urls.length || !p.media_urls[0]);
 
     const plan = need.map(p => {
-      const kw = deriveKeyword(p.caption);
-      const want = kw.toLowerCase().slice(0, 15);
-      const matched = products.find(t => (t || "").toLowerCase().includes(want)) || (shopify_ok ? "(rotates to a product image)" : "(SHOPIFY NOT CONNECTED → fallback)");
-      const url = `${APP_URL}/api/etsy/listing-image?title=${encodeURIComponent(kw)}`;
-      return { id: p.id, scheduled_for: p.scheduled_for, keyword: kw, matched_product: matched, url, caption_preview: (p.caption || "").slice(0, 55) };
+      const a = pick(p.caption);
+      return { id: p.id, scheduled_for: p.scheduled_for, theme: a.theme, art: a.slug, url: a.url, caption_preview: (p.caption || "").slice(0, 55) };
     });
 
     let updated = 0;
@@ -791,7 +772,7 @@ ibrahimRouter.get("/_backfill-media", async (req, res) => {
     }
 
     res.json({
-      dry, shopify_ok, products_found: products.length, sample_product_titles: products.slice(0, 8),
+      dry, source: "HOJ_ART i.etsystatic.com (real House of Jreym artwork)",
       scheduled_total: (posts || []).length, missing_media: need.length, updated: dry ? 0 : updated,
       plan: dry ? plan : plan.slice(0, 5)
     });
