@@ -332,13 +332,14 @@ export async function runAutoPublish() {
 
         const postId = await publishToInstagram(post);
 
+        // Column-safe flip (status + meta both proven to exist) so the cron can NEVER re-select a published post → no duplicate posting
         const { error: updErr } = await supabase.from("social_posts").update({
           status: "published",
-          published_at: new Date().toISOString(),
-          platform_post_id: postId,
-          updated_at: new Date().toISOString()
+          meta: { ...(post.meta || {}), ig_post_id: postId, published_at: new Date().toISOString() }
         }).eq("id", post.id);
         if (updErr) await logAgent("IBRAHIM", `⚠️ DB mark-published failed for ${post.id}: ${updErr.message}`, "warn");
+        // Best-effort: populate dedicated columns if they exist; errors ignored so a missing column can't trigger re-publishing
+        await supabase.from("social_posts").update({ published_at: new Date().toISOString(), platform_post_id: postId }).eq("id", post.id);
 
         await logAgent("IBRAHIM", `✅ Published to @houseofjreym: ${postId} | Type: ${post.media_type} | "${post.caption?.slice(0, 60)}..."`, "success");
         publishedCount++;
@@ -352,8 +353,7 @@ export async function runAutoPublish() {
         await logAgent("IBRAHIM", `❌ Publish failed for post ${post.id}: ${e.message}`, "error");
         const { error: updateErr } = await supabase.from("social_posts").update({
           status: "failed",
-          error_message: e.message,
-          updated_at: new Date().toISOString()
+          meta: { ...(post.meta || {}), publish_error: e.message, failed_at: new Date().toISOString() }
         }).eq("id", post.id);
         if (updateErr) console.error("[IBRAHIM] Failed to update post status:", updateErr.message);
         console.log(`[IBRAHIM] Post ${post.id} marked failed after publish error. Fix and re-schedule to retry.`);
@@ -730,6 +730,74 @@ ibrahimRouter.get("/_diag/writecheck", async (req, res) => {
   res.json(out);
 });
 
+// GET /api/ibrahim/_backfill-media?key=...&dry=1 — attach a collection-matched image proxy URL to scheduled posts missing media
+ibrahimRouter.get("/_backfill-media", async (req, res) => {
+  if (req.query.key !== "swarm-os-key-2025") return res.status(403).json({ error: "forbidden" });
+  const dry = req.query.dry === "1" || req.query.dry === "true";
+  const deriveKeyword = (caption = "") => {
+    const c = caption.toLowerCase();
+    if (/juneteenth|freedom day|june 19|the 19th/.test(c)) return "Juneteenth";
+    if (/melanin/.test(c)) return "Melanin";
+    if (/affirmation|i am the legacy|i come from greatness|speak it/.test(c)) return "Affirmation";
+    if (/brooklyn|\bbk\b|borough/.test(c)) return "Brooklyn";
+    if (/portrait|history|icons|legends|greats|trailblaz|visionaries|leaders/.test(c)) return "Black History";
+    return "Black Art";
+  };
+  try {
+    // Shopify connectivity check (so we know images will be real, not the cat fallback)
+    let token = process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_CLIENT_SECRET || "";
+    let shopDomain = process.env.SHOPIFY_DOMAIN || "";
+    try {
+      const { data: st } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform", "shopify").single();
+      if (st?.access_token) token = st.access_token;
+      if (st?.shop) shopDomain = st.shop;
+    } catch {}
+    shopDomain = String(shopDomain).replace(/^https?:\/\//, "").replace(/\/$/, "");
+    let products = [];
+    let shopify_ok = false;
+    if (shopDomain && token) {
+      try {
+        const r = await fetch(`https://${shopDomain}/admin/api/2024-01/products.json?limit=50&fields=id,title,image`, {
+          headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          products = (d.products || []).filter(p => p.image && p.image.src).map(p => p.title);
+          shopify_ok = products.length > 0;
+        }
+      } catch {}
+    }
+
+    const { data: posts } = await supabase.from("social_posts")
+      .select("id,caption,media_urls,meta,scheduled_for")
+      .eq("platform", "instagram").eq("status", "scheduled")
+      .order("scheduled_for", { ascending: true });
+    const need = (posts || []).filter(p => !p.media_urls || !p.media_urls.length || !p.media_urls[0]);
+
+    const plan = need.map(p => {
+      const kw = deriveKeyword(p.caption);
+      const want = kw.toLowerCase().slice(0, 15);
+      const matched = products.find(t => (t || "").toLowerCase().includes(want)) || (shopify_ok ? "(rotates to a product image)" : "(SHOPIFY NOT CONNECTED → fallback)");
+      const url = `${APP_URL}/api/etsy/listing-image?title=${encodeURIComponent(kw)}`;
+      return { id: p.id, scheduled_for: p.scheduled_for, keyword: kw, matched_product: matched, url, caption_preview: (p.caption || "").slice(0, 55) };
+    });
+
+    let updated = 0;
+    if (!dry) {
+      for (const item of plan) {
+        const { error } = await supabase.from("social_posts").update({ media_urls: [item.url] }).eq("id", item.id);
+        if (!error) updated++;
+      }
+    }
+
+    res.json({
+      dry, shopify_ok, products_found: products.length, sample_product_titles: products.slice(0, 8),
+      scheduled_total: (posts || []).length, missing_media: need.length, updated: dry ? 0 : updated,
+      plan: dry ? plan : plan.slice(0, 5)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/ibrahim/analytics — follower + engagement summary
 ibrahimRouter.get("/analytics", async (req, res) => {
   try {
@@ -773,7 +841,7 @@ ibrahimRouter.get("/test-publish-one", async (req, res) => {
       .select("*")
       .eq("platform", "instagram")
       .eq("status", "scheduled")
-      .eq("media_type", "IMAGE")
+      .in("media_type", ["IMAGE", "image"])
       .order("scheduled_for", { ascending: true })
       .limit(1);
 
@@ -794,10 +862,9 @@ ibrahimRouter.get("/test-publish-one", async (req, res) => {
 
     await supabase.from("social_posts").update({
       status: "published",
-      published_at: new Date().toISOString(),
-      platform_post_id: igPostId,
-      updated_at: new Date().toISOString()
+      meta: { ...(post.meta || {}), ig_post_id: igPostId, published_at: new Date().toISOString() }
     }).eq("id", post.id);
+    await supabase.from("social_posts").update({ published_at: new Date().toISOString(), platform_post_id: igPostId }).eq("id", post.id);
 
     await logAgent("IBRAHIM", `✅ TEST published to @houseofjreym: ${igPostId} | "${post.caption?.slice(0, 60)}..."`, "success");
 
