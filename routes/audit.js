@@ -1,10 +1,14 @@
-// routes/audit.js — House of Jreym digital-delivery audit (read-only)
-// Mounted at /api/audit. Changes nothing in the shop; flags fixes for approval.
-//   GET /api/audit/digital-delivery            -> JSON report (7 sections)
-//   GET /api/audit/digital-delivery?format=text -> plain-text report
-//   GET /api/audit/digital-delivery?max=20      -> cap listings (quota-safe test run)
+// routes/audit.js — House of Jreym Delivery Health Monitor (read-only audit + daily cron)
+// Routes:
+//   GET /api/audit/digital-delivery[?format=text][?max=N]  -> per-listing file audit
+//   GET /api/audit/order-health                            -> paid-but-incomplete orders
+//   GET /api/audit/monitor[?deep=true][?save=true]         -> combined health report
+// A self-registered cron runs the deep monitor daily at 08:00 UTC and saves to Supabase
+// (agent_outputs, agent="AUDIT", output_type="delivery_health_report").
+// Read-only against Etsy. Never edits or deletes listings/orders.
 import express from "express";
-import { supabase } from "../lib/supabase.js";
+import cron from "node-cron";
+import { supabase, saveAgentOutput } from "../lib/supabase.js";
 
 export const auditRouter = express.Router();
 
@@ -12,9 +16,9 @@ const ETSY_KEY = process.env.ETSY_KEY || "";
 const ETSY_SECRET = process.env.ETSY_SECRET || "";
 const ETSY_SHOP_ID = parseInt(process.env.ETSY_SHOP_ID) || 0;
 const ETSY_BASE = "https://openapi.etsy.com/v3/application";
-
 const ALLOWED_EXT = ["zip", "pdf", "png", "jpg", "jpeg", "svg"];
 const MAX_BYTES = 20 * 1024 * 1024;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function getEtsyToken() {
   const { data, error } = await supabase
@@ -29,23 +33,26 @@ async function resolveShopId(t) {
   if (ETSY_SHOP_ID) return ETSY_SHOP_ID;
   const uid = t.split(".")[0];
   const r = await fetch(ETSY_BASE + "/users/" + uid + "/shops", { headers: authH(t) });
-  const d = await r.json();
-  return (d.results?.[0] || d)?.shop_id;
+  return ((await r.json()).results?.[0] || {})?.shop_id;
 }
 function ext(n = "") { const m = String(n).toLowerCase().match(/\.([a-z0-9]+)$/); return m ? m[1] : ""; }
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function getAllActive(t, shopId, cap) {
+async function getActive(t, shopId, cap) {
   const out = []; let offset = 0; const limit = 100;
   while (true) {
     const r = await fetch(ETSY_BASE + "/shops/" + shopId + "/listings/active?limit=" + limit + "&offset=" + offset, { headers: authH(t) });
-    if (!r.ok) throw new Error("active " + r.status + ": " + (await r.text()).slice(0, 200));
-    const j = await r.json(); const batch = j.results || [];
+    if (!r.ok) throw new Error("active " + r.status + ": " + (await r.text()).slice(0, 160));
+    const batch = (await r.json()).results || [];
     out.push(...batch);
     if (batch.length < limit || (cap && out.length >= cap)) break;
     offset += limit; await sleep(300);
   }
   return cap ? out.slice(0, cap) : out;
+}
+async function countByState(t, shopId, state) {
+  const r = await fetch(ETSY_BASE + "/shops/" + shopId + "/listings?state=" + state + "&limit=1", { headers: authH(t) });
+  if (!r.ok) return null;
+  return (await r.json()).count ?? null;
 }
 async function getFiles(t, shopId, id) {
   const r = await fetch(ETSY_BASE + "/shops/" + shopId + "/listings/" + id + "/files", { headers: authH(t) });
@@ -55,99 +62,131 @@ async function getFiles(t, shopId, id) {
   return (await r.json()).results || [];
 }
 
-async function runAudit(cap) {
-  const t = await getEtsyToken();
-  if (!t) throw new Error("No Etsy token (oauth_tokens.platform=etsy). Re-auth at /api/etsy/auth");
-  const shopId = await resolveShopId(t);
-  if (!shopId) throw new Error("Could not resolve shop_id — set ETSY_SHOP_ID");
-  const listings = await getAllActive(t, shopId, cap);
+// ---- order health: paid-but-incomplete digital orders ("stuck") -----------
+async function orderHealth(t, shopId) {
+  const r = await fetch(ETSY_BASE + "/shops/" + shopId + "/receipts?limit=100&was_paid=true", { headers: authH(t) });
+  if (r.status === 403) return { available: false, reason: "receipts scope (transactions_r) not granted" };
+  if (!r.ok) return { available: false, reason: "etsy " + r.status };
+  const rows = (await r.json()).results || [];
+  const stuck = [];
+  for (const rc of rows) {
+    const paid = rc.is_paid === true;
+    const completed = rc.status === "Completed" || rc.is_shipped === true;
+    if (paid && !completed) {
+      stuck.push({ receipt_id: rc.receipt_id, buyer: rc.name, status: rc.status, total: rc.grandtotal?.amount / (rc.grandtotal?.divisor || 100) });
+    }
+  }
+  return { available: true, checked: rows.length, stuck_count: stuck.length, stuck };
+}
 
-  const R = {
-    shop_id: shopId, audited_at: new Date().toISOString(), total_listings: listings.length,
-    section1_delivery_risk: [], section2_missing_files: [], section3_needs_correction: [],
-    section4_revenue_risk: {}, section5_immediate_fixes: [], section6_health_score: 0,
-    section7_automation: [], duplicates: [], quota_errors: 0,
-  };
+// ---- core delivery audit --------------------------------------------------
+async function deliveryAudit(t, shopId, cap) {
+  const listings = await getActive(t, shopId, cap);
+  const R = { total: listings.length, delivery_risk: [], missing_files: [], needs_correction: [], duplicates: [], quota_errors: 0 };
   const titles = {};
-
   for (const L of listings) {
     const id = L.listing_id, title = L.title || "", type = L.listing_type;
     const price = L.price ? L.price.amount / (L.price.divisor || 100) : null;
     const key = title.trim().toLowerCase(); (titles[key] = titles[key] || []).push(id);
-    const isDigital = type === "download" || type === "both";
-
-    if (isDigital) {
-      const files = await getFiles(t, shopId, id); await sleep(200);
-      if (files.__error) {
-        if (files.__error.startsWith("429")) R.quota_errors++;
-        R.section3_needs_correction.push({ listing_id: id, title, issue: "files check failed (" + files.__error + ")" });
-      } else if (files.length === 0) {
-        R.section2_missing_files.push({ listing_id: id, title, price });
-        R.section1_delivery_risk.push({ listing_id: id, title, reason: "digital listing, 0 files -> will not auto-deliver" });
-      } else {
-        for (const f of files) {
-          const e = ext(f.filename);
-          if (e && !ALLOWED_EXT.includes(e)) R.section3_needs_correction.push({ listing_id: id, title, issue: "unexpected file type ." + e });
-          if (f.filesize_bytes > MAX_BYTES) R.section3_needs_correction.push({ listing_id: id, title, issue: "file over 20MB: " + f.filename });
-        }
+    if (type === "download" || type === "both") {
+      const files = await getFiles(t, shopId, id); await sleep(220);
+      if (files.__error) { if (files.__error.startsWith("429")) R.quota_errors++; }
+      else if (files.length === 0) {
+        R.missing_files.push({ listing_id: id, title, price });
+        R.delivery_risk.push({ listing_id: id, title, reason: "digital listing, 0 files" });
+      } else for (const f of files) {
+        if (ext(f.filename) && !ALLOWED_EXT.includes(ext(f.filename))) R.needs_correction.push({ listing_id: id, issue: "file type ." + ext(f.filename) });
+        if (f.filesize_bytes > MAX_BYTES) R.needs_correction.push({ listing_id: id, issue: "file >20MB" });
       }
-    } else {
-      R.section3_needs_correction.push({ listing_id: id, title, issue: "listed PHYSICAL — confirm intended, else convert to digital" });
     }
-    if (price === null || price <= 0) R.section3_needs_correction.push({ listing_id: id, title, issue: "bad price: " + price });
-    const tags = L.tags || [];
-    if (tags.length < 13) R.section3_needs_correction.push({ listing_id: id, title, issue: tags.length + "/13 tags" });
+    if (price === null || price <= 0) R.needs_correction.push({ listing_id: id, issue: "bad price " + price });
   }
-
   for (const [k, ids] of Object.entries(titles)) if (ids.length > 1) R.duplicates.push({ title: k, listing_ids: ids });
-
-  const prices = listings.map(L => L.price ? L.price.amount / (L.price.divisor || 100) : 0).filter(p => p > 0);
-  const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
-  R.section4_revenue_risk = {
-    at_risk_listings: R.section1_delivery_risk.length, avg_price: +avg.toFixed(2),
-    est_risk_per_failed_order: +avg.toFixed(2),
-    note: "Each at-risk listing that takes an order = failed delivery: refund + lost review + possible Purchase-Protection case.",
-  };
-  let score = 100;
-  score -= R.section2_missing_files.length * 4;
-  score -= R.section3_needs_correction.length * 0.5;
-  score -= R.duplicates.length;
-  R.section6_health_score = Math.max(0, Math.round(score));
-
-  if (R.section2_missing_files.length) R.section5_immediate_fixes.push("Attach correct deliverable + set Instant Download on " + R.section2_missing_files.length + " listing(s) with 0 files (manual: file mapping).");
-  R.section5_immediate_fixes.push("Open 'In the works' orders: Shop Manager > Orders > New > Complete order > upload file.");
-  if (R.quota_errors) R.section5_immediate_fixes.push("Etsy daily API quota hit on " + R.quota_errors + " listing(s) — re-run after midnight UTC reset for complete coverage.");
-  R.section7_automation = [
-    "Cron this endpoint daily; alert if section2_missing_files is non-empty.",
-    "Publish-time guard: reject any digital listing where files.length === 0.",
-    "Build slug -> hoj-assets map so a future ?fix=true can auto-attach the RIGHT file.",
-    "Etsy OAuth token auto-refresh so audits never fail on expiry.",
-  ];
   return R;
 }
 
-function toText(r) {
-  const L = [];
-  L.push("HOUSE OF JREYM — DIGITAL DELIVERY AUDIT", "shop " + r.shop_id + " · " + r.audited_at, "Total listings audited: " + r.total_listings, "");
-  L.push("S1 Delivery risk: " + r.section1_delivery_risk.length);
-  r.section1_delivery_risk.forEach(x => L.push("  • " + x.listing_id + " — " + x.title));
-  L.push("S2 Missing files: " + r.section2_missing_files.length);
-  r.section2_missing_files.forEach(x => L.push("  • " + x.listing_id + " — " + x.title));
-  L.push("S3 Needs correction: " + r.section3_needs_correction.length);
-  r.section3_needs_correction.slice(0, 60).forEach(x => L.push("  • " + x.listing_id + " — " + x.issue));
-  L.push("S4 Revenue risk: " + r.section4_revenue_risk.at_risk_listings + " at-risk · ~$" + r.section4_revenue_risk.est_risk_per_failed_order + "/failed order");
-  L.push("S5 Immediate fixes:"); r.section5_immediate_fixes.forEach(x => L.push("  • " + x));
-  L.push("S6 Health score: " + r.section6_health_score + "/100");
-  L.push("S7 Automation:"); r.section7_automation.forEach(x => L.push("  • " + x));
-  L.push("", "Duplicates: " + r.duplicates.length + " · Quota errors: " + r.quota_errors);
-  return L.join("\n");
+// ---- combined monitor (what the cron + /monitor run) ----------------------
+async function runMonitor({ deep = false, save = false, cap = 0 } = {}) {
+  const t = await getEtsyToken();
+  if (!t) throw new Error("No Etsy token (oauth_tokens.platform=etsy). Re-auth at /api/etsy/auth");
+  const shopId = await resolveShopId(t);
+  if (!shopId) throw new Error("Could not resolve shop_id — set ETSY_SHOP_ID");
+
+  const active = await getActive(t, shopId, cap);
+  const titles = {};
+  for (const L of active) { const k = (L.title || "").trim().toLowerCase(); (titles[k] = titles[k] || []).push(L.listing_id); }
+  const duplicates = Object.entries(titles).filter(([, ids]) => ids.length > 1).map(([title, listing_ids]) => ({ title, listing_ids }));
+
+  const [inactive, draft, expired] = await Promise.all([
+    countByState(t, shopId, "inactive"), countByState(t, shopId, "draft"), countByState(t, shopId, "expired"),
+  ]);
+  const orders = await orderHealth(t, shopId).catch(e => ({ available: false, reason: e.message }));
+
+  let files = { scanned: false, missing_files: [], delivery_risk: [], quota_errors: 0, note: "deep file scan runs in the daily 08:00 UTC cron" };
+  if (deep) {
+    const da = await deliveryAudit(t, shopId, cap);
+    files = { scanned: true, missing_files: da.missing_files, delivery_risk: da.delivery_risk, needs_correction: da.needs_correction, quota_errors: da.quota_errors };
+  }
+
+  const prices = active.map(L => L.price ? L.price.amount / (L.price.divisor || 100) : 0).filter(p => p > 0);
+  const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+
+  let score = 100;
+  score -= (files.missing_files?.length || 0) * 4;
+  score -= duplicates.length;
+  score -= (orders.stuck_count || 0) * 5;
+
+  const report = {
+    audited_at: new Date().toISOString(), shop_id: shopId,
+    total_listings_active: active.length,
+    inactive_listings: inactive, draft_listings: draft, expired_listings: expired,
+    missing_files_count: files.scanned ? files.missing_files.length : "deferred-to-daily-cron",
+    delivery_risk_count: files.scanned ? files.delivery_risk.length : "deferred-to-daily-cron",
+    duplicate_clusters: duplicates.length,
+    duplicate_detail: duplicates,
+    stuck_orders: orders,
+    etsy_api_errors: files.quota_errors || 0,
+    avg_price: +avg.toFixed(2),
+    revenue_at_risk: ((files.missing_files?.length || 0) + (orders.stuck_count || 0)) * +avg.toFixed(2),
+    health_score: Math.max(0, Math.round(score)),
+    file_scan: files,
+  };
+
+  if (save) {
+    try { await saveAgentOutput("AUDIT", "delivery_health_report", report); report.saved_to_supabase = true; }
+    catch (e) { report.saved_to_supabase = false; report.save_error = e.message; }
+  }
+  return report;
 }
 
+// ---- routes ---------------------------------------------------------------
 auditRouter.get("/digital-delivery", async (req, res) => {
   try {
+    const t = await getEtsyToken(); if (!t) return res.status(401).json({ error: "no etsy token" });
+    const shopId = await resolveShopId(t);
     const cap = req.query.max ? parseInt(req.query.max) : 0;
-    const r = await runAudit(cap);
-    if (req.query.format === "text") res.type("text/plain").send(toText(r));
-    else res.json(r);
+    const da = await deliveryAudit(t, shopId, cap);
+    res.json({ shop_id: shopId, audited_at: new Date().toISOString(), ...da });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+auditRouter.get("/order-health", async (req, res) => {
+  try {
+    const t = await getEtsyToken(); if (!t) return res.status(401).json({ error: "no etsy token" });
+    const shopId = await resolveShopId(t);
+    res.json({ shop_id: shopId, ...(await orderHealth(t, shopId)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+auditRouter.get("/monitor", async (req, res) => {
+  try {
+    const report = await runMonitor({ deep: req.query.deep === "true", save: req.query.save === "true", cap: req.query.max ? parseInt(req.query.max) : 0 });
+    res.json(report);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ---- daily self-registered monitor (deep scan + persist) ------------------
+cron.schedule("0 8 * * *", () => {
+  runMonitor({ deep: true, save: true })
+    .then(r => console.log("[DELIVERY-MONITOR] saved · score " + r.health_score + " · missing " + r.missing_files_count + " · stuck " + (r.stuck_orders?.stuck_count ?? "?")))
+    .catch(e => console.error("[DELIVERY-MONITOR] failed:", e.message));
+});
+console.log("[DELIVERY-MONITOR] daily cron registered (08:00 UTC) ✅");
