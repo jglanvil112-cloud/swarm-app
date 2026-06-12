@@ -159,6 +159,7 @@ cron.schedule("15 6 * * *",runDailyAnalytics);
 cron.schedule("0 7 * * 1",runWeeklyCampaign);
 cron.schedule("30 7 * * 1",runWeeklyAudit);
 cron.schedule("*/15 * * * *",runHealthCheck);
+cron.schedule("*/8 * * * *",async()=>{ try{ const r=await reseoTop20Tick(3); if(r&&r.processed) console.log("[RESEO-TOP20] +"+r.processed+(r.quota_hit?" (429 — will resume after reset)":"")); }catch(e){} });
 
 (async()=>{
   try{
@@ -175,7 +176,7 @@ console.log("SWARM OS v6.0: All cron jobs registered");
 import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "../routes/ibrahim.js";
 import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
-import { createQueuedBundles, runShopRolloutTick, syncEtsyRevenue } from "../routes/etsy.js";
+import { createQueuedBundles, runShopRolloutTick, syncEtsyRevenue, reseoTop20Tick } from "../routes/etsy.js";
 import { generateMissingFormats } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
