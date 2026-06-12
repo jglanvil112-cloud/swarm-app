@@ -1635,6 +1635,25 @@ etsyRouter.get("/reseo-top20-status",async(req,res)=>{
     res.json({upgraded:count||0,remaining:rem.length,next:rem.slice(0,5).map(x=>({id:x.id,score:x.score,title:(x.title||"").slice(0,50)}))});
   }catch(e){ res.status(500).json({error:e.message}); } });
 
+// ─── CATALOG SYNC (read-only; paginate all active listings into the products cache so the audit covers all 187; no listings mutated) ───
+etsyRouter.get("/sync-catalog",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  try{
+    const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+    let synced=0, quota=false, total=null;
+    for(let off=0; off<400; off+=100){
+      const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+      if(r.status===429){quota=true;break;}
+      if(!r.ok)break;
+      const d=await r.json(); total=(d.count!=null?d.count:total);
+      const rows=d.results||[]; if(!rows.length)break;
+      for(const l of rows){ try{ await supabase.from("products").upsert({external_id:String(l.listing_id),platform:"etsy",title:l.title,description:(l.description||"").slice(0,1000),tags:l.tags||[],price:l.price?l.price.amount/(l.price.divisor||100):0,status:l.state,updated_at:new Date().toISOString()},{onConflict:"external_id,platform"}); synced++; }catch(e){} }
+      if(rows.length<100)break;
+    }
+    res.json({synced, total_active:total, quota_hit:quota});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 // ─── CATALOG AUDIT (read-only; ranks all synced listings by sales potential, flags weakest 50 + duplicates; reads Supabase only, no Etsy quota) ───
 etsyRouter.get("/audit-rank",async(req,res)=>{
   if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
