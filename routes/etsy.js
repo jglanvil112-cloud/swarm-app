@@ -1488,6 +1488,43 @@ etsyRouter.get("/seo-batch",async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+// ─── AUTONOMOUS SHOP ROLLOUT — SEO + framed mockup across all active listings, idempotent + self-idling ───
+async function _rolloutDoneSet(){
+  const done=new Set();
+  try{const {data}=await supabase.from("agent_outputs").select("etsy_title").eq("output_type","rollout_done");(data||[]).forEach(r=>r.etsy_title&&done.add(String(r.etsy_title)));}catch(e){}
+  return done;
+}
+async function _rolloutEnabled(){
+  try{const {count}=await supabase.from("agent_outputs").select("id",{count:"exact",head:true}).eq("output_type","rollout_enabled");return (count||0)>0;}catch(e){return false;}
+}
+async function runShopRollout(perTick=2, dry=false){
+  const t=await getEtsyToken(); if(!t) return {error:"no token"};
+  const done=await _rolloutDoneSet();
+  let undone=[];
+  for(const off of [0,100,200]){
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
+    if(!lr.ok){ if(lr.status===429) return {error:"429 quota — will retry", processed:0}; continue; }
+    const ld=await lr.json(); (ld.results||[]).forEach(l=>{ if(!done.has(String(l.listing_id))) undone.push({id:l.listing_id,title:l.title,description:l.description}); });
+    if(undone.length>=perTick || (ld.results||[]).length<100) break;
+  }
+  if(!undone.length) return {done:true, processed:0, total_done:done.size, note:"all active listings rolled out"};
+  if(dry){ const l=undone[0]; const seo=await aiSEO(l.title,l.description); return {dry:true, lid:l.id, old_title:l.title, proposed_title:seo.title, proposed_tags:seo.tags}; }
+  const out=[];
+  for(const l of undone.slice(0,perTick)){
+    const r={lid:l.id}; let sok=false,mok=false;
+    try{ const s=await seoOneListing(t,l.id,l.title,l.description,false); sok=!!s.ok; r.seo=s.ok?"ok":(s.error||"fail"); }catch(e){ r.seo="err:"+e.message; }
+    try{ const m=await mockupListingCover(t,l.id); mok=!!m.ok; r.mockup=m.ok?"ok":(m.error||"fail"); }catch(e){ r.mockup="err:"+e.message; }
+    if(sok&&mok){ try{ await saveAgentOutput("DELE","rollout_done",{etsy_title:String(l.id),data:r}); }catch(e){} r.marked=true; } else r.marked=false;
+    out.push(r); await new Promise(res=>setTimeout(res,1500));
+  }
+  return {processed:out.length, total_done:done.size+out.slice().filter(x=>x.marked).length, results:out};
+}
+export async function runShopRolloutTick(){ try{ if(!(await _rolloutEnabled())) return {idle:true}; return await runShopRollout(2,false); }catch(e){ return {error:e.message}; } }
+
+etsyRouter.get("/rollout-once",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ res.json(await runShopRollout(parseInt(req.query.n||"1"), req.query.dry==="1")); }catch(e){ res.status(500).json({error:e.message}); } });
+etsyRouter.get("/rollout-start",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ await saveAgentOutput("DELE","rollout_enabled",{etsy_title:"rollout",data:{at:new Date().toISOString()}}); res.json({ok:true,enabled:true,note:"cron rolls SEO+mockup ~2 listings / 7 min until all active listings are done"}); }catch(e){ res.status(500).json({error:e.message}); } });
+etsyRouter.get("/rollout-status",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ res.json({enabled:await _rolloutEnabled(), listings_done:(await _rolloutDoneSet()).size}); }catch(e){ res.status(500).json({error:e.message}); } });
+
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
  {slug:"black-art-history-portraits",collection:"Portraits & Figures",url:"https://i.etsystatic.com/66171116/r/il/bf7ea6/8151607459/il_1080xN.8151607459_swyc.jpg"},

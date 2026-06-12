@@ -175,7 +175,7 @@ console.log("SWARM OS v6.0: All cron jobs registered");
 import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "../routes/ibrahim.js";
 import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
-import { createQueuedBundles } from "../routes/etsy.js";
+import { createQueuedBundles, runShopRolloutTick } from "../routes/etsy.js";
 import { generateMissingFormats } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
@@ -184,6 +184,8 @@ cron.schedule("*/12 * * * *", () => { backfillNextListingFiles(5).catch(()=>{});
 cron.schedule("*/14 * * * *", () => { assignNextSections(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
 // Every 20 min: create queued bundle DRAFTS (dedup by draft title; 429s harmlessly until quota resets, then idles)
 cron.schedule("*/20 * * * *", () => { createQueuedBundles().catch(()=>{}); });
+// Every 7 min: roll SEO + framed mockup across active listings (only when enabled via /rollout-start); idles when done
+cron.schedule("*/7 * * * *", () => { runShopRolloutTick().catch(()=>{}); });
 // Every 8 min: generate one missing format-variant set (CDN source, no Etsy quota); idles when all 5 done
 cron.schedule("*/8 * * * *", () => { generateMissingFormats().catch(()=>{}); });
 
