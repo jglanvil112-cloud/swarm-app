@@ -1635,6 +1635,35 @@ etsyRouter.get("/reseo-top20-status",async(req,res)=>{
     res.json({upgraded:count||0,remaining:rem.length,next:rem.slice(0,5).map(x=>({id:x.id,score:x.score,title:(x.title||"").slice(0,50)}))});
   }catch(e){ res.status(500).json({error:e.message}); } });
 
+// ─── CATALOG AUDIT (read-only; ranks all synced listings by sales potential, flags weakest 50 + duplicates; reads Supabase only, no Etsy quota) ───
+etsyRouter.get("/audit-rank",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  try{
+    const {data}=await supabase.from("products").select("external_id,title,tags,status").eq("platform","etsy").limit(500);
+    const rows=(data||[]).filter(r=>r.external_id);
+    const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\b(print|prints|wall|art|digital|download|printable|afrocentric|instant|decor)\b/g,"").replace(/\s+/g," ").trim().slice(0,40);
+    const groups={}; rows.forEach(r=>{const k=norm(r.title)||"(blank)";(groups[k]=groups[k]||[]).push(String(r.external_id));});
+    const dup=new Set(); Object.values(groups).forEach(ids=>{ if(ids.length>1) ids.slice(1).forEach(id=>dup.add(id)); });
+    const scored=rows.map(r=>{
+      const demand=scoreTitleDemand(r.title);
+      const tagN=Array.isArray(r.tags)?r.tags.length:0;
+      const tLen=String(r.title||"").length;
+      const isDup=dup.has(String(r.external_id));
+      const composite=Math.round((demand*2 + Math.min(tagN,13)*0.3 + (tLen>=60?2:0) - (isDup?6:0))*10)/10;
+      const reason=[]; if(isDup)reason.push("duplicate"); if(demand<=3)reason.push("low-demand cluster"); if(tagN<10)reason.push("thin tags"); if(tLen<45)reason.push("weak title");
+      return {id:String(r.external_id),title:(r.title||"").slice(0,72),demand,tags:tagN,dup:isDup,score:composite,reason:reason.join(", ")||"ok"};
+    });
+    const byScore=[...scored].sort((a,b)=>b.score-a.score);
+    res.json({
+      total:scored.length,
+      coverage: scored.length<150?"PARTIAL — products table not fully synced; run /api/etsy/listings?limit=200 (x3 offsets) after quota reset for all 187":"full",
+      duplicate_clusters: Object.entries(groups).filter(([k,v])=>v.length>1).map(([core,v])=>({core,count:v.length})).sort((a,b)=>b.count-a.count).slice(0,15),
+      strongest10: byScore.slice(0,10),
+      weakest50: byScore.slice(-50).reverse()
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
  {slug:"black-art-history-portraits",collection:"Portraits & Figures",url:"https://i.etsystatic.com/66171116/r/il/bf7ea6/8151607459/il_1080xN.8151607459_swyc.jpg"},
