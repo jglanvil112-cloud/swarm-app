@@ -1441,7 +1441,7 @@ etsyRouter.get("/mockup-batch",async(req,res)=>{
 // ─── SHOP-WIDE SEO: rewrite title + tags (+optional description) to the top-seller formula via Haiku ───
 async function aiSEO(currentTitle, currentDesc){
   const sys="You are an elite Etsy SEO copywriter for House of Jreym, a premium shop selling PRINTABLE digital Black & Afrocentric wall art (instant downloads). You write listing copy that ranks and converts, modeled on Etsy's top-selling Black-art printables.";
-  const prompt=`Rewrite the SEO for this Etsy DIGITAL DOWNLOAD wall-art listing.\n\nCURRENT TITLE: ${currentTitle}\nCURRENT DESCRIPTION (context only): ${(currentDesc||"").slice(0,400)}\n\nRules:\n- TITLE: max 140 chars. Lead with the strongest buyer keyword, then stack comma-separated keywords. Use proven high-traffic phrases where they truthfully fit the art: "Black Woman Art", "African American Art", "Afrocentric Wall Art", "Black Art Print", "Printable Wall Art", "Digital Download", "Gallery Wall". Stay truthful to the artwork implied by the current title.\n- TAGS: exactly 13 tags, each <=20 characters, multi-word high-intent Etsy search phrases, no "#". Mix broad and specific.\n- DESCRIPTION: 90-140 words. Hook first line, what's included (instant digital download, multiple print sizes, print at home or a print shop, personal-use license), soft CTA. Warm, culturally proud voice.\n\nReturn ONLY valid JSON, no markdown, no preamble:\n{"title":"...","tags":["t1","...13 total"],"description":"..."}`;
+  const prompt=`Rewrite the SEO for this Etsy DIGITAL DOWNLOAD wall-art listing.\n\nCURRENT TITLE: ${currentTitle}\nCURRENT DESCRIPTION (context only): ${(currentDesc||"").slice(0,400)}\n\nRules:\n- TITLE: max 140 chars. Lead with the strongest buyer keyword, then stack comma-separated keywords. Use proven high-traffic phrases where they truthfully fit the art: "Black Woman Art", "Black Girl Magic", "African American Art", "Afrocentric Wall Art", "Melanin Wall Art", "Black King"/"Black Queen", "Black Art Print", "Printable Wall Art", "Digital Download", "Gallery Wall", "Black Owned"; for empowerment pieces "Still I Rise"/"Young Gifted and Black"; for trendy/glam female pieces "Trendy Black Girl"/"Classy Black Woman Art". SEASONAL (high priority through June 19): if the art plausibly fits heritage, history, pride, family, or empowerment themes, include "Juneteenth Art" or "Juneteenth Decor" and "Black History" — these are spiking now. Never force a phrase that misdescribes the art; stay truthful to the artwork implied by the current title.\n- TAGS: exactly 13 tags, each <=20 characters, multi-word high-intent Etsy search phrases, no "#". Mix broad and specific.\n- DESCRIPTION: 90-140 words. Hook first line, what's included (instant digital download, multiple print sizes, print at home or a print shop, personal-use license), soft CTA. Warm, culturally proud voice.\n\nReturn ONLY valid JSON, no markdown, no preamble:\n{"title":"...","tags":["t1","...13 total"],"description":"..."}`;
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":process.env.ANTHROPIC_API_KEY||"","anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:900,system:sys,messages:[{role:"user",content:prompt}]})});
   const d=await r.json(); let txt=d.content?.[0]?.text||"";
   txt=txt.replace(/```json/g,"").replace(/```/g,"").trim();
@@ -1555,6 +1555,28 @@ export async function syncEtsyRevenue(limit=100){
   }catch(e){return {error:e.message};}
 }
 etsyRouter.get("/sync-revenue",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); res.json(await syncEtsyRevenue()); });
+
+// Re-SEO a targeted set of high-demand listings with the upgraded keyword + Juneteenth model (top-20 priority lever). Throttles safely on Etsy 429.
+etsyRouter.get("/reseo-priority",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const ids=String(req.query.ids||"").split(",").map(s=>s.trim()).filter(Boolean).slice(0,25);
+  if(!ids.length)return res.status(400).json({error:"pass ?ids=comma,separated,listingIds (max 25)"});
+  const withDesc=req.query.desc==="1";
+  const t=await getEtsyToken(); if(!t)return res.status(400).json({error:"no token"});
+  const done=[],failed=[]; let quota=false;
+  for(const lid of ids){
+    try{
+      const lr=await fetch(ETSY_BASE+"/listings/"+lid,{headers:authH(t)});
+      if(lr.status===429){quota=true;break;}
+      if(!lr.ok){failed.push({lid,error:lr.status});continue;}
+      const l=await lr.json();
+      const r=await seoOneListing(t,lid,l.title,l.description,withDesc);
+      if(r&&r.ok){done.push({lid,new_title:r.new_title});}
+      else{ if(r&&/429/.test(String(r.error||""))){quota=true;break;} failed.push({lid,error:r?r.error:"unknown"}); }
+    }catch(e){failed.push({lid,error:e.message});}
+  }
+  res.json({reseo:done.length,failed:failed.length,quota_hit:quota,done,failed});
+});
 
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
