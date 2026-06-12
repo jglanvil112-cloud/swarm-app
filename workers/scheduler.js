@@ -116,7 +116,7 @@ async function runHourlyTrendScan(){
   await updateSchedulerState("hourly_trend_scan","ok");
 }
 async function runHourlyInventoryCheck(){await enqueueTask({agent:"KOFI",task_type:"inventory_check",payload:{},priority:2});await updateSchedulerState("hourly_inventory_check","ok");}
-async function runHourlyOrderMonitor(){await enqueueTask({agent:"SEUN",task_type:"analytics_report",payload:{period:"last_hour"},priority:2});await updateSchedulerState("hourly_order_monitor","ok");}
+async function runHourlyOrderMonitor(){await syncEtsyRevenue().catch(()=>{});await enqueueTask({agent:"SEUN",task_type:"analytics_report",payload:{period:"last_hour"},priority:2});await updateSchedulerState("hourly_order_monitor","ok");}
 async function runDailySEO(){
   const{data:trends}=await supabase.from("trends").select("*").order("score",{ascending:false}).limit(5);
   if(trends?.length)for(const t of trends)await enqueueTask({agent:"AISHA",task_type:"seo_generation",payload:{title:t.keyword,keywords:[t.keyword],platform:"etsy"},priority:4});
@@ -175,7 +175,7 @@ console.log("SWARM OS v6.0: All cron jobs registered");
 import { runAutoPublish, takeFollowerSnapshot, generateCEOReport, generateAndSchedulePosts } from "../routes/ibrahim.js";
 import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
-import { createQueuedBundles, runShopRolloutTick } from "../routes/etsy.js";
+import { createQueuedBundles, runShopRolloutTick, syncEtsyRevenue } from "../routes/etsy.js";
 import { generateMissingFormats } from "../routes/etsy.js";
 
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
