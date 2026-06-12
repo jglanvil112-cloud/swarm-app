@@ -1529,6 +1529,13 @@ etsyRouter.get("/rollout-once",async(req,res)=>{ if(req.query.key!=="swarm-os-ke
 etsyRouter.get("/rollout-start",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ await saveAgentOutput("DELE","rollout_enabled",{etsy_title:"rollout",data:{at:new Date().toISOString()}}); res.json({ok:true,enabled:true,note:"cron rolls SEO+mockup ~2 listings / 7 min until all active listings are done"}); }catch(e){ res.status(500).json({error:e.message}); } });
 etsyRouter.get("/rollout-status",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ res.json({enabled:await _rolloutEnabled(), listings_done:(await _rolloutDoneSet()).size}); }catch(e){ res.status(500).json({error:e.message}); } });
 etsyRouter.get("/rollout-stop",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ await saveAgentOutput("DELE","rollout_disabled",{etsy_title:"rollout",data:{at:new Date().toISOString()}}); res.json({ok:true,enabled:false,note:"rollout paused; progress kept — /rollout-start resumes where it left off"}); }catch(e){ res.status(500).json({error:e.message}); } });
+// read-only: show the new title/tags of the most recently rolled-out listings (no Haiku, won't hang)
+etsyRouter.get("/rollout-sample",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{
+  const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+  const {data}=await supabase.from("agent_outputs").select("etsy_title,created_at").eq("output_type","rollout_done").order("created_at",{ascending:false}).limit(Math.min(parseInt(req.query.n||"3"),5));
+  const out=[]; for(const r of (data||[])){ if(!r.etsy_title||r.etsy_title==="rollout")continue; const lr=await fetch(ETSY_BASE+"/listings/"+r.etsy_title+"?includes=Images",{headers:authH(t)}); if(!lr.ok){out.push({lid:r.etsy_title,error:lr.status});continue;} const l=await lr.json(); out.push({lid:r.etsy_title,title:l.title,tags:l.tags,image_count:(l.images||l.Images||[]).length}); }
+  res.json({samples:out});
+}catch(e){res.status(500).json({error:e.message});} });
 
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
