@@ -1,7 +1,7 @@
 // routes/etsy.js — SWARM OS v6.6 — authH: strip x-api-key from Bearer calls
 import express from "express";
 import crypto from "crypto";
-import{supabase,logAgent,enqueueTask}from"../lib/supabase.js";
+import{supabase,logAgent,enqueueTask,saveAgentOutput}from"../lib/supabase.js";
 export const etsyRouter=express.Router();
 
 const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
