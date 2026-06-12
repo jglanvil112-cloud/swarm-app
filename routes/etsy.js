@@ -1495,7 +1495,11 @@ async function _rolloutDoneSet(){
   return done;
 }
 async function _rolloutEnabled(){
-  try{const {count}=await supabase.from("agent_outputs").select("id",{count:"exact",head:true}).eq("output_type","rollout_enabled");return (count||0)>0;}catch(e){return false;}
+  try{
+    const en=await supabase.from("agent_outputs").select("id",{count:"exact",head:true}).eq("output_type","rollout_enabled");
+    const dis=await supabase.from("agent_outputs").select("id",{count:"exact",head:true}).eq("output_type","rollout_disabled");
+    return (en.count||0)>(dis.count||0);
+  }catch(e){return false;}
 }
 async function runShopRollout(perTick=2, dry=false){
   const t=await getEtsyToken(); if(!t) return {error:"no token"};
@@ -1524,6 +1528,7 @@ export async function runShopRolloutTick(){ try{ if(!(await _rolloutEnabled())) 
 etsyRouter.get("/rollout-once",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ res.json(await runShopRollout(parseInt(req.query.n||"1"), req.query.dry==="1")); }catch(e){ res.status(500).json({error:e.message}); } });
 etsyRouter.get("/rollout-start",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ await saveAgentOutput("DELE","rollout_enabled",{etsy_title:"rollout",data:{at:new Date().toISOString()}}); res.json({ok:true,enabled:true,note:"cron rolls SEO+mockup ~2 listings / 7 min until all active listings are done"}); }catch(e){ res.status(500).json({error:e.message}); } });
 etsyRouter.get("/rollout-status",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ res.json({enabled:await _rolloutEnabled(), listings_done:(await _rolloutDoneSet()).size}); }catch(e){ res.status(500).json({error:e.message}); } });
+etsyRouter.get("/rollout-stop",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ await saveAgentOutput("DELE","rollout_disabled",{etsy_title:"rollout",data:{at:new Date().toISOString()}}); res.json({ok:true,enabled:false,note:"rollout paused; progress kept — /rollout-start resumes where it left off"}); }catch(e){ res.status(500).json({error:e.message}); } });
 
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
