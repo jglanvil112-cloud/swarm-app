@@ -1438,6 +1438,56 @@ etsyRouter.get("/mockup-batch",async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+// ─── SHOP-WIDE SEO: rewrite title + tags (+optional description) to the top-seller formula via Haiku ───
+async function aiSEO(currentTitle, currentDesc){
+  const sys="You are an elite Etsy SEO copywriter for House of Jreym, a premium shop selling PRINTABLE digital Black & Afrocentric wall art (instant downloads). You write listing copy that ranks and converts, modeled on Etsy's top-selling Black-art printables.";
+  const prompt=`Rewrite the SEO for this Etsy DIGITAL DOWNLOAD wall-art listing.\n\nCURRENT TITLE: ${currentTitle}\nCURRENT DESCRIPTION (context only): ${(currentDesc||"").slice(0,400)}\n\nRules:\n- TITLE: max 140 chars. Lead with the strongest buyer keyword, then stack comma-separated keywords. Use proven high-traffic phrases where they truthfully fit the art: "Black Woman Art", "African American Art", "Afrocentric Wall Art", "Black Art Print", "Printable Wall Art", "Digital Download", "Gallery Wall". Stay truthful to the artwork implied by the current title.\n- TAGS: exactly 13 tags, each <=20 characters, multi-word high-intent Etsy search phrases, no "#". Mix broad and specific.\n- DESCRIPTION: 90-140 words. Hook first line, what's included (instant digital download, multiple print sizes, print at home or a print shop, personal-use license), soft CTA. Warm, culturally proud voice.\n\nReturn ONLY valid JSON, no markdown, no preamble:\n{"title":"...","tags":["t1","...13 total"],"description":"..."}`;
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":process.env.ANTHROPIC_API_KEY||"","anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:900,system:sys,messages:[{role:"user",content:prompt}]})});
+  const d=await r.json(); let txt=d.content?.[0]?.text||"";
+  txt=txt.replace(/```json/g,"").replace(/```/g,"").trim();
+  const j=JSON.parse(txt);
+  const title=String(j.title||"").slice(0,140);
+  let tags=Array.isArray(j.tags)?j.tags.map(x=>String(x).trim().slice(0,20)).filter(Boolean):[];
+  tags=[...new Set(tags)].slice(0,13);
+  const description=String(j.description||"").slice(0,2000);
+  return {title,tags,description};
+}
+
+async function seoOneListing(t, lid, currentTitle, currentDesc, withDesc){
+  const seo=await aiSEO(currentTitle, currentDesc);
+  if(!seo.title || seo.tags.length<5) return {lid, error:"weak ai output", seo};
+  const body={title:seo.title, tags:seo.tags}; if(withDesc && seo.description) body.description=seo.description;
+  const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid,{method:"PATCH",headers:authH(t),body:JSON.stringify(body)});
+  if(!pr.ok){const e=await pr.text(); return {lid, error:"patch "+pr.status+" "+e.slice(0,80)};}
+  return {lid, ok:true, new_title:seo.title, tags:seo.tags};
+}
+
+// single listing — preview the SEO rewrite on one
+etsyRouter.get("/seo-listing",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const id=req.query.id; if(!id)return res.status(400).json({error:"id required (a listing_id)"});
+  try{
+    const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+    const lr=await fetch(ETSY_BASE+"/listings/"+id,{headers:authH(t)}); const l=await lr.json();
+    res.json(await seoOneListing(t,id,l.title,l.description,req.query.desc==="1"));
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// paginated rollout — call with increasing offset (next_offset returned). Add &desc=1 to also rewrite descriptions.
+etsyRouter.get("/seo-batch",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const limit=Math.min(parseInt(req.query.limit||"3"),6); const offset=Math.max(parseInt(req.query.offset||"0"),0);
+  const withDesc=req.query.desc==="1";
+  try{
+    const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+limit+"&offset="+offset,{headers:authH(t)});
+    if(!lr.ok){const e=await lr.text();return res.status(lr.status).json({error:"list "+lr.status,detail:e.slice(0,120)});}
+    const ld=await lr.json(); const out=[];
+    for(const l of (ld.results||[])){ try{ out.push(await seoOneListing(t,l.listing_id,l.title,l.description,withDesc)); }catch(e){ out.push({lid:l.listing_id,error:e.message}); } }
+    res.json({offset, processed:out.length, total_active:ld.count||null, next_offset:offset+out.length, results:out});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
  {slug:"black-art-history-portraits",collection:"Portraits & Figures",url:"https://i.etsystatic.com/66171116/r/il/bf7ea6/8151607459/il_1080xN.8151607459_swyc.jpg"},
