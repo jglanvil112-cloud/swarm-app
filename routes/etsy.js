@@ -1537,6 +1537,25 @@ etsyRouter.get("/rollout-sample",async(req,res)=>{ if(req.query.key!=="swarm-os-
   res.json({samples:out});
 }catch(e){res.status(500).json({error:e.message});} });
 
+// ─── REVENUE SYNC — pull paid Etsy receipts into revenue_events (so the dashboard reflects real sales) ───
+export async function syncEtsyRevenue(limit=100){
+  try{
+    const t=await getEtsyToken(); if(!t) return {error:"no token"};
+    const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/receipts?limit="+limit+"&was_paid=true",{headers:authH(t)});
+    if(!r.ok){const e=await r.text(); return {error:"etsy "+r.status, detail:e.slice(0,140)};}
+    const data=await r.json(); let n=0;
+    for(const o of (data.results||[])){
+      const amt=parseFloat(o.grandtotal?.amount||0)/(o.grandtotal?.divisor||100);
+      const ts=o.create_timestamp||o.created_timestamp||Math.floor(Date.now()/1000);
+      const {error}=await supabase.from("revenue_events").upsert({platform:"etsy",order_id:String(o.receipt_id),amount:amt,recorded_at:new Date(ts*1000).toISOString()},{onConflict:"order_id"});
+      if(!error)n++;
+    }
+    await logAgent("SEUN",`💰 Revenue sync: upserted ${n} Etsy receipt(s)`,n?"success":"info");
+    return {synced:n, fetched:(data.results||[]).length};
+  }catch(e){return {error:e.message};}
+}
+etsyRouter.get("/sync-revenue",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); res.json(await syncEtsyRevenue()); });
+
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
  {slug:"black-art-history-portraits",collection:"Portraits & Figures",url:"https://i.etsystatic.com/66171116/r/il/bf7ea6/8151607459/il_1080xN.8151607459_swyc.jpg"},
