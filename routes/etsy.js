@@ -1382,7 +1382,8 @@ export async function createQueuedBundles(){
           const up=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+nid+"/files",{method:"POST",headers:{"Content-Type":`multipart/form-data; boundary=${fbn}`,"Content-Length":fbody.length.toString(),Authorization:"Bearer "+t,"x-api-key":xk},body:fbody});
           if(up.ok)files++;
           if(!cover){
-            const ibn="----HoJImg"+Date.now().toString(36); const ip=[`--${ibn}\r\nContent-Disposition: form-data; name="image"; filename="cover.${ext}"\r\nContent-Type: ${ctype}\r\n\r\n`,bytes,`\r\n--${ibn}--\r\n`];
+            const mbytes=await framedMockup(bytes).catch(()=>bytes);
+            const ibn="----HoJImg"+Date.now().toString(36); const ip=[`--${ibn}\r\nContent-Disposition: form-data; name="image"; filename="cover.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`,mbytes,`\r\n--${ibn}--\r\n`];
             const ibody=Buffer.concat(ip.map(p=>typeof p==="string"?Buffer.from(p):p));
             const ci=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+nid+"/images",{method:"POST",headers:{"Content-Type":`multipart/form-data; boundary=${ibn}`,"Content-Length":ibody.length.toString(),Authorization:"Bearer "+t,"x-api-key":xk},body:ibody});
             if(ci.ok)cover=true;
@@ -1397,6 +1398,45 @@ export async function createQueuedBundles(){
   }catch(e){return {error:e.message};}
 }
 etsyRouter.get("/create-bundles-run",async(req,res)=>{if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});res.json(await createQueuedBundles());});
+
+// ─── MOCKUP COVERS: wrap a listing's art in a framed gallery mockup, add as rank-1 cover (existing images preserved) ───
+async function mockupListingCover(t, lid){
+  const ir=await fetch(ETSY_BASE+"/listings/"+lid+"/images",{headers:authH(t)});
+  if(!ir.ok) return {lid, error:"img "+ir.status};
+  const idata=await ir.json(); const im=(idata.results||[]).sort((a,b)=>(a.rank||0)-(b.rank||0))[0];
+  const url=im&&(im.url_fullxfull||im.url_570xN); if(!url) return {lid, error:"no source image"};
+  const bin=await fetch(url); if(!bin.ok) return {lid, error:"fetch art "+bin.status};
+  const mock=await framedMockup(Buffer.from(await bin.arrayBuffer()));
+  const xk=ETSY_KEY+(ETSY_SECRET?":"+ETSY_SECRET:"");
+  const ibn="----HoJMock"+Date.now().toString(36);
+  const ip=[`--${ibn}\r\nContent-Disposition: form-data; name="image"; filename="mockup.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`,mock,`\r\n--${ibn}\r\nContent-Disposition: form-data; name="rank"\r\n\r\n1\r\n--${ibn}--\r\n`];
+  const ibody=Buffer.concat(ip.map(p=>typeof p==="string"?Buffer.from(p):p));
+  const ci=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{method:"POST",headers:{"Content-Type":`multipart/form-data; boundary=${ibn}`,"Content-Length":ibody.length.toString(),Authorization:"Bearer "+t,"x-api-key":xk},body:ibody});
+  if(!ci.ok){const e=await ci.text(); return {lid, error:"upload "+ci.status+" "+e.slice(0,90)};}
+  const ni=await ci.json();
+  return {lid, ok:true, image_id:ni.listing_image_id};
+}
+
+// single listing — good for previewing on a real print
+etsyRouter.get("/mockup-listing",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const id=req.query.id; if(!id)return res.status(400).json({error:"id required (a listing_id)"});
+  try{const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"}); res.json(await mockupListingCover(t,id));}catch(e){res.status(500).json({error:e.message});}
+});
+
+// paginated rollout across active listings — call with increasing offset (next_offset is returned). Throttled per call to stay under Etsy quota.
+etsyRouter.get("/mockup-batch",async(req,res)=>{
+  if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  const limit=Math.min(parseInt(req.query.limit||"3"),8); const offset=Math.max(parseInt(req.query.offset||"0"),0);
+  try{
+    const t=await getEtsyToken(); if(!t)return res.status(401).json({error:"no token"});
+    const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+limit+"&offset="+offset,{headers:authH(t)});
+    if(!lr.ok){const e=await lr.text();return res.status(lr.status).json({error:"list "+lr.status,detail:e.slice(0,120)});}
+    const ld=await lr.json(); const out=[];
+    for(const l of (ld.results||[])){ out.push(await mockupListingCover(t,l.listing_id)); }
+    res.json({offset, processed:out.length, total_active:ld.count||null, next_offset:offset+out.length, results:out});
+  }catch(e){res.status(500).json({error:e.message});}
+});
 
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
@@ -1438,6 +1478,24 @@ async function _hojCanvas(srcBuf,fmt){
   const left=Math.round((c.w-m.width)/2);
   return await sharp({create:{width:c.w,height:c.h,channels:4,background:COCOA}})
     .composite([{input:art,top:Math.max(c.pad,top),left:left},{input:_wm(c.w,c.h,c.wm||44)}]).png().toBuffer();
+}
+
+// ─── FRAMED MOCKUP GENERATOR — turns flat art into a gallery-style framed product shot ───
+async function framedMockup(artBuf){
+  const sharp=(await import("sharp")).default;
+  const W=2000,H=2000;
+  const wallTop="#ece4d7",wallBot="#dccfbb",frameCol="#241c16",matteCol="#f7f3ec",brandCol="#c9a24b";
+  const art=await sharp(artBuf).resize(864,1080,{fit:"cover"}).toBuffer();
+  const am=await sharp(art).metadata(); const aW=am.width,aH=am.height;
+  const matte=90,border=24;
+  const matteW=aW+matte*2,matteH=aH+matte*2,frameW=matteW+border*2,frameH=matteH+border*2;
+  const fx=Math.round((W-frameW)/2), fy=Math.round((H-frameH)/2)-46;
+  const wall=Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${wallTop}"/><stop offset="1" stop-color="${wallBot}"/></linearGradient><radialGradient id="v" cx="0.5" cy="0.42" r="0.75"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.10"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#w)"/><rect width="${W}" height="${H}" fill="url(#v)"/></svg>`);
+  const shadow=await sharp({create:{width:frameW,height:frameH,channels:4,background:"#00000055"}}).extend({top:60,bottom:60,left:60,right:60,background:"#00000000"}).blur(34).png().toBuffer();
+  const matteBuf=await sharp({create:{width:matteW,height:matteH,channels:4,background:matteCol}}).png().toBuffer();
+  const frame=await sharp({create:{width:frameW,height:frameH,channels:4,background:frameCol}}).composite([{input:matteBuf,top:border,left:border},{input:art,top:border+matte,left:border+matte}]).png().toBuffer();
+  const brand=Buffer.from(`<svg width="${W}" height="120" xmlns="http://www.w3.org/2000/svg"><text x="${W/2}" y="74" text-anchor="middle" font-family="Georgia,serif" font-weight="600" font-size="40" letter-spacing="14" fill="${brandCol}">HOUSE OF JREYM</text></svg>`);
+  return await sharp(wall).composite([{input:shadow,top:fy-38,left:fx-50},{input:frame,top:fy,left:fx},{input:brand,top:H-150,left:0}]).jpeg({quality:92}).toBuffer();
 }
 
 async function generateFormatVariants(format){
