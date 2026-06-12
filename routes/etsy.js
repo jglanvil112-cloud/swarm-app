@@ -1559,8 +1559,9 @@ etsyRouter.get("/sync-revenue",async(req,res)=>{ if(req.query.key!=="swarm-os-ke
 // Re-SEO a targeted set of high-demand listings with the upgraded keyword + Juneteenth model (top-20 priority lever). Throttles safely on Etsy 429.
 etsyRouter.get("/reseo-priority",async(req,res)=>{
   if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
-  const ids=String(req.query.ids||"").split(",").map(s=>s.trim()).filter(Boolean).slice(0,25);
-  if(!ids.length)return res.status(400).json({error:"pass ?ids=comma,separated,listingIds (max 25)"});
+  let ids=String(req.query.ids||"").split(",").map(s=>s.trim()).filter(Boolean).slice(0,25);
+  if(!ids.length){ try{ const sel=await selectTop20(25); ids=sel.map(s=>String(s.id)); }catch(e){} }
+  if(!ids.length)return res.status(400).json({error:"no ids given and auto-select found no scored listings in the products table — run /api/etsy/listings?limit=200 to sync the catalog first"});
   const withDesc=req.query.desc==="1";
   const t=await getEtsyToken(); if(!t)return res.status(400).json({error:"no token"});
   const done=[],failed=[]; let quota=false;
@@ -1577,6 +1578,62 @@ etsyRouter.get("/reseo-priority",async(req,res)=>{
   }
   res.json({reseo:done.length,failed:failed.length,quota_hit:quota,done,failed});
 });
+
+// ─── TOP-20 DEMAND RE-SEO (self-selecting, self-walking, quota-safe) ───
+function scoreTitleDemand(title){
+  const h=String(title||"").toLowerCase(); let s=0;
+  const add=(re,w)=>{ if(re.test(h)) s+=w; };
+  add(/juneteenth|black history|heritage|freedom|emancipation/,10); // seasonal spike
+  add(/black woman|black girl|black queen/,7);
+  add(/black girl magic|affirmation|self ?love|self ?care/,6);
+  add(/melanin|natural hair|afro|black beauty/,6);
+  add(/still i rise|young gifted|empower|feminist|graduation/,5);
+  add(/black king|black love|family|couple|motherhood|sisterhood/,5);
+  add(/afrocentric|african american|black art|black pride/,3);
+  add(/pet|dog|cat portrait/,2);
+  add(/minimalist|line art/,1);
+  return s;
+}
+async function selectTop20(cap=20){
+  const done=new Set();
+  try{ const {data}=await supabase.from("agent_outputs").select("etsy_title").eq("output_type","reseo_top20_done"); (data||[]).forEach(r=>r.etsy_title&&done.add(String(r.etsy_title))); }catch(e){}
+  let rows=[];
+  try{ const {data}=await supabase.from("products").select("external_id,title,status").eq("platform","etsy").limit(500); rows=data||[]; }catch(e){}
+  return rows
+    .filter(r=>r.external_id && (!r.status || r.status==="active") && !done.has(String(r.external_id)))
+    .map(r=>({id:r.external_id,title:r.title||"",score:scoreTitleDemand(r.title||"")}))
+    .filter(r=>r.score>0)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,cap);
+}
+export async function reseoTop20Tick(cap=3){
+  let enabled=false;
+  try{ const {count}=await supabase.from("agent_outputs").select("id",{count:"exact",head:true}).eq("output_type","reseo_top20_enabled"); enabled=(count||0)>0; }catch(e){}
+  if(!enabled) return {enabled:false};
+  const sel=await selectTop20(cap);
+  if(!sel.length) return {enabled:true,processed:0,remaining:0,complete:true};
+  const t=await getEtsyToken(); if(!t) return {enabled:true,error:"no token"};
+  let processed=0, quota=false;
+  for(const s of sel){
+    try{
+      const r=await seoOneListing(t,String(s.id),s.title,"",false);
+      if(r&&r.ok){ processed++; try{await saveAgentOutput("DELE","reseo_top20_done",{etsy_title:String(s.id)});}catch(e){} }
+      else if(r&&/429/.test(String(r.error||""))){ quota=true; break; }
+    }catch(e){ if(/429/.test(e.message)){quota=true;break;} }
+  }
+  if(processed) await logAgent("DELE",`✨ Top-20 re-SEO: upgraded ${processed} high-demand listing(s)`,"success");
+  return {enabled:true,processed,quota_hit:quota};
+}
+etsyRouter.get("/reseo-top20-start",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});
+  try{ await saveAgentOutput("DELE","reseo_top20_enabled",{etsy_title:"reseo_top20",data:{at:new Date().toISOString()}});
+    const p=await selectTop20(20);
+    res.json({ok:true,enabled:true,queued:p.length,preview:p.map(x=>({id:x.id,score:x.score,title:(x.title||"").slice(0,60)})),note:"cron re-SEOs ~3 top-demand listings / 8 min until done; throttles on 429"});
+  }catch(e){ res.status(500).json({error:e.message}); } });
+etsyRouter.get("/reseo-top20-status",async(req,res)=>{
+  try{ const {count}=await supabase.from("agent_outputs").select("id",{count:"exact",head:true}).eq("output_type","reseo_top20_done");
+    const rem=await selectTop20(20);
+    res.json({upgraded:count||0,remaining:rem.length,next:rem.slice(0,5).map(x=>({id:x.id,score:x.score,title:(x.title||"").slice(0,50)}))});
+  }catch(e){ res.status(500).json({error:e.message}); } });
 
 // ─── FORMAT-VARIANT EXPORT PIPELINE (Sharp → Supabase Storage; CDN source, no Etsy API quota used) ───
 const HOJ_ART=[
