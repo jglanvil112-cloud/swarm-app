@@ -295,7 +295,7 @@ const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-
     description: description.slice(0, 2000),
     price,
     who_made: "i_did",
-    when_made: "made_to_order",
+    when_made: process.env.ETSY_WHEN_MADE || "2020_2026",
     taxonomy_id: 2078,
     tags,
     type: "download",
