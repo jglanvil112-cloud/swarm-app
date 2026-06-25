@@ -23,6 +23,7 @@ export async function handleCanvaToSocial(task) {
   const { data: row, error } = await supabase.from("social_posts").insert({
     platform: "instagram",
     caption: p.caption || "",
+    hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
     media_urls: [imageUrl],
     media_type: p.isReel ? "REEL" : "IMAGE",
     status: "draft",                                  // ← gated; approval -> 'scheduled'
@@ -30,6 +31,7 @@ export async function handleCanvaToSocial(task) {
     keyword: p.keyword || null,
     created_by: "KOFI",
     meta: { source: "canva", design_id: p.designId || null },
+    updated_at: new Date().toISOString(),             // ← required: no DB default (matches social.js)
   }).select().single();
   if (error) throw new Error("canvaToSocial insert: " + error.message);
 
