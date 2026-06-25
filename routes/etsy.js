@@ -100,7 +100,7 @@ etsyRouter.post("/publish",async(req,res)=>{
   try{
     const t=await getEtsyToken();
     if(!t)return res.status(401).json({error:"Not authenticated — visit /api/etsy/auth"});
-    const body={title:String(title).slice(0,140),description:String(description),price:parseFloat(price),quantity:999,who_made:"i_did",when_made:"made_to_order",is_supply:false,taxonomy_id:2078,tags:tags.map(t=>String(t).slice(0,20)).filter(t=>t.length>0).slice(0,13),state:"active",type:"download",is_digital:true};
+    const body={title:String(title).slice(0,140),description:String(description),price:parseFloat(price),quantity:999,who_made:"i_did",when_made:(process.env.ETSY_WHEN_MADE||"2020_2026"),is_supply:false,taxonomy_id:2078,tags:tags.map(t=>String(t).slice(0,20)).filter(t=>t.length>0).slice(0,13),state:"active",type:"download",is_digital:true};
     const r=await fetch(ETSY_BASE+"/shops/"+sid+"/listings",{method:"POST",headers:authH(t),body:JSON.stringify(body)});
     const listing=await r.json();
     if(!r.ok){await logAgent("AISHA","Listing failed: "+(listing?.error||r.status),"error");return res.status(502).json({error:"Etsy listing failed",details:listing});}
@@ -1364,7 +1364,7 @@ export async function createQueuedBundles(){
     for(const b of HOJ_BUNDLES){
       const title=b.title.slice(0,140);
       if(existing.has(title)) continue; // already created as draft
-      const body={title,description:b.desc,price:b.price,quantity:999,who_made:"i_did",when_made:"made_to_order",is_supply:false,taxonomy_id:2078,tags:b.tags.map(x=>String(x).slice(0,20)).slice(0,13),state:"draft",type:"download",is_digital:true};
+      const body={title,description:b.desc,price:b.price,quantity:999,who_made:"i_did",when_made:(process.env.ETSY_WHEN_MADE||"2020_2026"),is_supply:false,taxonomy_id:2078,tags:b.tags.map(x=>String(x).slice(0,20)).slice(0,13),state:"draft",type:"download",is_digital:true};
       const cr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings",{method:"POST",headers:authH(t),body:JSON.stringify(body)});
       if(!cr.ok){const e=await cr.text();await logAgent("BUNDLES",`⚠️ bundle "${b.key}" create failed: ${cr.status} ${e.slice(0,70)}`,"warn");return {created:0,stopped:b.key,status:cr.status};}
       const nl=await cr.json(); const nid=nl.listing_id;
