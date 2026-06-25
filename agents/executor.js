@@ -2,6 +2,9 @@
 // Full Etsy listing publish + SVG file attachment end-to-end verified.
 import Anthropic from "@anthropic-ai/sdk";
 import { logAgent, saveDecision, saveTrend, saveAgentOutput, enqueueTask, supabase } from "../lib/supabase.js";
+import { handleCanvaToEtsy } from "./canvaToEtsy.js";
+import { handleCanvaToSocial } from "./canvaToSocial.js";
+import { briefFromImage } from "../lib/visionBrief.js";
 
 const anthropic    = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BASE_URL     = process.env.BASE_URL    || "https://swarm-app-3nch.onrender.com";
@@ -396,6 +399,15 @@ export async function executeTask(task) {
   try {
     if (task_type === "publish_etsy_listing") {
       return await handlePublishEtsyListing(payload);
+    }
+
+    // ── Canva pipeline (gated: drafts + queue only; KWAME publishes approved rows) ──
+    if (task_type === "canva_to_etsy")   return await handleCanvaToEtsy(task);
+    if (task_type === "canva_to_social") return await handleCanvaToSocial(task);
+    if (task_type === "vision_brief") {
+      const brief = await briefFromImage(payload.imageUrl);
+      await saveAgentOutput("KOFI", "vision_brief", { image_url: payload.imageUrl, brief });
+      return { brief };
     }
 
 
