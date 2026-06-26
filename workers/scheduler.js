@@ -179,6 +179,14 @@ import { assignNextSections } from "../routes/etsy.js";
 import { createQueuedBundles, runShopRolloutTick, syncEtsyRevenue, reseoTop20Tick } from "../routes/etsy.js";
 import { generateMissingFormats } from "../routes/etsy.js";
 
+// ─── Canva pipeline: gated publisher (KWAME) ─────────────────────────────────
+import { drainPublishQueue } from "../agents/publisher.js";
+// Every 5 min: activate ONLY publish_queue rows a human flipped to 'approved'.
+cron.schedule("*/5 * * * *", async () => {
+  try { const r = await drainPublishQueue(5); if (r?.processed > 0) console.log(`[KWAME] ✅ Published ${r.processed} approved listing(s)`); }
+  catch (e) { console.error("[KWAME] publish queue error:", e.message); }
+});
+
 // Every 2 min: attach a small batch of digital files to listings missing them (overnight backfill + ongoing prevention)
 cron.schedule("*/12 * * * *", () => { backfillNextListingFiles(5).catch(()=>{}); }); // throttled: stay under Etsy daily quota
 // Every 3 min: organize listings into shop sections (collections), a small batch at a time
