@@ -17,7 +17,6 @@ import { auditRouter } from "./routes/audit.js";
 import { approveRouter } from "./routes/approve.js";
 import { supabase, recordHealth, getRecentOutputs } from "./lib/supabase.js";
 import "./workers/scheduler.js";
-import "./lib/taskReclaimer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
