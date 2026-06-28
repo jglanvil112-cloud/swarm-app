@@ -14,7 +14,7 @@ const APP_URL = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 export const IBRAHIM_CONFIG = {
-  auto_posting: true,
+  auto_posting: false,   // PAUSED by CEO — flip to true or POST /api/ibrahim/resume to re-enable. Scheduled posts are preserved, just held.
   phase: "2-auto-posting",
   posts_per_day: 2,
   reels_per_day: 0,   // reels disabled until a video source is connected
@@ -287,6 +287,12 @@ async function checkEngagementGuard() {
 
 export async function runAutoPublish() {
   try {
+    // 0. Master auto-posting switch — respect CEO pause/resume. Without this the
+    //    /pause endpoint was a no-op and scheduled posts published regardless.
+    if (!IBRAHIM_CONFIG.auto_posting) {
+      return { published: 0, paused: true, reason: "auto_posting disabled" };
+    }
+
     // 1. Check engagement guard
     const guard = await checkEngagementGuard();
     if (guard.paused) {
@@ -615,7 +621,7 @@ ibrahimRouter.get("/status", async (req, res) => {
     res.json({
       config: IBRAHIM_CONFIG,
       phase: "2-auto-posting",
-      auto_posting: true,
+      auto_posting: IBRAHIM_CONFIG.auto_posting,
       engagement_guard: { ...guard, config: IBRAHIM_CONFIG.engagement_guard },
       stats: {
         scheduled: scheduledCount || 0,
