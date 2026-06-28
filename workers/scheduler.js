@@ -140,7 +140,7 @@ async function runHealthCheck(){
     catch(e){await recordHealth(svc,"fail",null,{error:e.message});}
   }
   try{
-    const{data:row}=await supabase.from("oauth_tokens").select("expires_at").eq("platform","etsy").single().catch(()=>({data:null}));
+    const{data:row}=await supabase.from("oauth_tokens").select("expires_at").eq("platform","etsy").maybeSingle();
     if(row?.expires_at){const h=(new Date(row.expires_at)-Date.now())/3600000;if(h<2){console.log("[healthCheck] Etsy token expires in "+h.toFixed(1)+"h — refreshing");await fetch(BASE_URL+"/api/etsy/refresh-token",{method:"POST"}).catch(e=>console.warn("[healthCheck] Refresh failed:",e.message));}}
   }catch(e){console.warn("[healthCheck] Token check failed:",e.message);}
 }
