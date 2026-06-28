@@ -39,7 +39,7 @@ let openai = null;
 try { if (process.env.OPENAI_API_KEY) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); } catch(e) {}
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://cufrxwpmxglgiquntlca.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPERBAS_KEY || "";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "";
 
 // AUTH MIDDLEWARE — dashboard routes are always public (no API key needed)
 const API_SECRET = process.env.API_SECRET;
