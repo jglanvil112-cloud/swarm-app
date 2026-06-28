@@ -247,4 +247,44 @@ cron.schedule("30 */4 * * *", async () => {
   } catch(e) { console.error("[IBRAHIM] Analytics sync error:", e.message); }
 });
 
+// ─── Stale-task reclaimer ────────────────────────────────────────────────────
+// Workers that die mid-task leave rows stuck in 'running' forever (claimed, never
+// released). Every 10 min: reset 'running' tasks idle > 30 min back to 'pending'
+// for retry. After 3 reclaims a task is marked 'failed' to avoid poison loops.
+cron.schedule("*/10 * * * *", async () => {
+  try {
+    const STALE_MS = 30 * 60 * 1000;
+    const cutoff = new Date(Date.now() - STALE_MS).toISOString();
+    const { data: stuck } = await supabase
+      .from("tasks")
+      .select("id, result")
+      .eq("status", "running")
+      .lt("started_at", cutoff)
+      .limit(50);
+    if (!stuck?.length) return;
+    let requeued = 0, failed = 0;
+    for (const t of stuck) {
+      const reclaims = ((t.result && t.result._reclaims) || 0) + 1;
+      if (reclaims > 3) {
+        await supabase.from("tasks").update({
+          status: "failed",
+          error: `stale: reclaimed ${reclaims - 1}x without completing`,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", t.id);
+        failed++;
+      } else {
+        await supabase.from("tasks").update({
+          status: "pending",
+          started_at: null,
+          result: { ...(t.result || {}), _reclaims: reclaims },
+          updated_at: new Date().toISOString(),
+        }).eq("id", t.id);
+        requeued++;
+      }
+    }
+    console.log(`[RECLAIMER] stale running tasks → requeued ${requeued}, failed ${failed}`);
+  } catch (e) { console.error("[RECLAIMER] error:", e.message); }
+});
+
 console.log("[IBRAHIM] Phase 2 AUTO-POSTING cron jobs registered ✅");
