@@ -10,8 +10,13 @@ const APP_URL            = process.env.APP_URL || "https://swarm-app-3nch.onrend
 const SHOPIFY_SCOPES     = "read_products,write_products,read_orders,write_orders,read_inventory,write_inventory,read_customers,write_customers";
 
 async function getStoredToken() {
-  const { data } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform","shopify").single();
-  return data;
+  // Robust read: handle 0, 1, or duplicate shopify rows. The OAuth upsert uses
+  // onConflict:"platform" which needs a unique index that may be missing, so
+  // duplicates can accumulate and .single() would throw. Take the newest row.
+  const { data } = await supabase.from("oauth_tokens")
+    .select("access_token,shop,updated_at").eq("platform","shopify")
+    .order("updated_at", { ascending: false }).limit(1);
+  return Array.isArray(data) && data.length ? data[0] : null;
 }
 function shopifyHeaders(token) {
   return { "X-Shopify-Access-Token": token || process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_CLIENT_SECRET || "", "Content-Type": "application/json" };
@@ -20,6 +25,52 @@ function shopifyBase(shop) {
   const domain = (shop || process.env.SHOPIFY_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   return `https://${domain}/admin/api/2024-01`;
 }
+
+// ── Approval gate for write operations (same secret as routes/approve.js) ──
+const APPROVAL_SECRET = process.env.APPROVAL_SECRET || "";
+function requireApproval(req, res) {
+  if (!APPROVAL_SECRET) { res.status(503).json({ error: "approval not configured — set APPROVAL_SECRET" }); return false; }
+  const key = req.headers["x-approval-key"] || req.query.key;
+  if (key !== APPROVAL_SECRET) { res.status(401).json({ error: "unauthorized" }); return false; }
+  return true;
+}
+async function resolveShopAuth() {
+  const stored = await getStoredToken();
+  return { token: stored?.access_token || process.env.SHOPIFY_ACCESS_TOKEN, shop: stored?.shop || process.env.SHOPIFY_DOMAIN };
+}
+
+// PUT /api/shopify/products/:id — update product metadata (GATED). Whitelisted fields only.
+shopifyRouter.put("/products/:id", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const src = req.body || {};
+    const product = { id: Number(req.params.id) };
+    for (const f of ["title", "product_type", "tags", "body_html", "status"]) {
+      if (src[f] !== undefined) product[f] = src[f];
+    }
+    const r = await fetch(`${shopifyBase(shop)}/products/${req.params.id}.json`, { method: "PUT", headers: shopifyHeaders(token), body: JSON.stringify({ product }) });
+    const txt = await r.text();
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 400) });
+    await logAgent("AMARA", `Updated Shopify product ${req.params.id}`, "success");
+    res.json(JSON.parse(txt));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shopify/pages — create a content page (GATED). For policy / about pages.
+shopifyRouter.post("/pages", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const { title, body_html = "", published = true } = req.body || {};
+    if (!title) return res.status(400).json({ error: "title required" });
+    const r = await fetch(`${shopifyBase(shop)}/pages.json`, { method: "POST", headers: shopifyHeaders(token), body: JSON.stringify({ page: { title, body_html, published } }) });
+    const txt = await r.text();
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 400) });
+    await logAgent("AMARA", `Created Shopify page: ${title}`, "success");
+    res.json(JSON.parse(txt));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // OAuth Step 1
 shopifyRouter.get("/auth", (req, res) => {
