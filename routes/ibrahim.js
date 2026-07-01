@@ -323,7 +323,7 @@ export async function runAutoPublish() {
     const { data: duePosts } = await supabase
       .from("social_posts")
       .select("*")
-      .eq("platform", "instagram")
+      .in("platform", ["instagram", "all"])
       .eq("status", "scheduled")
       .lte("scheduled_for", new Date().toISOString())
       .order("scheduled_for", { ascending: true })
