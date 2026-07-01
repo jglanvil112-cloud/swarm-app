@@ -246,6 +246,25 @@ async function publishToInstagram(post) {
   return published.id;
 }
 
+// Publish the same post to the connected Facebook Page feed (image + caption).
+async function publishToFacebook(post) {
+  const { data } = await supabase.from("social_credentials")
+    .select("access_token,page_id,username").eq("platform", "facebook")
+    .order("updated_at", { ascending: false }).limit(1);
+  const cred = data && data[0];
+  if (!cred?.access_token || !cred?.page_id) throw new Error("No Facebook page credentials");
+  if (!post.media_urls?.length) throw new Error("No media URL for FB post " + post.id);
+
+  const r = await fetch(`https://graph.facebook.com/v21.0/${cred.page_id}/photos`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: post.media_urls[0], caption: post.caption, access_token: cred.access_token })
+  });
+  const j = await r.json();
+  if (j.error) throw new Error("FB publish error: " + j.error.message);
+  return j.post_id || j.id || null;
+}
+
 // ─── ENGAGEMENT GUARD ─────────────────────────────────────────────────────────
 
 async function checkEngagementGuard() {
@@ -338,10 +357,19 @@ export async function runAutoPublish() {
 
         const postId = await publishToInstagram(post);
 
+        // Cross-post the same content to the Facebook Page (non-fatal — an FB hiccup must not undo the IG publish)
+        let fbPostId = null;
+        try {
+          fbPostId = await publishToFacebook(post);
+          await logAgent("IBRAHIM", `📘 Cross-posted ${post.id} to Facebook (${fbPostId})`, "info");
+        } catch (fbErr) {
+          await logAgent("IBRAHIM", `Facebook cross-post failed for ${post.id}: ${fbErr.message}`, "warn");
+        }
+
         // Column-safe flip (status + meta both proven to exist) so the cron can NEVER re-select a published post → no duplicate posting
         const { error: updErr } = await supabase.from("social_posts").update({
           status: "published",
-          meta: { ...(post.meta || {}), ig_post_id: postId, published_at: new Date().toISOString() }
+          meta: { ...(post.meta || {}), ig_post_id: postId, fb_post_id: fbPostId, published_at: new Date().toISOString() }
         }).eq("id", post.id);
         if (updErr) await logAgent("IBRAHIM", `⚠️ DB mark-published failed for ${post.id}: ${updErr.message}`, "warn");
         // Best-effort: populate dedicated columns if they exist; errors ignored so a missing column can't trigger re-publishing
