@@ -130,6 +130,30 @@ socialRouter.get("/status", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/social/verify/:platform — live-check a stored token against the platform's API
+socialRouter.get("/verify/:platform", async (req, res) => {
+  try {
+    const platform = req.params.platform;
+    const cred = await getCredential(platform);
+    if (!cred?.access_token) return res.json({ platform, connected: false, reason: "no token stored" });
+    let check = { live: null };
+    if (platform === "facebook") {
+      const pid = cred.page_id;
+      const r = await fetch(`https://graph.facebook.com/v19.0/${pid}?fields=name,fan_count&access_token=${cred.access_token}`);
+      const d = await r.json();
+      check = r.ok ? { live: true, page: d.name, fans: d.fan_count } : { live: false, error: d.error?.message || `HTTP ${r.status}` };
+    } else if (platform === "instagram") {
+      const aid = cred.account_id || cred.page_id;
+      const r = await fetch(`https://graph.facebook.com/v19.0/${aid}?fields=username,followers_count&access_token=${cred.access_token}`);
+      const d = await r.json();
+      check = r.ok ? { live: true, username: d.username, followers: d.followers_count } : { live: false, error: d.error?.message || `HTTP ${r.status}` };
+    } else {
+      check = { live: null, note: "verify not implemented for " + platform };
+    }
+    res.json({ platform, connected: true, ...check });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/social/credentials — store platform tokens securely
 socialRouter.post("/credentials", async (req, res) => {
   const { platform, access_token, refresh_token, page_id, account_id, username, scopes, token_expires_at } = req.body;
