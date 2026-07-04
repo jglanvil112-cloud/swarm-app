@@ -57,6 +57,17 @@ shopifyRouter.put("/products/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/shopify/pages — list existing pages (read-only, for verification).
+shopifyRouter.get("/pages", async (req, res) => {
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const r = await fetch(`${shopifyBase(shop)}/pages.json?limit=250`, { headers: shopifyHeaders(token) });
+    const j = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: JSON.stringify(j).slice(0, 300) });
+    res.json({ count: (j.pages || []).length, pages: (j.pages || []).map(p => ({ id: p.id, title: p.title, handle: p.handle, published: !!p.published_at })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/shopify/pages — create a content page (GATED). For policy / about pages.
 shopifyRouter.post("/pages", async (req, res) => {
   if (!requireApproval(req, res)) return;
