@@ -58,6 +58,23 @@ shopifyRouter.put("/products/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/shopify/create-product (GATED) — directly create a product (images pulled by URL)
+shopifyRouter.post("/create-product", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const p = req.body.product || req.body;
+    const r = await fetch(`${shopifyBase(shop)}/products.json`, {
+      method: "POST", headers: shopifyHeaders(token), body: JSON.stringify({ product: p })
+    });
+    const txt = await r.text();
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 400) });
+    const j = JSON.parse(txt);
+    await logAgent("KWAME", `Created product: ${p.title || "(untitled)"}`, "success");
+    res.json({ ok: true, id: j.product?.id, handle: j.product?.handle, images: (j.product?.images || []).length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POD auto-filing: tag Printify products "originals" + rebrand vendor ──────
 // Runs on a cron so every new POD product self-files into the "House of Jreym
 // Originals" smart collection (condition: tag = originals). Uses product scope,
