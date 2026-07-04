@@ -1,6 +1,7 @@
 // routes/shopify.js — Shopify OAuth + Admin API
 import express from "express";
 import crypto from "crypto";
+import cron from "node-cron";
 import { supabase, logAgent, enqueueTask } from "../lib/supabase.js";
 export const shopifyRouter = express.Router();
 
@@ -46,7 +47,7 @@ shopifyRouter.put("/products/:id", async (req, res) => {
     const { token, shop } = await resolveShopAuth();
     const src = req.body || {};
     const product = { id: Number(req.params.id) };
-    for (const f of ["title", "product_type", "tags", "body_html", "status"]) {
+    for (const f of ["title", "product_type", "tags", "body_html", "status", "vendor"]) {
       if (src[f] !== undefined) product[f] = src[f];
     }
     const r = await fetch(`${shopifyBase(shop)}/products/${req.params.id}.json`, { method: "PUT", headers: shopifyHeaders(token), body: JSON.stringify({ product }) });
@@ -56,6 +57,38 @@ shopifyRouter.put("/products/:id", async (req, res) => {
     res.json(JSON.parse(txt));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ── POD auto-filing: tag Printify products "originals" + rebrand vendor ──────
+// Runs on a cron so every new POD product self-files into the "House of Jreym
+// Originals" smart collection (condition: tag = originals). Uses product scope,
+// which works today (no content scope needed).
+async function tagOriginals() {
+  const { token, shop } = await resolveShopAuth();
+  const r = await fetch(`${shopifyBase(shop)}/products.json?limit=250&fields=id,vendor,tags`, { headers: shopifyHeaders(token) });
+  const j = await r.json();
+  let tagged = 0;
+  for (const p of (j.products || [])) {
+    const isPOD = (p.vendor || "").toLowerCase() === "printify";
+    const tags = (typeof p.tags === "string" ? p.tags.split(",").map(t => t.trim()) : (p.tags || [])).filter(Boolean);
+    if (isPOD && !tags.map(t => t.toLowerCase()).includes("originals")) {
+      const up = await fetch(`${shopifyBase(shop)}/products/${p.id}.json`, {
+        method: "PUT", headers: shopifyHeaders(token),
+        body: JSON.stringify({ product: { id: p.id, tags: [...tags, "originals"].join(", "), vendor: "House of Jreym" } })
+      });
+      if (up.ok) tagged++;
+    }
+  }
+  if (tagged) await logAgent("KWAME", `Filed ${tagged} POD product(s) into "originals"`, "success");
+  return tagged;
+}
+// POST /api/shopify/tag-originals (GATED) — manual trigger
+shopifyRouter.post("/tag-originals", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try { res.json({ ok: true, tagged: await tagOriginals() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Hourly cron: auto-file any newly-published POD products
+cron.schedule("30 * * * *", () => { tagOriginals().catch(e => console.log("[tag-originals] cron:", e.message)); });
 
 // GET /api/shopify/pages — list existing pages (read-only, for verification).
 shopifyRouter.get("/pages", async (req, res) => {
