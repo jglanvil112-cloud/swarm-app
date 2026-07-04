@@ -7,7 +7,7 @@ export const shopifyRouter = express.Router();
 const SHOPIFY_API_KEY    = process.env.SHOPIFY_CLIENT_ID     || "";
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_CLIENT_SECRET || "";
 const APP_URL            = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
-const SHOPIFY_SCOPES     = "read_products,write_products,read_orders,write_orders,read_inventory,write_inventory,read_customers,write_customers";
+const SHOPIFY_SCOPES     = "read_products,write_products,read_orders,write_orders,read_inventory,write_inventory,read_customers,write_customers,read_content,write_content";
 
 async function getStoredToken() {
   // Robust read: handle 0, 1, or duplicate shopify rows. The OAuth upsert uses
@@ -102,7 +102,10 @@ shopifyRouter.get("/callback", async (req, res) => {
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_id: SHOPIFY_API_KEY, client_secret: SHOPIFY_API_SECRET, code }) });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) return res.status(500).json({ error: "Token exchange failed", detail: tokenData });
-    await supabase.from("oauth_tokens").upsert({ platform: "shopify", access_token: tokenData.access_token, scope: tokenData.scope, shop, updated_at: new Date().toISOString() }, { onConflict: "platform" });
+    // Persist reliably without depending on a unique index existing on `platform`
+    // (the old onConflict:"platform" upsert silently no-op'd when that index was missing).
+    await supabase.from("oauth_tokens").delete().eq("platform", "shopify");
+    await supabase.from("oauth_tokens").insert({ platform: "shopify", access_token: tokenData.access_token, scope: tokenData.scope, shop, updated_at: new Date().toISOString() });
     await logAgent("KOFI", `Shopify OAuth completed for ${shop}`, "success");
     res.redirect(`/swarm_shop_os_v5.html?shopify=connected&shop=${shop}`);
   } catch (err) { res.status(500).json({ error: err.message }); }
