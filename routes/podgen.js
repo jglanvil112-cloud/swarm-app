@@ -16,7 +16,7 @@ import { supabase, logAgent } from "../lib/supabase.js";
 export const podgenRouter = express.Router();
 
 const APPROVAL_SECRET = process.env.APPROVAL_SECRET || "";
-const FAL_KEY = process.env.FAL_KEY || "";
+const FAL_KEY = process.env.FAL_KEY || process.env.FAL_AI_KEY || process.env.fal_ai_KEY || process.env.fal_ai_key || "";
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
 const APP_URL = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
 const AUTO_PUBLISH = process.env.PODGEN_AUTO_PUBLISH === "true";
