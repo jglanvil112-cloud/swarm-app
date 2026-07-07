@@ -124,4 +124,21 @@ podgenRouter.post("/run", async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/podgen/batch (GATED) — generate a catalog in the background. body { count?, themes? }
+const DEFAULT_THEMES = ["Juneteenth Celebration","Melanin Queen","Kente Heritage","Sankofa Wisdom","Black Excellence","Ankara Bloom","Afro Muse","Diaspora Roots","Golden Heritage","Naija Pride","Black Love","Ancestral Power"];
+podgenRouter.post("/batch", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  const count = Math.min(20, Math.max(1, req.body?.count || 12));
+  const themes = (req.body?.themes && req.body.themes.length) ? req.body.themes : DEFAULT_THEMES;
+  res.json({ ok: true, started: count, note: "generating in background (~45s each)" });
+  (async () => {
+    let made = 0;
+    for (let i = 0; i < count; i++) {
+      try { const r = await runPodGen({ theme: themes[i % themes.length], style: i % 3 === 1 ? "text" : "design" }); if (r?.productId) made++; }
+      catch (e) { console.log("[batch]", e.message); }
+    }
+    await logAgent("AMARA", `Batch complete: ${made}/${count} designs created`, "success");
+  })();
+});
+
 console.log("[podgen] armed — POST /api/podgen/run (fal.ai gen + Claude-vision IP gate). AUTO_PUBLISH=" + AUTO_PUBLISH);
