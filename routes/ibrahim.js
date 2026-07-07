@@ -16,7 +16,7 @@ const APP_URL = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
 export const IBRAHIM_CONFIG = {
   auto_posting: true,   // PERSISTENT-ON (per CEO). Set false or POST /api/ibrahim/pause to hold. Scheduled posts publish automatically.
   phase: "2-auto-posting",
-  posts_per_day: 2,
+  posts_per_day: 4,   // launch cadence (safe spaced max)
   reels_per_day: 0,   // reels disabled until a video source is connected
   // Optimal posting times (EST → UTC)
   post_times_utc: ["14:00", "22:00"],   // 10am, 6pm EST
