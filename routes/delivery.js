@@ -97,6 +97,28 @@ export async function runDelivery() {
 
 // GET /api/delivery/status — config check
 deliveryRouter.get("/status", (req, res) => res.json({ resend_configured: !!RESEND_KEY, from: RESEND_FROM, poll: "every 5 min" }));
+// GET /api/delivery/domain-records (GATED) — full DNS records for domain verification
+deliveryRouter.get("/domain-records", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const list = await (await fetch("https://api.resend.com/domains", { headers: { "Authorization": `Bearer ${RESEND_KEY}` } })).json();
+    const dom = (list.data || []).find(d => /houseofjreym/i.test(d.name)) || (list.data || [])[0];
+    if (!dom) return res.status(404).json({ error: "no domain in Resend" });
+    const full = await (await fetch(`https://api.resend.com/domains/${dom.id}`, { headers: { "Authorization": `Bearer ${RESEND_KEY}` } })).json();
+    res.json({ id: dom.id, name: full.name, status: full.status, records: full.records });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// POST /api/delivery/verify-domain (GATED) — ask Resend to verify
+deliveryRouter.post("/verify-domain", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const list = await (await fetch("https://api.resend.com/domains", { headers: { "Authorization": `Bearer ${RESEND_KEY}` } })).json();
+    const dom = (list.data || []).find(d => /houseofjreym/i.test(d.name));
+    if (!dom) return res.status(404).json({ error: "no domain" });
+    const v = await (await fetch(`https://api.resend.com/domains/${dom.id}/verify`, { method: "POST", headers: { "Authorization": `Bearer ${RESEND_KEY}` } })).json();
+    res.json(v);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // POST /api/delivery/run (GATED) — manual sweep
 deliveryRouter.post("/run", async (req, res) => {
   if (!requireApproval(req, res)) return;
