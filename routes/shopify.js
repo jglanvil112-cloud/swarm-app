@@ -102,8 +102,20 @@ shopifyRouter.post("/inventory-limit", async (req, res) => {
     if (!variant_ids.length) return res.status(400).json({ error: "variant_ids required" });
     const locR = await fetch(`${shopifyBase(shop)}/locations.json`, { headers: shopifyHeaders(token) });
     const locJ = await locR.json();
-    const loc = (locJ.locations || [])[0];
-    if (!loc) return res.status(500).json({ error: "no location found" });
+    let loc = (locJ.locations || [])[0] || null;
+    if (!loc) {
+      // Fallback (token may lack read_locations): derive location from an existing inventory level
+      const v0 = await fetch(`${shopifyBase(shop)}/variants/${variant_ids[0]}.json?fields=id,inventory_item_id`, { headers: shopifyHeaders(token) });
+      const v0j = await v0.json();
+      const item0 = v0j.variant?.inventory_item_id;
+      if (item0) {
+        const lv = await fetch(`${shopifyBase(shop)}/inventory_levels.json?inventory_item_ids=${item0}`, { headers: shopifyHeaders(token) });
+        const lvj = await lv.json();
+        const lid = lvj.inventory_levels?.[0]?.location_id;
+        if (lid) loc = { id: lid, name: "derived" };
+      }
+    }
+    if (!loc) return res.status(500).json({ error: "no location found (scope?)" });
     const results = [];
     for (const vid of variant_ids) {
       try {
