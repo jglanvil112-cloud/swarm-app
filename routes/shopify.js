@@ -75,7 +75,7 @@ shopifyRouter.post("/create-product", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PUT /api/shopify/variants/:id (GATED) — update variant pricing only (price, compare_at_price)
+// PUT /api/shopify/variants/:id (GATED) — update variant pricing/inventory settings
 shopifyRouter.put("/variants/:id", async (req, res) => {
   if (!requireApproval(req, res)) return;
   try {
@@ -83,10 +83,45 @@ shopifyRouter.put("/variants/:id", async (req, res) => {
     const v = { id: Number(req.params.id) };
     if (req.body?.price !== undefined) v.price = String(req.body.price);
     if (req.body?.compare_at_price !== undefined) v.compare_at_price = req.body.compare_at_price === null ? null : String(req.body.compare_at_price);
+    if (req.body?.inventory_management !== undefined) v.inventory_management = req.body.inventory_management; // "shopify" | null
+    if (req.body?.inventory_policy !== undefined) v.inventory_policy = req.body.inventory_policy;             // "deny" | "continue"
     const r = await fetch(`${shopifyBase(shop)}/variants/${req.params.id}.json`, { method: "PUT", headers: shopifyHeaders(token), body: JSON.stringify({ variant: v }) });
     const txt = await r.text();
     if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 300) });
     res.json(JSON.parse(txt));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shopify/inventory-limit (GATED) — cap stock for exclusivity.
+// body { variant_ids: [..], qty: 250 }  → enables tracking, sets available=qty at primary location.
+shopifyRouter.post("/inventory-limit", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const { variant_ids = [], qty = 250 } = req.body || {};
+    if (!variant_ids.length) return res.status(400).json({ error: "variant_ids required" });
+    const locR = await fetch(`${shopifyBase(shop)}/locations.json`, { headers: shopifyHeaders(token) });
+    const locJ = await locR.json();
+    const loc = (locJ.locations || [])[0];
+    if (!loc) return res.status(500).json({ error: "no location found" });
+    const results = [];
+    for (const vid of variant_ids) {
+      try {
+        // 1) enable tracking + hard-stop at zero
+        const uv = await fetch(`${shopifyBase(shop)}/variants/${vid}.json`, { method: "PUT", headers: shopifyHeaders(token),
+          body: JSON.stringify({ variant: { id: Number(vid), inventory_management: "shopify", inventory_policy: "deny" } }) });
+        const uvj = await uv.json();
+        const invItem = uvj.variant?.inventory_item_id;
+        if (!invItem) { results.push({ vid, ok: false, step: "variant" }); continue; }
+        // 2) set available
+        const setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token),
+          body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available: qty }) });
+        results.push({ vid, ok: setR.ok });
+      } catch (e) { results.push({ vid, ok: false, err: e.message.slice(0, 60) }); }
+    }
+    const okCount = results.filter(x => x.ok).length;
+    await logAgent("KWAME", `Exclusivity cap: ${okCount}/${variant_ids.length} variants limited to ${qty}`, "success");
+    res.json({ ok: true, location: loc.name, capped: okCount, of: variant_ids.length, results });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
