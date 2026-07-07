@@ -18,7 +18,8 @@ export const deliveryRouter = express.Router();
 
 const APPROVAL_SECRET = process.env.APPROVAL_SECRET || "";
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
-const RESEND_FROM = process.env.RESEND_FROM || "House of Jreym <onboarding@resend.dev>";
+const RESEND_FROM = process.env.RESEND_FROM || "House of Jreym <downloads@houseofjreym.store>";
+const RESEND_FALLBACK_FROM = "House of Jreym <onboarding@resend.dev>";
 const DIGITAL_MATCH = /\(HOJ-|Mary Jane Flats|Low Top Sneaker/i;
 
 function requireApproval(req, res) {
@@ -52,14 +53,21 @@ async function productDownloadLinks(shop, token, productIds) {
 
 async function sendResend(to, subject, html) {
   if (!RESEND_KEY) throw new Error("RESEND_API_KEY missing");
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html })
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error("Resend " + r.status + ": " + JSON.stringify(j).slice(0, 200));
-  return j.id;
+  async function attempt(from) {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject, html })
+    });
+    const j = await r.json();
+    return { ok: r.ok, status: r.status, j };
+  }
+  let res = await attempt(RESEND_FROM);
+  if (!res.ok && /domain is not verified|not verified|validation_error/i.test(JSON.stringify(res.j))) {
+    res = await attempt(RESEND_FALLBACK_FROM); // self-heals: domain sender takes over once verified
+  }
+  if (!res.ok) throw new Error("Resend " + res.status + ": " + JSON.stringify(res.j).slice(0, 200));
+  return res.j.id;
 }
 
 export async function runDelivery() {
