@@ -104,14 +104,39 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     images: [{ src: imageUrl }],
     variants: [{ price: "10.99", requires_shipping: false, taxable: true, inventory_management: null }]
   };
-  let productId = null;
+  let productId = null, variantId = null, handle = null;
   try {
     const cr = await fetch(`${APP_URL}/api/shopify/create-product`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-approval-key": APPROVAL_SECRET },
       body: JSON.stringify({ product })
     });
-    const crj = await cr.json(); productId = crj.id || null;
+    const crj = await cr.json(); productId = crj.id || null; variantId = crj.variant_id || null; handle = crj.handle || null;
   } catch (e) { /* logged below */ }
+
+  // ── Closed loop 1: every new design is a limited edition of 250, automatically
+  if (variantId) {
+    try {
+      await fetch(`${APP_URL}/api/shopify/inventory-cap`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-approval-key": APPROVAL_SECRET },
+        body: JSON.stringify({ variant_ids: [variantId], qty: 250 })
+      });
+    } catch (e) { await logAgent("KWAME", `Auto-cap failed for ${uid}: ${e.message.slice(0, 80)}`, "warn"); }
+  }
+
+  // ── Closed loop 2: auto-schedule a buy-link post for the new design (IG+FB via IBRAHIM, respects 4/day cap)
+  if (pass && productId) {
+    try {
+      const when = new Date(Date.now() + 3 * 3600e3); when.setUTCMinutes(0, 0, 0);
+      const link = handle ? `houseofjreym.store/products/${handle}` : "houseofjreym.store";
+      const caption = `NEW DROP 🔥 "${theme}" — original Afrocentric wall art, instant digital download. Limited edition of 250 (${uid}). Launch price $8.79 (was $10.99). 🛍 ${link} ✊🏾✨ #HouseOfJreym #AfrocentricArt #BlackArt #DigitalDownload #LimitedEdition`;
+      await supabase.from("social_posts").insert({
+        platform: "all", status: "scheduled", caption, media_urls: [imageUrl], media_type: "IMAGE",
+        scheduled_for: when.toISOString(), keyword: "autodrop-" + uid,
+        meta: { pipeline: "podgen-autopost", product_id: productId, uid }
+      });
+      await logAgent("IBRAHIM", `Auto-scheduled buy-link post for ${uid} @ ${when.toISOString()}`, "info");
+    } catch (e) { await logAgent("IBRAHIM", `Auto-post schedule failed for ${uid}: ${e.message.slice(0, 80)}`, "warn"); }
+  }
 
   await logAgent("AMARA", `PODgen ${uid}: ${pass ? "PASSED gate" : "HELD [" + gate.reason + "]"} → ${status} product ${productId || "(create failed)"}`, pass ? "success" : "warn");
   return { ok: true, uid, gate, status, productId, imageUrl };

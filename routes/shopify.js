@@ -71,7 +71,7 @@ shopifyRouter.post("/create-product", async (req, res) => {
     if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 400) });
     const j = JSON.parse(txt);
     await logAgent("KWAME", `Created product: ${p.title || "(untitled)"}`, "success");
-    res.json({ ok: true, id: j.product?.id, handle: j.product?.handle, images: (j.product?.images || []).length });
+    res.json({ ok: true, id: j.product?.id, handle: j.product?.handle, variant_id: j.product?.variants?.[0]?.id, images: (j.product?.images || []).length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
