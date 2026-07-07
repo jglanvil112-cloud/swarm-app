@@ -34,6 +34,8 @@ app.use(cors({
 }));
 app.options("*", cors());
 app.use(express.json());
+// Root = SWARM Command Room v7 (also what the embedded Shopify app shows)
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "swarm_shop_os_v7.html")));
 app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.static(path.join(__dirname, "public")));
 

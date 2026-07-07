@@ -291,6 +291,30 @@ shopifyRouter.get("/pages", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT /api/shopify/pages/:id (GATED) — update a page's title/body/published
+shopifyRouter.put("/pages/:id", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const page = { id: Number(req.params.id) };
+    for (const f of ["title", "body_html", "published"]) if (req.body?.[f] !== undefined) page[f] = req.body[f];
+    const r = await fetch(`${shopifyBase(shop)}/pages/${req.params.id}.json`, { method: "PUT", headers: shopifyHeaders(token), body: JSON.stringify({ page }) });
+    const txt = await r.text();
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 250) });
+    res.json({ ok: true, id: page.id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// DELETE /api/shopify/pages/:id (GATED)
+shopifyRouter.delete("/pages/:id", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const r = await fetch(`${shopifyBase(shop)}/pages/${req.params.id}.json`, { method: "DELETE", headers: shopifyHeaders(token) });
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}` });
+    res.json({ ok: true, deleted: Number(req.params.id) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/shopify/pages — create a content page (GATED). For policy / about pages.
 shopifyRouter.post("/pages", async (req, res) => {
   if (!requireApproval(req, res)) return;
