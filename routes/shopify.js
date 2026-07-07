@@ -8,7 +8,7 @@ export const shopifyRouter = express.Router();
 const SHOPIFY_API_KEY    = process.env.SHOPIFY_CLIENT_ID     || "";
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_CLIENT_SECRET || "";
 const APP_URL            = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
-const SHOPIFY_SCOPES     = "read_products,write_products,read_orders,write_orders,read_inventory,write_inventory,read_customers,write_customers,read_content,write_content";
+const SHOPIFY_SCOPES     = "read_products,write_products,read_orders,write_orders,read_inventory,write_inventory,read_customers,write_customers,read_content,write_content,read_discounts,write_discounts,read_price_rules,write_price_rules";
 
 async function getStoredToken() {
   // Robust read: handle 0, 1, or duplicate shopify rows. The OAuth upsert uses
@@ -72,6 +72,33 @@ shopifyRouter.post("/create-product", async (req, res) => {
     const j = JSON.parse(txt);
     await logAgent("KWAME", `Created product: ${p.title || "(untitled)"}`, "success");
     res.json({ ok: true, id: j.product?.id, handle: j.product?.handle, images: (j.product?.images || []).length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shopify/discount (GATED) — create a storewide % discount code. body { code, percent, ends_at? }
+shopifyRouter.post("/discount", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const { code = "JREYM20", percent = 20, ends_at = null } = req.body || {};
+    const pr = await fetch(`${shopifyBase(shop)}/price_rules.json`, {
+      method: "POST", headers: shopifyHeaders(token),
+      body: JSON.stringify({ price_rule: {
+        title: code, target_type: "line_item", target_selection: "all",
+        allocation_method: "across", value_type: "percentage", value: `-${percent}.0`,
+        customer_selection: "all", starts_at: new Date().toISOString(), ends_at
+      }})
+    });
+    const prj = await pr.json();
+    if (!pr.ok) return res.status(pr.status).json({ error: "price_rule", detail: JSON.stringify(prj).slice(0, 300) });
+    const dc = await fetch(`${shopifyBase(shop)}/price_rules/${prj.price_rule.id}/discount_codes.json`, {
+      method: "POST", headers: shopifyHeaders(token),
+      body: JSON.stringify({ discount_code: { code } })
+    });
+    const dcj = await dc.json();
+    if (!dc.ok) return res.status(dc.status).json({ error: "discount_code", detail: JSON.stringify(dcj).slice(0, 300) });
+    await logAgent("ZARA", `Discount live: ${code} (${percent}% storewide)`, "success");
+    res.json({ ok: true, code, percent, price_rule_id: prj.price_rule.id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
