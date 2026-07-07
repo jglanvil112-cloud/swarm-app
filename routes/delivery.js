@@ -11,6 +11,7 @@
 
 import express from "express";
 import cron from "node-cron";
+import dns from "node:dns/promises";
 import { supabase, logAgent } from "../lib/supabase.js";
 
 export const deliveryRouter = express.Router();
@@ -94,6 +95,17 @@ export async function runDelivery() {
   }
   return { ok: true, checked: orders.length, sent, results };
 }
+
+// GET /api/delivery/dns-check — diagnose domain DNS (ns, txt, mx for verification)
+deliveryRouter.get("/dns-check", async (req, res) => {
+  const name = (req.query.name || "houseofjreym.store").toString();
+  const out = {};
+  try { out.ns = await dns.resolveNs(name); } catch (e) { out.ns = e.code; }
+  try { out.dkim_txt = await dns.resolveTxt(`resend._domainkey.${name}`); } catch (e) { out.dkim_txt = e.code; }
+  try { out.send_txt = await dns.resolveTxt(`send.${name}`); } catch (e) { out.send_txt = e.code; }
+  try { out.send_mx = await dns.resolveMx(`send.${name}`); } catch (e) { out.send_mx = e.code; }
+  res.json(out);
+});
 
 // GET /api/delivery/status — config check
 deliveryRouter.get("/status", (req, res) => res.json({ resend_configured: !!RESEND_KEY, from: RESEND_FROM, poll: "every 5 min" }));
