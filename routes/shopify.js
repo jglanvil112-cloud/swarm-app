@@ -164,6 +164,78 @@ shopifyRouter.post("/discount", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/shopify/inventory-limit (GATED) — cap stock for exclusivity.
+// body { variant_ids: [..], qty: 250 }  → enables tracking, sets available=qty at primary location.
+shopifyRouter.post("/inventory-cap", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const { variant_ids = [], qty = 250 } = req.body || {};
+    if (!variant_ids.length) return res.status(400).json({ error: "variant_ids required" });
+    const locR = await fetch(`${shopifyBase(shop)}/locations.json`, { headers: shopifyHeaders(token) });
+    const locJ = await locR.json();
+    let loc = (locJ.locations || [])[0] || null;
+    if (!loc) {
+      // Fallback (token may lack read_locations): derive location from an existing inventory level
+      const v0 = await fetch(`${shopifyBase(shop)}/variants/${variant_ids[0]}.json?fields=id,inventory_item_id`, { headers: shopifyHeaders(token) });
+      const v0j = await v0.json();
+      const item0 = v0j.variant?.inventory_item_id;
+      if (item0) {
+        const lv = await fetch(`${shopifyBase(shop)}/inventory_levels.json?inventory_item_ids=${item0}`, { headers: shopifyHeaders(token) });
+        const lvj = await lv.json();
+        const lid = lvj.inventory_levels?.[0]?.location_id;
+        if (lid) loc = { id: lid, name: "derived" };
+      }
+    }
+    if (!loc) return res.status(500).json({ error: "no location found (v2)" });
+    const results = [];
+    for (const vid of variant_ids) {
+      try {
+        // 1) enable tracking + hard-stop at zero
+        const uv = await fetch(`${shopifyBase(shop)}/variants/${vid}.json`, { method: "PUT", headers: shopifyHeaders(token),
+          body: JSON.stringify({ variant: { id: Number(vid), inventory_management: "shopify", inventory_policy: "deny" } }) });
+        const uvj = await uv.json();
+        const invItem = uvj.variant?.inventory_item_id;
+        if (!invItem) { results.push({ vid, ok: false, step: "variant" }); continue; }
+        // 2) set available
+        const setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token),
+          body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available: qty }) });
+        results.push({ vid, ok: setR.ok });
+      } catch (e) { results.push({ vid, ok: false, err: e.message.slice(0, 60) }); }
+    }
+    const okCount = results.filter(x => x.ok).length;
+    await logAgent("KWAME", `Exclusivity cap: ${okCount}/${variant_ids.length} variants limited to ${qty}`, "success");
+    res.json({ ok: true, location: loc.name, capped: okCount, of: variant_ids.length, results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shopify/discount (GATED) — create a storewide % discount code. body { code, percent, ends_at? }
+shopifyRouter.post("/discount", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const { code = "JREYM20", percent = 20, ends_at = null } = req.body || {};
+    const pr = await fetch(`${shopifyBase(shop)}/price_rules.json`, {
+      method: "POST", headers: shopifyHeaders(token),
+      body: JSON.stringify({ price_rule: {
+        title: code, target_type: "line_item", target_selection: "all",
+        allocation_method: "across", value_type: "percentage", value: `-${percent}.0`,
+        customer_selection: "all", starts_at: new Date().toISOString(), ends_at
+      }})
+    });
+    const prj = await pr.json();
+    if (!pr.ok) return res.status(pr.status).json({ error: "price_rule", detail: JSON.stringify(prj).slice(0, 300) });
+    const dc = await fetch(`${shopifyBase(shop)}/price_rules/${prj.price_rule.id}/discount_codes.json`, {
+      method: "POST", headers: shopifyHeaders(token),
+      body: JSON.stringify({ discount_code: { code } })
+    });
+    const dcj = await dc.json();
+    if (!dc.ok) return res.status(dc.status).json({ error: "discount_code", detail: JSON.stringify(dcj).slice(0, 300) });
+    await logAgent("ZARA", `Discount live: ${code} (${percent}% storewide)`, "success");
+    res.json({ ok: true, code, percent, price_rule_id: prj.price_rule.id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── POD auto-filing: tag Printify products "originals" + rebrand vendor ──────
 // Runs on a cron so every new POD product self-files into the "House of Jreym
 // Originals" smart collection (condition: tag = originals). Uses product scope,
