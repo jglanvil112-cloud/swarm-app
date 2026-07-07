@@ -75,6 +75,21 @@ shopifyRouter.post("/create-product", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT /api/shopify/variants/:id (GATED) — update variant pricing only (price, compare_at_price)
+shopifyRouter.put("/variants/:id", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const { token, shop } = await resolveShopAuth();
+    const v = { id: Number(req.params.id) };
+    if (req.body?.price !== undefined) v.price = String(req.body.price);
+    if (req.body?.compare_at_price !== undefined) v.compare_at_price = req.body.compare_at_price === null ? null : String(req.body.compare_at_price);
+    const r = await fetch(`${shopifyBase(shop)}/variants/${req.params.id}.json`, { method: "PUT", headers: shopifyHeaders(token), body: JSON.stringify({ variant: v }) });
+    const txt = await r.text();
+    if (!r.ok) return res.status(r.status).json({ error: `Shopify ${r.status}`, detail: txt.slice(0, 300) });
+    res.json(JSON.parse(txt));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/shopify/discount (GATED) — create a storewide % discount code. body { code, percent, ends_at? }
 shopifyRouter.post("/discount", async (req, res) => {
   if (!requireApproval(req, res)) return;
