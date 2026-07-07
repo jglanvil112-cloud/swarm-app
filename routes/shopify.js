@@ -125,10 +125,16 @@ shopifyRouter.post("/inventory-limit", async (req, res) => {
         const uvj = await uv.json();
         const invItem = uvj.variant?.inventory_item_id;
         if (!invItem) { results.push({ vid, ok: false, step: "variant" }); continue; }
-        // 2) set available
-        const setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token),
-          body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available: qty }) });
-        results.push({ vid, ok: setR.ok });
+        // 2) set available (connect first if never stocked at this location)
+        const setBody = JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available: qty });
+        let setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token), body: setBody });
+        if (!setR.ok) {
+          await fetch(`${shopifyBase(shop)}/inventory_levels/connect.json`, { method: "POST", headers: shopifyHeaders(token),
+            body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem }) });
+          setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token), body: setBody });
+        }
+        const setTxt = setR.ok ? "" : (await setR.text()).slice(0, 120);
+        results.push({ vid, ok: setR.ok, detail: setTxt || undefined });
       } catch (e) { results.push({ vid, ok: false, err: e.message.slice(0, 60) }); }
     }
     const okCount = results.filter(x => x.ok).length;
@@ -197,10 +203,16 @@ shopifyRouter.post("/inventory-cap", async (req, res) => {
         const uvj = await uv.json();
         const invItem = uvj.variant?.inventory_item_id;
         if (!invItem) { results.push({ vid, ok: false, step: "variant" }); continue; }
-        // 2) set available
-        const setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token),
-          body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available: qty }) });
-        results.push({ vid, ok: setR.ok });
+        // 2) set available (connect first if never stocked at this location)
+        const setBody = JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available: qty });
+        let setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token), body: setBody });
+        if (!setR.ok) {
+          await fetch(`${shopifyBase(shop)}/inventory_levels/connect.json`, { method: "POST", headers: shopifyHeaders(token),
+            body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem }) });
+          setR = await fetch(`${shopifyBase(shop)}/inventory_levels/set.json`, { method: "POST", headers: shopifyHeaders(token), body: setBody });
+        }
+        const setTxt = setR.ok ? "" : (await setR.text()).slice(0, 120);
+        results.push({ vid, ok: setR.ok, detail: setTxt || undefined });
       } catch (e) { results.push({ vid, ok: false, err: e.message.slice(0, 60) }); }
     }
     const okCount = results.filter(x => x.ok).length;
