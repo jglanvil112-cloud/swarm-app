@@ -874,14 +874,14 @@ ibrahimRouter.get("/test-publish-one", async (req, res) => {
     return res.status(403).json({ error: "forbidden" });
   }
   try {
-    const { data: posts } = await supabase
+    let q = supabase
       .from("social_posts")
       .select("*")
-      .eq("platform", "instagram")
+      .in("platform", ["instagram", "all"])
       .eq("status", "scheduled")
-      .in("media_type", ["IMAGE", "image"])
-      .order("scheduled_for", { ascending: true })
-      .limit(1);
+      .in("media_type", ["IMAGE", "image"]);
+    q = req.query.id ? q.eq("id", req.query.id) : q.order("scheduled_for", { ascending: true });
+    const { data: posts } = await q.limit(1);
 
     const post = posts?.[0];
     if (!post) return res.json({ ok: false, error: "no scheduled IMAGE post found" });
