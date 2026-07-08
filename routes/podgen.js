@@ -167,3 +167,42 @@ podgenRouter.post("/batch", async (req, res) => {
 });
 
 console.log("[podgen] armed — POST /api/podgen/run (fal.ai gen + Claude-vision IP gate). AUTO_PUBLISH=" + AUTO_PUBLISH);
+
+// ── Daily auto-drop: trend-driven art generation (CEO directive: full-auto) ──────
+// 08:30 UTC daily (right after NANA's 08:00 trend scout). Pulls NANA's freshest
+// trend keywords as themes; falls back to DEFAULT_THEMES rotation. Each run flows
+// the full closed loop: fal.ai gen → Claude-vision IP gate → Shopify publish
+// (250-unit cap) → auto-scheduled IG/FB buy-link post (respects 4/day cap).
+// Disable with PODGEN_DAILY=false. Volume via PODGEN_DAILY_COUNT (default 3, max 6).
+import cron from "node-cron";
+const DAILY_ON = process.env.PODGEN_DAILY !== "false";
+const DAILY_COUNT = Math.min(6, Math.max(1, parseInt(process.env.PODGEN_DAILY_COUNT || "3", 10)));
+
+async function latestTrendThemes(n) {
+  try {
+    const { data } = await supabase.from("tasks")
+      .select("result, updated_at")
+      .eq("task_type", "trend_research").eq("status", "completed")
+      .order("updated_at", { ascending: false }).limit(1);
+    const trends = data?.[0]?.result?.trends || [];
+    const kws = trends.map(t => (typeof t === "string" ? t : t?.keyword))
+      .filter(k => typeof k === "string" && k.trim());
+    if (kws.length) return kws.slice(0, n);
+  } catch (e) { console.log("[podgen daily] trend fetch failed:", e.message); }
+  const day = Math.floor(Date.now() / 86400000);
+  return Array.from({ length: n }, (_, i) => DEFAULT_THEMES[(day * n + i) % DEFAULT_THEMES.length]);
+}
+
+if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
+  try {
+    const themes = await latestTrendThemes(DAILY_COUNT);
+    await logAgent("NANA", `Daily auto-drop starting: ${themes.join(" | ")}`, "info");
+    let made = 0;
+    for (let i = 0; i < themes.length; i++) {
+      try { const r = await runPodGen({ theme: themes[i], style: i % 3 === 1 ? "text" : "design" }); if (r?.productId) made++; }
+      catch (e) { console.log("[podgen daily]", e.message); }
+    }
+    await logAgent("AMARA", `Daily auto-drop complete: ${made}/${themes.length} live`, made ? "success" : "warn");
+  } catch (e) { console.log("[podgen daily] fatal:", e.message); }
+});
+console.log("[podgen] daily auto-drop " + (DAILY_ON ? ("ON — 08:30 UTC, " + DAILY_COUNT + "/day") : "OFF"));
