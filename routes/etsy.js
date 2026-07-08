@@ -1908,13 +1908,96 @@ etsyRouter.get("/archive-picture-only",async(req,res)=>{
   try{res.json(await archivePictureOnly({dry:req.query.dry==="true",before:req.query.before||"2026-07-01",limit:parseInt(req.query.limit||"8",10)}));}
   catch(e){res.status(500).json({error:e.message});}
 });
-// Zero-touch drip: every 30 min, check 8 candidates; self-terminates when none remain
-cron2.schedule("*/30 * * * *",async()=>{
+// Zero-touch drip: every 30 min (6-field pattern — 5-field parsed sub-minute on node-cron v4
+// and caused a runaway drain + quota burn on 7/8), check 8 candidates; self-terminates.
+// Kill switch: set scheduler_state.archive_picture_only_v2 last_status='paused' to stop it.
+cron2.schedule("0 */30 * * * *",async()=>{
   if(_picSweepDone)return;
   try{
+    const{data:g}=await supabase.from("scheduler_state").select("last_status").eq("job_name","archive_picture_only_v2").limit(1);
+    if(["paused","done"].includes(g?.[0]?.last_status)){_picSweepDone=(g[0].last_status==="done");return;}
     const r=await archivePictureOnly({dry:false,limit:8});
-    if(r.error){console.log("[ARCHIVE-PIC]",r.error);return;}
+    if(r.error){if(!/429/.test(r.error))console.log("[ARCHIVE-PIC]",r.error);return;} // 429 = quota spent, wait for reset
     console.log("[ARCHIVE-PIC] tick: checked "+r.batch_checked+", archived "+r.archived.filter(a=>a.ok===true).length+", remaining "+r.candidates_remaining);
     if(r.candidates_remaining===0&&r.batch_checked===0){_picSweepDone=true;await updateSchedulerState("archive_picture_only_v2","done");await logAgent("AISHA","Picture-only archive sweep COMPLETE — no wordless pre-July listings remain active","success");}
   }catch(e){console.error("[ARCHIVE-PIC]",e.message);}
 });
+
+
+// ── Title clarity drip (CEO 7/8: "make titles clearer to buyers") ────────────
+// Every 20 min: rewrite 3 active listing titles via Claude into buyer-clear format.
+// Skips already-polished (agent_outputs output_type=title_polish). Quota-aware: idles on 429.
+async function titleClarityTick(n=3){
+  const K=process.env.ANTHROPIC_API_KEY||"";if(!K)return{skip:"no key"};
+  const t=await getEtsyToken();if(!t)return{skip:"no etsy auth"};
+  const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100",{headers:authH(t)});
+  if(lr.status===429)return{skip:"429"};if(!lr.ok)return{skip:"etsy "+lr.status};
+  const listings=(await lr.json()).results||[];
+  const{data:done}=await supabase.from("agent_outputs").select("etsy_title").eq("output_type","title_polish");
+  const doneIds=new Set((done||[]).map(d=>d.etsy_title));
+  const todo=listings.filter(l=>!doneIds.has(String(l.listing_id))).slice(0,n);
+  let updated=0;
+  for(const l of todo){
+    try{
+      const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":K,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:120,messages:[{role:"user",content:`Rewrite this Etsy listing title so a buyer instantly understands WHAT it is, the FORMAT, and the USE. Keep strong keywords near the front, natural language (no keyword-stuffing pipes beyond 2), max 130 chars. It is a digital download wall-art print. Current title: "${l.title}". Reply with ONLY the new title, nothing else.`}]})});
+      const j=await r.json();const nt=((j.content||[]).map(b=>b.text||"").join("")).trim().replace(/^"|"$/g,"").slice(0,138);
+      if(nt.length<20)continue;
+      const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id,{method:"PATCH",headers:authH(t),body:JSON.stringify({title:nt})});
+      if(pr.status===429)return{skip:"429",updated};
+      if(pr.ok){updated++;await saveAgentOutput({taskId:null,agent:"AISHA",outputType:"title_polish",etsyTitle:String(l.listing_id),confidence:1});}
+    }catch(e){/* next */}
+    await new Promise(r=>setTimeout(r,600));
+  }
+  if(updated)await logAgent("AISHA","Title clarity pass: "+updated+" listing title(s) rewritten for buyer clarity","success");
+  return{updated,remaining:listings.length-doneIds.size-updated};
+}
+cron2.schedule("0 */20 * * * *",()=>{titleClarityTick(3).catch(()=>{});});
+
+// ── Photo enrichment drip (CEO 7/8: "2+ photos per listing") ─────────────────
+// Every 25 min: for 2 active listings with <3 photos, add (a) framed/matted version
+// and (b) detail close-up crop — both derived from the primary image with sharp.
+async function uploadListingImage(t,lid,buf,fname,rank){
+  const boundary="----hoj"+Date.now().toString(36);
+  const head=Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${fname}"\r\nContent-Type: image/jpeg\r\n\r\n`);
+  const tail=Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="rank"\r\n\r\n${rank}\r\n--${boundary}--\r\n`);
+  const body=Buffer.concat([head,buf,tail]);
+  return fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{method:"POST",headers:{...authH(t),"Content-Type":"multipart/form-data; boundary="+boundary},body});
+}
+async function photoEnrichTick(n=2){
+  const t=await getEtsyToken();if(!t)return{skip:"no etsy auth"};
+  const sharp=(await import("sharp")).default;
+  const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100",{headers:authH(t)});
+  if(lr.status===429)return{skip:"429"};if(!lr.ok)return{skip:"etsy "+lr.status};
+  const listings=(await lr.json()).results||[];
+  const{data:done}=await supabase.from("agent_outputs").select("etsy_title").eq("output_type","photo_enrich");
+  const doneIds=new Set((done||[]).map(d=>d.etsy_title));
+  let enriched=0;
+  for(const l of listings.filter(x=>!doneIds.has(String(x.listing_id)))){
+    if(enriched>=n)break;
+    try{
+      const ir=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id+"/images",{headers:authH(t)});
+      if(ir.status===429)return{skip:"429",enriched};if(!ir.ok)continue;
+      const imgs=(await ir.json()).results||[];
+      if(imgs.length>=3){await saveAgentOutput({taskId:null,agent:"AISHA",outputType:"photo_enrich",etsyTitle:String(l.listing_id),confidence:1});continue;}
+      const src=imgs[0]?.url_fullxfull||imgs[0]?.url_570xN;if(!src)continue;
+      const buf=Buffer.from(await (await fetch(src)).arrayBuffer());
+      const img=sharp(buf);const meta=await img.metadata();
+      // (a) matted + framed presentation shot
+      const framed=await sharp(buf).resize(1400,1400,{fit:"inside"})
+        .extend({top:90,bottom:90,left:90,right:90,background:"#f6f1e7"})
+        .extend({top:26,bottom:26,left:26,right:26,background:"#1a1208"})
+        .jpeg({quality:88}).toBuffer();
+      // (b) detail close-up: center 55% crop
+      const w=meta.width||1000,h=meta.height||1000,cw=Math.floor(w*0.55),ch=Math.floor(h*0.55);
+      const detail=await sharp(buf).extract({left:Math.floor((w-cw)/2),top:Math.floor((h-ch)/2),width:cw,height:ch}).resize(1400,null,{fit:"inside"}).jpeg({quality:88}).toBuffer();
+      const u1=await uploadListingImage(t,l.listing_id,framed,"framed-"+l.listing_id+".jpg",imgs.length+1);
+      if(u1.status===429)return{skip:"429",enriched};
+      const u2=await uploadListingImage(t,l.listing_id,detail,"detail-"+l.listing_id+".jpg",imgs.length+2);
+      if(u1.ok||u2.ok){enriched++;await saveAgentOutput({taskId:null,agent:"AISHA",outputType:"photo_enrich",etsyTitle:String(l.listing_id),confidence:1});}
+    }catch(e){/* next listing */}
+    await new Promise(r=>setTimeout(r,800));
+  }
+  if(enriched)await logAgent("AISHA","Photo enrichment: added framed + detail shots to "+enriched+" listing(s)","success");
+  return{enriched};
+}
+cron2.schedule("0 */25 * * * *",()=>{photoEnrichTick(2).catch(()=>{});});

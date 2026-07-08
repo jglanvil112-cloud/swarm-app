@@ -96,12 +96,29 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
   const pass = !gate.risky;
   const status = (pass && AUTO_PUBLISH) ? "active" : "draft";
 
+  // ── 3D + Holographic editions (CEO 7/8): every clean drop ships 3 versions ──
+  const versionImages = [{ src: imageUrl }];
+  const versionsIncluded = ["Classic"];
+  if (pass) {
+    const variants3 = [
+      { label: "3D", p: prompt + " Rendered as a volumetric 3D sculptural relief with realistic depth, dimensional shadows, and studio lighting." },
+      { label: "Holographic", p: prompt + " Holographic iridescent chrome finish, prismatic rainbow light refractions, futuristic luminous sheen." }
+    ];
+    for (const v of variants3) {
+      try {
+        const vUrl = await falGenerate(MODELS.art, v.p);
+        const vGate = await ipVisionGate(vUrl);
+        if (!vGate.risky) { versionImages.push({ src: vUrl }); versionsIncluded.push(v.label); }
+      } catch (e) { /* version optional — base still ships */ }
+    }
+  }
+
   const product = {
     title: `Afrocentric ${theme} — Original Digital Wall Art (${uid})`,
-    body_html: `<p>Original Afrocentric ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
+    body_html: `<p>Original Afrocentric ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong></p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
     vendor: "House of Jreym", product_type: "Digital Wall Art", status,
-    tags: `originals, afrocentric, digital download, ${theme}, ${uid}`,
-    images: [{ src: imageUrl }],
+    tags: `originals, afrocentric, digital download, 3d, holographic, ${theme}, ${uid}`,
+    images: versionImages,
     variants: [{ price: "10.99", requires_shipping: false, taxable: true, inventory_management: null }]
   };
   let productId = null, variantId = null, handle = null;

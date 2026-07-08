@@ -44,8 +44,10 @@ async function productDownloadLinks(shop, token, productIds) {
     try {
       const r = await fetch(`${base(shop)}/products/${id}.json?fields=id,title,image,images`, { headers: hdrs(token) });
       const j = await r.json();
-      const src = j.product?.image?.src || j.product?.images?.[0]?.src;
-      if (src) links[id] = { title: j.product.title, url: src };
+      const labels = ["Classic", "3D Edition", "Holographic Edition"];
+      const files = (j.product?.images || []).slice(0, 3).map((im, i) => ({ label: labels[i] || `Version ${i + 1}`, url: im.src }));
+      if (!files.length && j.product?.image?.src) files.push({ label: "Classic", url: j.product.image.src });
+      if (files.length) links[id] = { title: j.product.title, url: files[0].url, files };
     } catch (e) { /* skip */ }
   }
   return links;
@@ -88,7 +90,7 @@ export async function runDelivery() {
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111">
         <h2 style="letter-spacing:.08em">HOUSE OF JREYM</h2>
         <p>Thank you for your order <b>${o.name}</b>! Your digital art is ready — download links below (save the full-size file):</p>
-        ${items.map(it => `<p style="margin:14px 0"><b>${it.title.split("—")[0].trim()}</b><br/><a href="${it.url}" style="color:#1a6fba">⬇ Download full-resolution file</a></p>`).join("")}
+        ${items.map(it => `<p style="margin:14px 0"><b>${it.title.split("—")[0].trim()}</b><br/>${(it.files && it.files.length ? it.files : [{ label: "Classic", url: it.url }]).map(f => `<a href="${f.url}" style="color:#1a6fba">⬇ Download ${f.label} (full-resolution)</a>`).join("<br/>")}</p>`).join("")}
         <p style="font-size:12px;color:#666">For personal use only — may not be resold or redistributed. Questions? Just reply to this email.</p>
       </div>`;
     try {
