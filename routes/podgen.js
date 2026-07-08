@@ -88,7 +88,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
   const uid = ("HOJ-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6)).toUpperCase();
   if (IP_BLOCK.some(t => theme.toLowerCase().includes(t))) return { ok: false, reason: "theme tripped IP blocklist", uid };
   const model = MODELS[style] || MODELS.design;
-  const prompt = `Original Afrocentric ${theme} wall-art design for the brand House of Jreym. Bold, culturally rooted, high-contrast, clean print-ready composition. Absolutely no brand logos, trademarks, copyrighted characters, or real people — 100% original artwork. PURE IMAGERY ONLY: no words, letters, numbers, text, or typography anywhere in the design.`;
+  const prompt = `Original Afrocentric ${theme} wall-art design. Bold, culturally rooted, high-contrast, clean print-ready composition, museum-quality digital art. Pure imagery with absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere in the image. No brand names or logos, no trademarks, no copyrighted characters, no real people — 100% original artwork.`;
   if (dry) return { ok: true, dry: true, uid, model, prompt };
 
   const imageUrl = await falGenerate(model, prompt);
