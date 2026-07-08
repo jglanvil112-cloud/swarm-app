@@ -1783,3 +1783,30 @@ export async function generateMissingFormats(){
   }catch(e){return {error:e.message};}
 }
 etsyRouter.get("/generate-missing-run",async(req,res)=>{if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"});res.json(await generateMissingFormats());});
+
+// ── Archive words-only listings (CEO: keep picture art, retire quote/typography posts) ──
+// GET/POST /api/etsy/archive-text-only?key=APPROVAL_SECRET[&dry=false]
+// dry (default true) = report matches only. dry=false = set state:"inactive" (reversible in Shop Manager).
+const TEXT_ONLY_RX=/\b(quote|quotes|affirmation|affirmations|typography|typographic|lettering|saying|sayings|mantra|word art|wording)\b/i;
+async function archiveTextOnly(req,res){
+  const k=req.headers["x-approval-key"]||req.query.key;
+  if(!process.env.APPROVAL_SECRET||k!==process.env.APPROVAL_SECRET)return res.status(401).json({error:"unauthorized"});
+  const dry=req.query.dry!=="false";
+  try{
+    const t=await getEtsyToken();if(!t)return res.status(401).json({error:"etsy not authenticated"});
+    let all=[],offset=0;
+    for(let i=0;i<4;i++){const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+offset,{headers:authH(t)});if(!r.ok){const e=await r.text();return res.status(r.status).json({error:"Etsy "+r.status,detail:e.slice(0,200)});}const d=await r.json();all=all.concat(d.results||[]);if((d.results||[]).length<100)break;offset+=100;}
+    // conservative: title hit OR >=2 tag hits (avoids nuking picture art that merely carries a "quote" tag)
+    const hits=all.filter(l=>TEXT_ONLY_RX.test(l.title||"")||((l.tags||[]).filter(tg=>TEXT_ONLY_RX.test(tg)).length>=2));
+    const archived=[];
+    if(!dry)for(const l of hits){
+      try{const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id,{method:"PATCH",headers:authH(t),body:JSON.stringify({state:"inactive"})});archived.push({id:l.listing_id,ok:r.ok,status:r.status});}
+      catch(e){archived.push({id:l.listing_id,ok:false,err:e.message.slice(0,60)});}
+      await new Promise(r=>setTimeout(r,400));
+    }
+    if(!dry)await logAgent("AISHA","Archived "+archived.filter(a=>a.ok).length+"/"+hits.length+" words-only listings","success");
+    res.json({ok:true,dry,active_scanned:all.length,match_count:hits.length,matches:hits.map(l=>({id:l.listing_id,title:l.title,created:l.original_creation_timestamp})),archived});
+  }catch(e){res.status(500).json({error:e.message});}
+}
+etsyRouter.get("/archive-text-only",archiveTextOnly);
+etsyRouter.post("/archive-text-only",archiveTextOnly);
