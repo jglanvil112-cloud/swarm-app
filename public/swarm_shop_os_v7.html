@@ -270,7 +270,7 @@ AGENTS.forEach(a=>{
   el.querySelector(".run").onclick=async e=>{const ep=e.target.dataset.ep,id=e.target.dataset.id;
     e.target.textContent="⏳ DISPATCHING";toast(`${id} dispatched${ep?' → '+ep:''}`);
     const st=figs.find(f=>f.a.id===id); if(st)spawnTrail(st);
-    if(ep){try{await fetch(API+ep,{method:"POST",headers:{"Content-Type":"application/json","x-approval-key":"hoj_4Qk9mPvX2s677zLpT8nW3eRyU1cBfD6gH0jKaSdF"},body:JSON.stringify({dry:true})});}catch(_){}}
+    if(ep){try{await fetch(API+ep,{method:"POST",headers:{"Content-Type":"application/json","x-approval-key":(localStorage.hoj_key||(localStorage.hoj_key=prompt("Approval key")||""))},body:JSON.stringify({dry:true})});}catch(_){}}
     setTimeout(()=>{e.target.textContent=ep?'▶ RUN':'▶ DISPATCH';refresh();},1400);};
 });
 

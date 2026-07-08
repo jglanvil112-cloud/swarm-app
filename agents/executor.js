@@ -54,7 +54,7 @@ async function callClaude(agent, prompt) {
 
 // ── Etsy token (auto-refresh) ───────────────────────────────────────────────
 const ETSY_KEY    = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
-const ETSY_SECRET_VAL = process.env.ETSY_SECRET || "4omdt27v26";
+const ETSY_SECRET_VAL = process.env.ETSY_SECRET || "";
 
 async function getLiveEtsyToken() {
   console.log('[getLiveEtsyToken] START');
@@ -131,7 +131,7 @@ function generateSVG(keyword, niche) {
 // ── Generate PNG image for Etsy listing (raw multipart — same pattern as attachFileToListing) ──
 async function generateAndUploadListingImage(listingId, keyword, niche, token) {
   const ETSY_KEY    = process.env.ETSY_KEY    || "06k7svc5tbl35c6oh7k399ak";
-  const ETSY_SECRET = process.env.ETSY_SECRET || "4omdt27v26";
+  const ETSY_SECRET = process.env.ETSY_SECRET || "";
   try {
     const svg    = generateSVG(keyword, niche);
     const svgBuf = Buffer.from(svg, "utf8");
@@ -265,7 +265,7 @@ export async function handlePublishEtsyListing(payload) {
   const price     = Math.max(2.99, Math.min(19.99, parseFloat(basePrice.toFixed(2))));
 
   const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
-  const ETSY_SECRET_PUB = process.env.ETSY_SECRET || "4omdt27v26";
+  const ETSY_SECRET_PUB = process.env.ETSY_SECRET || "";
 const authH = _liveToken ? { Authorization: `Bearer ${_liveToken}` } : { "x-api-key": ETSY_KEY };
 
   if (!ETSY_SHOP_ID) {
