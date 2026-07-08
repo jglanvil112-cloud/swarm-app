@@ -298,11 +298,11 @@ cron.schedule("*/10 * * * *", async () => {
 console.log("[IBRAHIM] Phase 2 AUTO-POSTING cron jobs registered ✅");
 
 // ─── PODGEN trend auto-drop: NANA top_pick → full closed loop, 3x/day ─────────
-// Gen at 05/09/13 UTC; buy-link post auto-schedules +3h → 08/12/16 UTC = 4am/8am/12pm ET.
+// Gen at 05/09/12 UTC; buy-link post auto-schedules +3h → 08/12/15 UTC = 4am/8am/11am ET.
 // Same runPodGen path = IP gate, 250-cap, and IBRAHIM 4/day posting cap all apply.
 import { runPodGen } from "../routes/podgen.js";
 const PODGEN_FLAVORS={1:"New Year renewal",2:"Black History Month tribute",3:"spring awakening",6:"Juneteenth heritage",7:"summer block party",9:"harvest gratitude",10:"Afro-gothic autumn",11:"Thanksgiving legacy",12:"Kwanzaa celebration"};
-const PODGEN_STYLES=["design","text","art"];
+const PODGEN_STYLES=["design","art"];
 const PODGEN_FALLBACK=["Sankofa Wisdom","Melanin Queen","Ancestral Power","Diaspora Roots","Kente Heritage","Black Love","Golden Heritage","Afro Muse"];
 async function runPodgenTrendDrop(slot){
   try{
@@ -317,5 +317,5 @@ async function runPodgenTrendDrop(slot){
 }
 cron.schedule("0 5 * * *",()=>runPodgenTrendDrop(0));
 cron.schedule("0 9 * * *",()=>runPodgenTrendDrop(1));
-cron.schedule("0 13 * * *",()=>runPodgenTrendDrop(2));
-console.log("[PODGEN-TREND] 3x/day trend auto-drop registered (05/09/13 UTC → posts by 12pm ET) ✅");
+cron.schedule("0 12 * * *",()=>runPodgenTrendDrop(2));
+console.log("[PODGEN-TREND] 3x/day trend auto-drop registered (05/09/12 UTC → posts by 11am ET) ✅");

@@ -1,6 +1,7 @@
 // routes/etsy.js — SWARM OS v6.6 — authH: strip x-api-key from Bearer calls
 import express from "express";
 import crypto from "crypto";
+import cron2 from "node-cron";
 import{supabase,logAgent,enqueueTask,saveAgentOutput,updateSchedulerState}from"../lib/supabase.js";
 export const etsyRouter=express.Router();
 
@@ -1864,53 +1865,56 @@ etsyRouter.get("/archive-text-only",archiveTextOnly);
 etsyRouter.post("/archive-text-only",archiveTextOnly);
 
 // ── Archive OLD picture-only listings (CEO 7/8: retire wordless image-only art) ──
-// GET/POST /api/etsy/archive-picture-only?key=APPROVAL_SECRET[&dry=false][&before=2026-06-01]
-// Vision-confirmed: only archives listings whose primary image contains NO readable text.
-// Reversible — state:"inactive", restorable in Etsy Shop Manager. Auto-runs ONCE on next boot.
-export async function archivePictureOnly({dry=true,before="2026-06-01"}={}){
+// Self-draining sweep: Etsy listings/active does NOT return images inline, so each
+// candidate needs a per-listing images call. Daily quota is tight (bundles already 429),
+// so a 30-min cron checks a small batch per tick and archives vision-confirmed wordless
+// listings until none remain. Reversible (state:"inactive"). Manual: 
+// GET /api/etsy/archive-picture-only?key=APPROVAL_SECRET[&limit=8][&dry=false][&before=2026-07-01]
+const _picChecked=new Set(); // has_text=true listing ids (in-memory; recheck only on redeploy)
+let _picSweepDone=false;
+export async function archivePictureOnly({dry=false,before="2026-07-01",limit=8}={}){
   const t=await getEtsyToken();if(!t)return{error:"etsy not authenticated"};
-  const K=process.env.ANTHROPIC_API_KEY||"";
+  const K=process.env.ANTHROPIC_API_KEY||"";if(!K)return{error:"no vision key"};
   const cutoff=Math.floor(new Date(before).getTime()/1000);
   let all=[],offset=0;
-  for(let i=0;i<4;i++){const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+offset+"&includes=Images",{headers:authH(t)});if(!r.ok)return{error:"Etsy "+r.status};const d=await r.json();all=all.concat(d.results||[]);if((d.results||[]).length<100)break;offset+=100;}
-  // candidates: OLD (pre-cutoff) + not word-art by title/tags (those stay per keep-list)
-  const candidates=all.filter(l=>(l.original_creation_timestamp||0)<cutoff&&!TEXT_ONLY_RX.test(l.title||"")&&!(l.tags||[]).some(tg=>TEXT_ONLY_RX.test(tg)));
-  const matches=[];let visionSkipped=0;
-  for(const l of candidates){
-    const img=l.images?.[0]?.url_570xN||l.images?.[0]?.url_fullxfull;
-    if(!img||!K){visionSkipped++;continue;}
+  for(let i=0;i<4;i++){const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+offset,{headers:authH(t)});if(!r.ok)return{error:"Etsy "+r.status};const d=await r.json();all=all.concat(d.results||[]);if((d.results||[]).length<100)break;offset+=100;}
+  const remaining=all.filter(l=>(l.original_creation_timestamp||0)<cutoff&&!TEXT_ONLY_RX.test(l.title||"")&&!(l.tags||[]).some(tg=>TEXT_ONLY_RX.test(tg))&&!_picChecked.has(l.listing_id));
+  const batch=remaining.slice(0,Math.max(1,limit));
+  const archived=[],kept=[];
+  for(const l of batch){
     try{
-      const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":K,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:60,messages:[{role:"user",content:[{type:"image",source:{type:"url",url:img}},{type:"text",text:"Does this artwork contain any readable words, letters, numbers, or typography as part of the design? Reply ONLY JSON: {\"has_text\":true|false}"}]}]})});
-      const j=await r.json();const txt=(j.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
-      if(JSON.parse(txt).has_text===false)matches.push({id:l.listing_id,title:l.title});
-    }catch(e){visionSkipped++;} // vision unsure → keep listing live (safe default)
-    await new Promise(r=>setTimeout(r,350));
+      const ir=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id+"/images",{headers:authH(t)});
+      if(!ir.ok){_picChecked.add(l.listing_id);kept.push(l.listing_id);continue;}
+      const img=(await ir.json()).results?.[0];const url=img?.url_570xN||img?.url_fullxfull;
+      if(!url){_picChecked.add(l.listing_id);kept.push(l.listing_id);continue;}
+      const vr=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":K,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:60,messages:[{role:"user",content:[{type:"image",source:{type:"url",url}},{type:"text",text:"Does this artwork contain any readable words, letters, numbers, or typography as part of the design? Reply ONLY JSON: {\"has_text\":true|false}"}]}]})});
+      const vj=await vr.json();const txt=(vj.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
+      const hasText=JSON.parse(txt).has_text;
+      if(hasText===false&&!dry){
+        const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id,{method:"PATCH",headers:authH(t),body:JSON.stringify({state:"inactive"})});
+        archived.push({id:l.listing_id,ok:pr.ok,title:(l.title||"").slice(0,60)});
+      }else if(hasText===false&&dry){archived.push({id:l.listing_id,ok:"dry",title:(l.title||"").slice(0,60)});}
+      else{_picChecked.add(l.listing_id);kept.push(l.listing_id);}
+    }catch(e){_picChecked.add(l.listing_id);kept.push(l.listing_id);} // unsure → keep live (safe default)
+    await new Promise(r=>setTimeout(r,500));
   }
-  const archived=[];
-  if(!dry)for(const m of matches){
-    try{const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+m.id,{method:"PATCH",headers:authH(t),body:JSON.stringify({state:"inactive"})});archived.push({id:m.id,ok:r.ok,status:r.status});}
-    catch(e){archived.push({id:m.id,ok:false,err:e.message.slice(0,60)});}
-    await new Promise(r=>setTimeout(r,400));
-  }
-  if(!dry)await logAgent("AISHA","Archived "+archived.filter(a=>a.ok).length+"/"+matches.length+" old picture-only (wordless) listings, pre-"+before,"success");
-  return{ok:true,dry,before,active_scanned:all.length,old_nonword_candidates:candidates.length,wordless_matches:matches.length,matches,archived,vision_skipped:visionSkipped};
+  const left=remaining.length-batch.length;
+  if(archived.length&&!dry)await logAgent("AISHA","Archived "+archived.filter(a=>a.ok===true).length+"/"+batch.length+" wordless picture-only listings ("+left+" candidates left)","success");
+  return{ok:true,dry,before,active_scanned:all.length,batch_checked:batch.length,archived,kept_has_text:kept.length,candidates_remaining:left};
 }
-async function archivePictureOnlyHandler(req,res){
+etsyRouter.get("/archive-picture-only",async(req,res)=>{
   const k=req.headers["x-approval-key"]||req.query.key;
   if(!process.env.APPROVAL_SECRET||k!==process.env.APPROVAL_SECRET)return res.status(401).json({error:"unauthorized"});
-  try{res.json(await archivePictureOnly({dry:req.query.dry!=="false",before:req.query.before||"2026-06-01"}));}
+  try{res.json(await archivePictureOnly({dry:req.query.dry==="true",before:req.query.before||"2026-07-01",limit:parseInt(req.query.limit||"8",10)}));}
   catch(e){res.status(500).json({error:e.message});}
-}
-etsyRouter.get("/archive-picture-only",archivePictureOnlyHandler);
-etsyRouter.post("/archive-picture-only",archivePictureOnlyHandler);
-// Zero-touch boot one-shot: runs LIVE once (scheduler_state guard), 90s after boot
-(async()=>{try{
-  const{data}=await supabase.from("scheduler_state").select("run_count").eq("job_name","archive_picture_only_v1").limit(1);
-  if(data?.length){console.log("[ARCHIVE-PIC] one-shot already ran — skipping");return;}
-  await updateSchedulerState("archive_picture_only_v1","started");
-  setTimeout(async()=>{try{
-    const r=await archivePictureOnly({dry:false});
-    console.log("[ARCHIVE-PIC] done:",JSON.stringify({scanned:r.active_scanned,candidates:r.old_nonword_candidates,wordless:r.wordless_matches,archived:(r.archived||[]).filter(a=>a.ok).length,error:r.error||null}));
-    await updateSchedulerState("archive_picture_only_v1",r.error?"fail":"ok");
-  }catch(e){console.error("[ARCHIVE-PIC]",e.message);await updateSchedulerState("archive_picture_only_v1","fail");}},90e3);
-}catch(e){console.error("[ARCHIVE-PIC] boot guard:",e.message);}})();
+});
+// Zero-touch drip: every 30 min, check 8 candidates; self-terminates when none remain
+cron2.schedule("*/30 * * * *",async()=>{
+  if(_picSweepDone)return;
+  try{
+    const r=await archivePictureOnly({dry:false,limit:8});
+    if(r.error){console.log("[ARCHIVE-PIC]",r.error);return;}
+    console.log("[ARCHIVE-PIC] tick: checked "+r.batch_checked+", archived "+r.archived.filter(a=>a.ok===true).length+", remaining "+r.candidates_remaining);
+    if(r.candidates_remaining===0&&r.batch_checked===0){_picSweepDone=true;await updateSchedulerState("archive_picture_only_v2","done");await logAgent("AISHA","Picture-only archive sweep COMPLETE — no wordless pre-July listings remain active","success");}
+  }catch(e){console.error("[ARCHIVE-PIC]",e.message);}
+});

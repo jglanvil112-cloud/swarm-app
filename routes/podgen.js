@@ -73,7 +73,7 @@ async function ipVisionGate(imageUrl) {
         model: "claude-haiku-4-5-20251001", max_tokens: 200,
         messages: [{ role: "user", content: [
           { type: "image", source: { type: "url", url: imageUrl } },
-          { type: "text", text: "Check this AI-generated art for a print-on-demand store. Does it contain any trademarked logo, brand name, copyrighted character, real identifiable person/celebrity, or a near-copy of a famous existing artwork? Is it low-quality, garbled, or blurry? Reply ONLY with JSON: {\"risky\":true|false,\"reason\":\"short\"}" }
+          { type: "text", text: "Check this AI-generated art for a print-on-demand store. Does it contain any trademarked logo, brand name, copyrighted character, real identifiable person/celebrity, or a near-copy of a famous existing artwork? Does it contain ANY readable words, letters, numbers, or typography (brand is picture-only)? Is it low-quality, garbled, or blurry? Reply ONLY with JSON: {\"risky\":true|false,\"reason\":\"short\"}" }
         ]}]
       })
     });
@@ -88,7 +88,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
   const uid = ("HOJ-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6)).toUpperCase();
   if (IP_BLOCK.some(t => theme.toLowerCase().includes(t))) return { ok: false, reason: "theme tripped IP blocklist", uid };
   const model = MODELS[style] || MODELS.design;
-  const prompt = `Original Afrocentric ${theme} wall-art design for the brand House of Jreym. Bold, culturally rooted, high-contrast, clean print-ready composition. Absolutely no brand logos, trademarks, copyrighted characters, or real people — 100% original artwork.`;
+  const prompt = `Original Afrocentric ${theme} wall-art design for the brand House of Jreym. Bold, culturally rooted, high-contrast, clean print-ready composition. Absolutely no brand logos, trademarks, copyrighted characters, or real people — 100% original artwork. PURE IMAGERY ONLY: no words, letters, numbers, text, or typography anywhere in the design.`;
   if (dry) return { ok: true, dry: true, uid, model, prompt };
 
   const imageUrl = await falGenerate(model, prompt);
@@ -199,7 +199,7 @@ if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
     await logAgent("NANA", `Daily auto-drop starting: ${themes.join(" | ")}`, "info");
     let made = 0;
     for (let i = 0; i < themes.length; i++) {
-      try { const r = await runPodGen({ theme: themes[i], style: i % 3 === 1 ? "text" : "design" }); if (r?.productId) made++; }
+      try { const r = await runPodGen({ theme: themes[i], style: i % 2 === 1 ? "art" : "design" }); if (r?.productId) made++; }
       catch (e) { console.log("[podgen daily]", e.message); }
     }
     await logAgent("AMARA", `Daily auto-drop complete: ${made}/${themes.length} live`, made ? "success" : "warn");
