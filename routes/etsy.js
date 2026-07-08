@@ -1,7 +1,7 @@
 // routes/etsy.js — SWARM OS v6.6 — authH: strip x-api-key from Bearer calls
 import express from "express";
 import crypto from "crypto";
-import{supabase,logAgent,enqueueTask,saveAgentOutput}from"../lib/supabase.js";
+import{supabase,logAgent,enqueueTask,saveAgentOutput,updateSchedulerState}from"../lib/supabase.js";
 export const etsyRouter=express.Router();
 
 const ETSY_KEY=process.env.ETSY_KEY||"06k7svc5tbl35c6oh7k399ak";
@@ -1158,6 +1158,58 @@ etsyRouter.get("/attach-real-file",async(req,res)=>{
 
 // ─── OVERNIGHT BACKFILL: attach each active listing's own artwork as its digital download ───
 let _bfOffset=0;
+// ── One-time sweep: archive text-only digital listings (CEO: keep pictures, retire words-only) ──
+// Claude-vision classifies each active digital listing's primary image; pure typography/quote
+// designs get state:"inactive" (reversible in Shop Manager). Progress survives restarts via
+// scheduler_state done-flag; archived items fall out of the active list so offsets stay honest.
+let _atOffset=0,_atDone=null;
+export async function archiveTextOnlyTick(batch=12){
+  if(_atDone===null){
+    try{const{data}=await supabase.from("scheduler_state").select("status").eq("job_name","archive_text_only_sweep").limit(1);_atDone=data?.[0]?.status==="done";}catch(e){_atDone=false;}
+  }
+  if(_atDone)return{done:true};
+  const AK=process.env.ANTHROPIC_API_KEY||"";
+  if(!AK)return{error:"no vision key"};
+  const t=await getEtsyToken();if(!t)return{error:"no etsy token"};
+  const r=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit="+batch+"&offset="+_atOffset+"&includes=Images",{headers:authH(t)});
+  if(!r.ok)return{error:"etsy "+r.status};
+  const rows=(await r.json()).results||[];
+  if(!rows.length){
+    _atDone=true;await updateSchedulerState("archive_text_only_sweep","done");
+    await logAgent("AISHA","Text-only archive sweep COMPLETE — all active listings scanned","success");
+    return{done:true};
+  }
+  let archived=0,kept=0;
+  for(const l of rows){
+    kept++;
+    if(!l.is_digital)continue;
+    const img=l.images?.[0]?.url_570xN||l.images?.[0]?.url_fullxfull;
+    if(!img)continue;
+    try{
+      const vr=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":AK,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:100,messages:[{role:"user",content:[{type:"image",source:{type:"url",url:img}},{type:"text",text:'Wall-art design check. Reply ONLY JSON {"text_only":true|false}. text_only=true ONLY if the design is purely words/letters/typography (quote, affirmation, saying) with NO drawing, figure, line art, illustration, pattern, or scenery. Any pictorial element at all = false.'}]}]})});
+      const vj=await vr.json();
+      const verdict=JSON.parse((vj.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim());
+      if(verdict.text_only===true){
+        const pr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+l.listing_id,{method:"PATCH",headers:authH(t),body:JSON.stringify({state:"inactive"})});
+        if(pr.ok){archived++;kept--;await logAgent("AISHA","Archived text-only: "+String(l.title).slice(0,60)+" ("+l.listing_id+")","info");console.log("[archive-text-only] 📦",l.listing_id,String(l.title).slice(0,50));}
+        else console.log("[archive-text-only] ❌ patch",l.listing_id,pr.status);
+      }
+    }catch(e){console.log("[archive-text-only]",l.listing_id,e.message);}
+    await new Promise(r=>setTimeout(r,300));
+  }
+  _atOffset+=kept;
+  return{scanned:rows.length,archived,offset:_atOffset};
+}
+
+// POST /api/etsy/archive-text-only (GATED) — manual trigger / status. body { batch? } or ?status=1
+etsyRouter.post("/archive-text-only",async(req,res)=>{
+  const k=req.headers["x-approval-key"]||req.query.key;
+  if(!process.env.APPROVAL_SECRET||k!==process.env.APPROVAL_SECRET)return res.status(401).json({error:"unauthorized"});
+  if(req.query.status)return res.json({done:_atDone,offset:_atOffset});
+  try{res.json(await archiveTextOnlyTick(Math.min(25,req.body?.batch||12)));}
+  catch(e){res.status(500).json({error:e.message});}
+});
+
 export async function backfillNextListingFiles(batch=6){
   try{
     const t=await getEtsyToken(); if(!t) return {error:"no token"};

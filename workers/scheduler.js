@@ -178,6 +178,14 @@ import { backfillNextListingFiles } from "../routes/etsy.js";
 import { assignNextSections } from "../routes/etsy.js";
 import { createQueuedBundles, runShopRolloutTick, syncEtsyRevenue, reseoTop20Tick } from "../routes/etsy.js";
 import { generateMissingFormats } from "../routes/etsy.js";
+import { archiveTextOnlyTick } from "../routes/etsy.js";
+
+// One-time Etsy sweep: archive words-only digital listings (vision-classified). Runs every 10 min
+// in small batches until the whole active catalog is scanned, then flips a done-flag and idles forever.
+cron.schedule("4-59/10 * * * *", async () => {
+  try { const r = await archiveTextOnlyTick(12); if (r?.archived) console.log(`[ARCHIVE-TEXT-ONLY] 📦 ${r.archived} archived (offset ${r.offset})`); }
+  catch (e) { console.error("[ARCHIVE-TEXT-ONLY]", e.message); }
+});
 
 // ─── Canva pipeline: gated publisher (KWAME) ─────────────────────────────────
 import { drainPublishQueue } from "../agents/publisher.js";
