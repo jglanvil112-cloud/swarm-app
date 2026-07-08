@@ -19,7 +19,7 @@ export const IBRAHIM_CONFIG = {
   posts_per_day: 4,   // launch cadence (safe spaced max)
   reels_per_day: 0,   // reels disabled until a video source is connected
   // Optimal posting times (EST → UTC)
-  post_times_utc: ["14:00", "22:00"],   // 10am, 6pm EST
+  post_times_utc: ["13:00", "15:00"],   // 9am, 11am ET — all posts land by 11am ET (CEO 7/8)
   reel_time_utc:  "18:00",              // 2pm EST — peak reel engagement
   // Content mix
   strategy: {
@@ -304,6 +304,21 @@ async function checkEngagementGuard() {
 
 // ─── AUTO-PUBLISH ENGINE ──────────────────────────────────────────────────────
 
+
+// Next upcoming daytime slot (13:00/15:00 UTC). Stale posts re-slot here instead of
+// publishing whenever the UTC-midnight cap reset frees them (killed the 8pm ET flush loop).
+export function nextDaytimeSlot(after = new Date()) {
+  for (let d = 0; d < 14; d++) {
+    for (const ts of IBRAHIM_CONFIG.post_times_utc) {
+      const [h, m] = ts.split(":").map(Number);
+      const cand = new Date(after.getTime() + d * 86400000);
+      cand.setUTCHours(h, m, 0, 0);
+      if (cand > after) return cand;
+    }
+  }
+  return new Date(after.getTime() + 86400000);
+}
+
 export async function runAutoPublish() {
   try {
     // 0. Master auto-posting switch — respect CEO pause/resume. Without this the
@@ -334,6 +349,14 @@ export async function runAutoPublish() {
     let publishedCount = 0;
     for (const post of duePosts) {
       try {
+        // STALE GUARD: >2h past due means its daytime window is gone — re-slot to the
+        // next 13:00/15:00 UTC slot instead of dumping it at the midnight cap reset.
+        if (Date.now() - new Date(post.scheduled_for).getTime() > 2 * 3600e3) {
+          const slot = nextDaytimeSlot();
+          await supabase.from("social_posts").update({ scheduled_for: slot.toISOString(), updated_at: new Date().toISOString() }).eq("id", post.id);
+          await logAgent("IBRAHIM", `⏩ Re-slotted stale post ${post.id} → ${slot.toISOString().slice(0,16)}Z`, "info");
+          continue;
+        }
         // Reels disabled until a working video source exists — skip any reel that slipped through
         if (post.media_type === "REEL" || post.is_reel || post.meta?.is_reel) {
           await supabase.from("social_posts").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", post.id);

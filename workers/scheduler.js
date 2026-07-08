@@ -297,6 +297,23 @@ cron.schedule("*/10 * * * *", async () => {
 
 console.log("[IBRAHIM] Phase 2 AUTO-POSTING cron jobs registered ✅");
 
+// ─── One-shot (7/8): re-slot every scheduled post onto 13:00/15:00 UTC daytime slots ──
+import { nextDaytimeSlot } from "../routes/ibrahim.js";
+(async()=>{try{
+  const{data:g}=await supabase.from("scheduler_state").select("run_count").eq("job_name","reslot_posts_v1").limit(1);
+  if(g?.length)return;
+  await updateSchedulerState("reslot_posts_v1","started");
+  const{data:rows}=await supabase.from("social_posts").select("id,scheduled_for").eq("status","scheduled").order("scheduled_for",{ascending:true});
+  if(rows?.length){
+    let cursor=new Date();
+    for(const r of rows){const slot=nextDaytimeSlot(cursor);await supabase.from("social_posts").update({scheduled_for:slot.toISOString(),updated_at:new Date().toISOString()}).eq("id",r.id);cursor=slot;}
+    console.log("[RESLOT] Redistributed "+rows.length+" scheduled posts onto 13:00/15:00 UTC slots");
+    await logAgent("IBRAHIM","Re-slotted "+rows.length+" queued posts — everything now lands 9am/11am ET, nothing after","success");
+  }
+  await updateSchedulerState("reslot_posts_v1","ok");
+}catch(e){console.error("[RESLOT]",e.message);}})();
+
+
 // ─── PODGEN trend auto-drop: NANA top_pick → full closed loop, 3x/day ─────────
 // Gen at 05/09/12 UTC; buy-link post auto-schedules +3h → 08/12/15 UTC = 4am/8am/11am ET.
 // Same runPodGen path = IP gate, 250-cap, and IBRAHIM 4/day posting cap all apply.
