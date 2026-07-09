@@ -225,4 +225,4 @@ if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
 console.log("[podgen] daily auto-drop " + (DAILY_ON ? ("ON — 08:30 UTC, " + DAILY_COUNT + "/day") : "OFF"));
 
 // GET /api/podgen/status — public config check (no secrets): confirms auto-publish state remotely
-podgenRouter.get("/status",(req,res)=>res.json({auto_publish:AUTO_PUBLISH,daily_drop_on:DAILY_ON,daily_count:DAILY_COUNT,trend_drop_utc:"05:00 / 09:00 / 13:00",ts:new Date().toISOString()}));
+podgenRouter.get("/status",(req,res)=>res.json({auto_publish:AUTO_PUBLISH,daily_drop_on:DAILY_ON,daily_count:DAILY_COUNT,trend_drop_utc:"05:00 / 09:00 / 12:00",uptime_s:Math.round(process.uptime()),mem_mb:Math.round(process.memoryUsage().rss/1048576),ts:new Date().toISOString()}));
