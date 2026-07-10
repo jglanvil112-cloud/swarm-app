@@ -13,7 +13,7 @@ const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
 const APP_URL = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
 // House rule (Etsy): captions link the exact Etsy listing when known; else the Etsy
 // shop (SHOP_NAME env); else the storefront. Never a bare "link in bio".
-const ETSY_SHOP_URL = process.env.SHOP_NAME ? `https://www.etsy.com/shop/${process.env.SHOP_NAME}` : "houseofjreym.store";
+const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`; // verified slug (shop_id 66171116)
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
