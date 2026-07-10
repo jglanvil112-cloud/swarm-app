@@ -11,6 +11,9 @@ export const ibrahimRouter = express.Router();
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
 const APP_URL = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
+// House rule (Etsy): captions link the exact Etsy listing when known; else the Etsy
+// shop (SHOP_NAME env); else the storefront. Never a bare "link in bio".
+const ETSY_SHOP_URL = process.env.SHOP_NAME ? `https://www.etsy.com/shop/${process.env.SHOP_NAME}` : "houseofjreym.store";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
@@ -596,11 +599,16 @@ export async function generateAndSchedulePosts(count = 10) {
   try {
     const { data } = await supabase
       .from("agent_outputs")
-      .select("etsy_title")
-      .eq("output_type", "etsy_listing_published")
+      .select("etsy_title,data")
+      .in("output_type", ["etsy_listing_published", "publish_etsy_listing"])
       .order("created_at", { ascending: false })
       .limit(20);
-    etsyListings = (data || []).map(d => ({ title: d.etsy_title, price: "$7.99" }));
+    etsyListings = (data || []).map(d => {
+      const raw = d.etsy_title || "";
+      const url = d.data?.listing_url || (/etsy\.com/i.test(raw) ? raw : null);   // exact listing link
+      const title = d.data?.title || (/etsy\.com/i.test(raw) ? null : raw);
+      return { title: title || "Premium Digital Art Print", price: d.data?.price ? `$${d.data.price}` : "$7.99", url };
+    });
   } catch (e) { /* non-fatal */ }
 
   // Pull latest trends for reel keywords
@@ -616,7 +624,7 @@ export async function generateAndSchedulePosts(count = 10) {
     const keyword = trends[i % (trends.length || 1)] || "digital art prints";
 
     try {
-      const caption = enforceCaptionRules(await generatePostContent(slot.type, keyword, listing)); // house rules: link + 250w cap
+      const caption = enforceCaptionRules(await generatePostContent(slot.type, keyword, listing), listing?.url || ETSY_SHOP_URL); // house rules: exact Etsy listing link when known
       const description = slot.is_reel ? await generateReelDescription(keyword) : null;
 
       // Use a placeholder image — will be replaced with actual listing images

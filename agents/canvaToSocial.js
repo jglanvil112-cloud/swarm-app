@@ -8,6 +8,7 @@
 // Task payload: { imageUrl | designId, caption, scheduledFor?, keyword?, isReel? }
 
 import { supabase, saveAgentOutput, logAgent } from "../lib/supabase.js";
+import { enforceCaptionRules } from "../lib/captionRules.js";
 import { exportAndRehost, canvaAvailable } from "../lib/canva.js";
 
 export async function handleCanvaToSocial(task) {
@@ -22,7 +23,7 @@ export async function handleCanvaToSocial(task) {
 
   const { data: row, error } = await supabase.from("social_posts").insert({
     platform: "instagram",
-    caption: p.caption || "",
+    caption: enforceCaptionRules(p.caption || ""), // house rules: link + 250w cap
     hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
     media_urls: [imageUrl],
     media_type: p.isReel ? "REEL" : "IMAGE",
