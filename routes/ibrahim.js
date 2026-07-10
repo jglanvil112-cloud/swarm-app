@@ -5,6 +5,7 @@
 // Features: engagement guard, CEO report, follower tracking, Etsy traffic priority
 
 import express from "express";
+import { enforceCaptionRules } from "../lib/captionRules.js";
 import { supabase, logAgent } from "../lib/supabase.js";
 export const ibrahimRouter = express.Router();
 
@@ -615,7 +616,7 @@ export async function generateAndSchedulePosts(count = 10) {
     const keyword = trends[i % (trends.length || 1)] || "digital art prints";
 
     try {
-      const caption = await generatePostContent(slot.type, keyword, listing);
+      const caption = enforceCaptionRules(await generatePostContent(slot.type, keyword, listing)); // house rules: link + 250w cap
       const description = slot.is_reel ? await generateReelDescription(keyword) : null;
 
       // Use a placeholder image — will be replaced with actual listing images

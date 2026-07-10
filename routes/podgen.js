@@ -12,6 +12,7 @@
 
 import express from "express";
 import { supabase, logAgent } from "../lib/supabase.js";
+import { enforceCaptionRules } from "../lib/captionRules.js";
 
 export const podgenRouter = express.Router();
 
@@ -145,7 +146,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     try {
       const when = new Date(Date.now() + 3 * 3600e3); when.setUTCMinutes(0, 0, 0);
       const link = handle ? `houseofjreym.store/products/${handle}` : "houseofjreym.store";
-      const caption = `NEW DROP 🔥 "${theme}" — original Afrocentric wall art, instant digital download. Limited edition of 250 (${uid}). Launch price $8.79 (was $10.99). 🛍 ${link} ✊🏾✨ #HouseOfJreym #AfrocentricArt #BlackArt #DigitalDownload #LimitedEdition`;
+      const caption = enforceCaptionRules(`NEW DROP 🔥 "${theme}" — original Afrocentric wall art, instant digital download. Limited edition of 250 (${uid}). Launch price $8.79 (was $10.99). 🛍 ${link} ✊🏾✨ #HouseOfJreym #AfrocentricArt #BlackArt #DigitalDownload #LimitedEdition`, link); // house rules
       await supabase.from("social_posts").insert({
         platform: "all", status: "scheduled", caption, media_urls: [imageUrl], media_type: "IMAGE",
         scheduled_for: when.toISOString(), keyword: "autodrop-" + uid,

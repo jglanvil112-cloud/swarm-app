@@ -13,6 +13,7 @@
 
 import express from "express";
 import cron from "node-cron";
+import { enforceCaptionRules } from "../lib/captionRules.js";
 import { supabase, logAgent } from "../lib/supabase.js";
 
 export const trendingRouter = express.Router();
@@ -123,7 +124,7 @@ export async function runTrendingPipeline({ dry = false } = {}) {
   const occ = pickOccasion(new Date());                         // A) NANA scout
   const imageUrl = ART[occ.art] || ART.affirmation;
   let caption = "";
-  try { caption = await generateCaption(occ.occasion, occ.brief); } // B) AMARA
+  try { caption = enforceCaptionRules(await generateCaption(occ.occasion, occ.brief)); } // B) AMARA (+house rules: link + 250w cap)
   catch (e) { await logAgent("NANA", `Trending run aborted: ${e.message}`, "error"); return { ok: false, error: e.message }; }
 
   const gate = safetyGate(caption, imageUrl);                   // C) gate
