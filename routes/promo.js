@@ -29,9 +29,16 @@ const PROMO_CODE = process.env.PROMO_CODE || "FREEART50";
 const MIN_SPEND = process.env.PROMO_MIN_SPEND || "50";
 const WEEKLY_TARGET = parseFloat(process.env.PROMO_WEEKLY_TARGET || "150");
 const COLLECTION_TITLE = "Digital Art — Instant Downloads";
+const ALL_COLLECTION_TITLE = "All Products (SWARM system)";
 const DIGITAL_TYPE = "Digital Wall Art";
+const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
+const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
-let promoState = { collection_id: null, collection_handle: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null };
+let promoState = { collection_id: null, collection_handle: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null };
+
+// Section description shown on the storefront collection page: what it is,
+// the deal, and the Etsy mirror. Same brand name as the website.
+const SECTION_BODY = `<p>Original Afrocentric digital wall art from House of Jreym — instant downloads. Every clean drop includes Classic, 3D, and Holographic editions.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
 
 function requireApproval(req, res) {
   if (!APPROVAL_SECRET) { res.status(503).json({ error: "approval not configured" }); return false; }
@@ -63,7 +70,7 @@ export async function ensurePromoAssets() {
       method: "POST", headers: hdrs(token),
       body: JSON.stringify({ smart_collection: {
         title: COLLECTION_TITLE, published: true, disjunctive: false,
-        body_html: "<p>Original Afrocentric digital wall art from House of Jreym — instant downloads. Every clean drop includes Classic, 3D, and Holographic editions.</p>",
+        body_html: SECTION_BODY,
         rules: [{ column: "type", relation: "equals", condition: DIGITAL_TYPE }]
       }})
     })).json();
@@ -73,7 +80,27 @@ export async function ensurePromoAssets() {
   if (!col) return { ok: false, error: "collection create failed" };
   promoState.collection_id = col.id; promoState.collection_handle = col.handle;
 
-  // Price rule: spend $MIN_SPEND -> 1 item from the digital collection 100% off
+  // Keep the section description current: deal messaging + Etsy shop link
+  if (!(col.body_html || "").includes(PROMO_CODE)) {
+    const ur = await fetch(`${base(shop)}/smart_collections/${col.id}.json`, {
+      method: "PUT", headers: hdrs(token),
+      body: JSON.stringify({ smart_collection: { id: col.id, body_html: SECTION_BODY } })
+    });
+    if (ur.ok) await logAgent("IMANI", `Section refreshed: $${MIN_SPEND} deal + Etsy link now live on /collections/${col.handle}`, "success");
+  }
+
+  // Heal sold-out digital variants (failed exclusivity caps leave 0 stock and
+  // the whole section shows "Sold out" — restock to the edition size).
+  try { promoState.last_restock = await restockDigitalProducts(token, shop); }
+  catch (e) { promoState.last_restock = { error: e.message.slice(0, 120) }; }
+
+  // Price rule: spend $MIN_SPEND -> 1 item from the digital collection 100% off.
+  // Shopify's spend-X-get-Y validator demands an ITEM prerequisite alongside the
+  // quantity ratio ("item_prerequisites: must have at least one item prerequisite
+  // if the prerequisite_to_entitlement_quantity_ratio is defined"), so the $50
+  // spend is counted against an all-products smart collection (hidden).
+  const allCol = await ensureAllProductsCollection(token, shop);
+  if (!allCol) return { ok: false, error: "all-products collection failed", collection: col.handle };
   let rule = null;
   const rl = await (await fetch(`${base(shop)}/price_rules.json?limit=250`, { headers: hdrs(token) })).json();
   rule = (rl.price_rules || []).find(r => r.title === PROMO_CODE) || null;
@@ -87,6 +114,7 @@ export async function ensurePromoAssets() {
         value_type: "percentage", value: "-100.0",
         customer_selection: "all",
         entitled_collection_ids: [col.id],
+        prerequisite_collection_ids: [allCol.id],
         prerequisite_to_entitlement_purchase: { prerequisite_amount: MIN_SPEND },
         prerequisite_to_entitlement_quantity_ratio: { entitled_quantity: 1 },
         starts_at: new Date().toISOString()
@@ -112,6 +140,69 @@ export async function ensurePromoAssets() {
   promoState.code_ok = !!code;
   promoState.last_ensure = new Date().toISOString();
   return { ok: true, collection: { id: col.id, handle: col.handle, url: `houseofjreym.store/collections/${col.handle}` }, price_rule_id: rule.id, code: PROMO_CODE, deal: `Spend $${MIN_SPEND}, get 1 free digital piece` };
+}
+
+// ── Hidden all-products collection (price-rule prerequisite target) ──────────
+async function ensureAllProductsCollection(token, shop) {
+  const cl = await (await fetch(`${base(shop)}/smart_collections.json?title=${encodeURIComponent(ALL_COLLECTION_TITLE)}`, { headers: hdrs(token) })).json();
+  let col = (cl.smart_collections || [])[0] || null;
+  if (!col) {
+    const cr = await (await fetch(`${base(shop)}/smart_collections.json`, {
+      method: "POST", headers: hdrs(token),
+      body: JSON.stringify({ smart_collection: {
+        title: ALL_COLLECTION_TITLE, published: false, disjunctive: false,
+        rules: [{ column: "variant_price", relation: "greater_than", condition: "0" }]
+      }})
+    })).json();
+    col = cr.smart_collection || null;
+    if (col) await logAgent("IMANI", `Created hidden all-products collection for ${PROMO_CODE} prerequisite (${col.id})`, "info");
+  }
+  return col;
+}
+
+// ── Restock sweep: no digital product may ever read "Sold out" ───────────────
+// The limited-edition cap (KWAME) enables tracking then sets stock to 250; when
+// the set step fails the variant is left tracked at 0 and the storefront shows
+// "Sold out". This sweep finds tracked digital variants at <=0 and restores the
+// edition size. Idempotent; runs inside ensurePromoAssets.
+async function restockDigitalProducts(token, shop, qty = RESTOCK_QTY) {
+  const out = { checked: 0, restocked: 0, failed: 0, at: new Date().toISOString() };
+  const pr = await fetch(`${base(shop)}/products.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&limit=250&fields=id,variants`, { headers: hdrs(token) });
+  const pj = await pr.json();
+  if (!pr.ok) return { ...out, error: JSON.stringify(pj).slice(0, 120) };
+  const items = [];
+  for (const p of pj.products || []) for (const v of p.variants || [])
+    if (v.inventory_management === "shopify" && v.inventory_item_id) items.push(v.inventory_item_id);
+  out.checked = items.length;
+  if (!items.length) return out;
+
+  const levels = [];
+  for (let i = 0; i < items.length; i += 50) {
+    const lr = await fetch(`${base(shop)}/inventory_levels.json?inventory_item_ids=${items.slice(i, i + 50).join(",")}&limit=250`, { headers: hdrs(token) });
+    const lj = await lr.json();
+    if (lr.ok) levels.push(...(lj.inventory_levels || []));
+  }
+  const byItem = new Map();
+  for (const l of levels) if (!byItem.has(l.inventory_item_id)) byItem.set(l.inventory_item_id, l);
+  let locId = levels.find(l => l.location_id)?.location_id || null;
+  if (!locId) {
+    const locJ = await (await fetch(`${base(shop)}/locations.json`, { headers: hdrs(token) })).json();
+    locId = locJ.locations?.[0]?.id || null;
+  }
+  if (!locId) return { ...out, error: "no location" };
+
+  for (const item of items) {
+    const lvl = byItem.get(item);
+    if (lvl && lvl.available !== null && lvl.available > 0) continue; // healthy
+    try {
+      if (!lvl) await fetch(`${base(shop)}/inventory_levels/connect.json`, { method: "POST", headers: hdrs(token), body: JSON.stringify({ location_id: locId, inventory_item_id: item }) });
+      const sr = await fetch(`${base(shop)}/inventory_levels/set.json`, { method: "POST", headers: hdrs(token), body: JSON.stringify({ location_id: lvl?.location_id || locId, inventory_item_id: item, available: qty }) });
+      sr.ok ? out.restocked++ : out.failed++;
+    } catch (e) { out.failed++; }
+  }
+  if (out.restocked || out.failed)
+    await logAgent("IMANI", `Digital restock sweep: ${out.restocked} sold-out variant(s) back to ${qty}${out.failed ? `, ${out.failed} failed` : ""}`, out.failed ? "warn" : "success");
+  return out;
 }
 
 // ── Promo post (through the normal social pipeline + house caption rules) ────
@@ -171,6 +262,7 @@ export async function checkAndBoost() {
 promoRouter.get("/status", (req, res) => res.json({
   deal: `Spend $${MIN_SPEND}, get 1 FREE digital piece of choice`, code: PROMO_CODE,
   collection: promoState.collection_handle ? `houseofjreym.store/collections/${promoState.collection_handle}` : "(pending ensure)",
+  etsy_shop: ETSY_SHOP_URL,
   weekly_target: WEEKLY_TARGET, boost_cron: "daily 15:00 UTC", state: promoState
 }));
 // POST /api/promo/ensure (GATED) — force-create collection + deal now
@@ -189,8 +281,23 @@ promoRouter.post("/post-now", async (req, res) => {
   try { res.json(await schedulePromoPost(req.body?.delay_hours ?? 2)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Boot: ensure section + deal exist (idempotent, waits for server/token warmup)
-setTimeout(() => { ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message)); }, 25000);
-// Daily boost check — 15:00 UTC (11am ET), node-cron v4 six-field pattern
-cron.schedule("0 0 15 * * *", () => { checkAndBoost().catch(e => console.log("[promo] check:", e.message)); });
+// Boot: ensure section + deal exist (idempotent, waits for server/token warmup).
+// Retries every 5 min (up to 4 tries) so a cold token or Shopify hiccup at boot
+// can't leave the deal dead until the next deploy.
+const bootEnsure = async (attempt = 1) => {
+  try {
+    const r = await ensurePromoAssets();
+    if (!r.ok && attempt < 4) setTimeout(() => bootEnsure(attempt + 1), 300000);
+    else if (!r.ok) console.log("[promo] ensure gave up:", r.error);
+  } catch (e) {
+    console.log("[promo] ensure:", e.message);
+    if (attempt < 4) setTimeout(() => bootEnsure(attempt + 1), 300000);
+  }
+};
+setTimeout(() => bootEnsure(), 25000);
+// Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
+cron.schedule("0 0 15 * * *", () => {
+  ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
+    .then(() => checkAndBoost()).catch(e => console.log("[promo] check:", e.message));
+});
 console.log(`[promo] armed — ${PROMO_CODE}: spend $${MIN_SPEND} → free digital piece; boost check daily 15:00 UTC`);
