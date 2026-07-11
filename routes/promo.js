@@ -11,6 +11,8 @@
 //     7-day paid revenue is under PROMO_WEEKLY_TARGET (env, default $150) and
 //     no promo post ran in the last 3 days, IMANI auto-schedules a promo post
 //     (IG+FB via the normal pipeline, house caption rules enforced).
+//  4) CEO 7/11: HOJ Pets digital-only section + physical goods section split
+//     away from digital; one-shot 3-piece drop off top sellers + trend.
 //
 //  Env (optional): PROMO_WEEKLY_TARGET (default "150"), PROMO_MIN_SPEND
 //  (default "50"), PROMO_CODE (default "FREEART50").
@@ -21,6 +23,7 @@ import express from "express";
 import cron from "node-cron";
 import { supabase, logAgent } from "../lib/supabase.js";
 import { enforceCaptionRules } from "../lib/captionRules.js";
+import { runPodGen } from "./podgen.js";
 
 export const promoRouter = express.Router();
 
@@ -30,15 +33,20 @@ const MIN_SPEND = process.env.PROMO_MIN_SPEND || "50";
 const WEEKLY_TARGET = parseFloat(process.env.PROMO_WEEKLY_TARGET || "150");
 const COLLECTION_TITLE = "Digital Art — Instant Downloads";
 const ALL_COLLECTION_TITLE = "All Products (SWARM system)";
+const PET_COLLECTION_TITLE = "HOJ Pets — Digital Art (Instant Downloads)";
+const PHYSICAL_COLLECTION_TITLE = "Physical Goods — Shipped to You";
 const DIGITAL_TYPE = "Digital Wall Art";
+const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the title — that's what routes them to the pets section
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
-let promoState = { collection_id: null, collection_handle: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null };
+let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null };
 
 // Section description shown on the storefront collection page: what it is,
 // the deal, and the Etsy mirror. Same brand name as the website.
 const SECTION_BODY = `<p>Original Afrocentric digital wall art from House of Jreym — instant downloads. Every clean drop includes Classic, 3D, and Holographic editions.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
+const PET_SECTION_BODY = `<p>HOJ Pets — original pet portrait digital art from House of Jreym. Instant downloads only: Classic, 3D, and Holographic editions of every clean drop.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
+const PHYSICAL_SECTION_BODY = `<p>Wearables and physical goods from House of Jreym — made to order and shipped to you.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece of your choice</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
 
 function requireApproval(req, res) {
   if (!APPROVAL_SECRET) { res.status(503).json({ error: "approval not configured" }); return false; }
@@ -89,6 +97,37 @@ export async function ensurePromoAssets() {
     if (ur.ok) await logAgent("IMANI", `Section refreshed: $${MIN_SPEND} deal + Etsy link now live on /collections/${col.handle}`, "success");
   }
 
+  // Main digital section excludes pet art — pet pieces live ONLY in HOJ Pets (CEO 7/11)
+  if (!(col.rules || []).some(r => r.column === "title" && r.relation === "not_contains")) {
+    const rr2 = await fetch(`${base(shop)}/smart_collections/${col.id}.json`, {
+      method: "PUT", headers: hdrs(token),
+      body: JSON.stringify({ smart_collection: { id: col.id, disjunctive: false, rules: [
+        { column: "type", relation: "equals", condition: DIGITAL_TYPE },
+        { column: "title", relation: "not_contains", condition: PET_MARK }
+      ]}})
+    });
+    if (rr2.ok) await logAgent("IMANI", `Main digital section now excludes "${PET_MARK}" pieces (pets get their own section)`, "info");
+  }
+
+  // HOJ Pets — pet-related digital art ONLY (CEO 7/11)
+  const petCol = await ensureSmartCollection(token, shop, {
+    title: PET_COLLECTION_TITLE, published: true, disjunctive: false,
+    body_html: PET_SECTION_BODY,
+    rules: [
+      { column: "type", relation: "equals", condition: DIGITAL_TYPE },
+      { column: "title", relation: "contains", condition: PET_MARK }
+    ]
+  });
+  if (petCol) promoState.pet_collection_handle = petCol.handle;
+
+  // Physical goods — everything that ships, separated away from the digital sections (CEO 7/11)
+  const physCol = await ensureSmartCollection(token, shop, {
+    title: PHYSICAL_COLLECTION_TITLE, published: true, disjunctive: false,
+    body_html: PHYSICAL_SECTION_BODY,
+    rules: [{ column: "type", relation: "not_equals", condition: DIGITAL_TYPE }]
+  });
+  if (physCol) promoState.physical_collection_handle = physCol.handle;
+
   // Heal sold-out digital variants (failed exclusivity caps leave 0 stock and
   // the whole section shows "Sold out" — restock to the edition size).
   try { promoState.last_restock = await restockDigitalProducts(token, shop); }
@@ -127,6 +166,15 @@ export async function ensurePromoAssets() {
   if (!rule) return { ok: false, error: "price rule failed", collection: col.handle };
   promoState.price_rule_id = rule.id;
 
+  // Free-piece entitlement covers BOTH digital sections (main + HOJ Pets)
+  if (petCol && !(rule.entitled_collection_ids || []).includes(petCol.id)) {
+    const eu = await fetch(`${base(shop)}/price_rules/${rule.id}.json`, {
+      method: "PUT", headers: hdrs(token),
+      body: JSON.stringify({ price_rule: { id: rule.id, entitled_collection_ids: [col.id, petCol.id] } })
+    });
+    if (eu.ok) await logAgent("IMANI", `${PROMO_CODE} free piece can now also be picked from HOJ Pets`, "info");
+  }
+
   // Discount code on the rule
   const dl = await (await fetch(`${base(shop)}/price_rules/${rule.id}/discount_codes.json`, { headers: hdrs(token) })).json();
   let code = (dl.discount_codes || []).find(d => d.code === PROMO_CODE) || null;
@@ -142,22 +190,56 @@ export async function ensurePromoAssets() {
   return { ok: true, collection: { id: col.id, handle: col.handle, url: `houseofjreym.store/collections/${col.handle}` }, price_rule_id: rule.id, code: PROMO_CODE, deal: `Spend $${MIN_SPEND}, get 1 free digital piece` };
 }
 
-// ── Hidden all-products collection (price-rule prerequisite target) ──────────
-async function ensureAllProductsCollection(token, shop) {
-  const cl = await (await fetch(`${base(shop)}/smart_collections.json?title=${encodeURIComponent(ALL_COLLECTION_TITLE)}`, { headers: hdrs(token) })).json();
+// ── Generic idempotent smart-collection ensure (find by title, else create) ──
+async function ensureSmartCollection(token, shop, def) {
+  const cl = await (await fetch(`${base(shop)}/smart_collections.json?title=${encodeURIComponent(def.title)}`, { headers: hdrs(token) })).json();
   let col = (cl.smart_collections || [])[0] || null;
   if (!col) {
     const cr = await (await fetch(`${base(shop)}/smart_collections.json`, {
-      method: "POST", headers: hdrs(token),
-      body: JSON.stringify({ smart_collection: {
-        title: ALL_COLLECTION_TITLE, published: false, disjunctive: false,
-        rules: [{ column: "variant_price", relation: "greater_than", condition: "0" }]
-      }})
+      method: "POST", headers: hdrs(token), body: JSON.stringify({ smart_collection: def })
     })).json();
     col = cr.smart_collection || null;
-    if (col) await logAgent("IMANI", `Created hidden all-products collection for ${PROMO_CODE} prerequisite (${col.id})`, "info");
+    if (col) await logAgent("IMANI", `Created storefront section "${def.title}" (/collections/${col.handle})`, "success");
   }
   return col;
+}
+
+// ── Hidden all-products collection (price-rule prerequisite target) ──────────
+async function ensureAllProductsCollection(token, shop) {
+  return ensureSmartCollection(token, shop, {
+    title: ALL_COLLECTION_TITLE, published: false, disjunctive: false,
+    rules: [{ column: "variant_price", relation: "greater_than", condition: "0" }]
+  });
+}
+
+// ── CEO 7/11 one-shot: 3-piece drop off top sellers + freshest trend ─────────
+// Fires ONCE (agent_logs marker is the latch), 40s after boot. Each piece runs
+// the full podgen loop: fal.ai gen → vision IP gate → Shopify product with 3
+// edition images (Classic/3D/Holographic) → 250-unit cap → auto buy-link post.
+// Theme 1 seeds the HOJ Pets section ("Pet Portrait" in the title routes it).
+const DROP_MARKER = "CEO drop 2026-07-11: 3-piece top-seller/trend batch fired";
+async function fireCeoDropOnce() {
+  try {
+    const { data, error } = await supabase.from("agent_logs").select("id").eq("message", DROP_MARKER).limit(1);
+    if (error || (data && data.length)) return; // already fired (or can't verify — don't risk duplicates)
+  } catch (e) { return; }
+  await logAgent("IMANI", DROP_MARKER, "info"); // latch BEFORE generating
+  const themes = ["Regal Pet Portrait — crowned royal dog", "Black Excellence", "Black Art History Portrait"];
+  try { // slot 2 upgrades to NANA's freshest trend keyword when available
+    const { data: t } = await supabase.from("tasks").select("result").eq("task_type", "trend_research")
+      .eq("status", "completed").order("updated_at", { ascending: false }).limit(1);
+    const kw = (t?.[0]?.result?.trends || []).map(x => (typeof x === "string" ? x : x?.keyword))
+      .find(k => typeof k === "string" && k.trim());
+    if (kw) themes[1] = kw.trim();
+  } catch (e) { /* fallback theme stands */ }
+  const styles = ["art", "design", "design"];
+  let made = 0;
+  for (let i = 0; i < themes.length; i++) {
+    try { const r = await runPodGen({ theme: themes[i], style: styles[i] }); if (r?.productId) made++; }
+    catch (e) { console.log("[promo drop]", e.message); }
+  }
+  promoState.last_drop = { at: new Date().toISOString(), made, themes };
+  await logAgent("IMANI", `CEO 3-piece drop done: ${made}/3 created (${themes.join(" | ")}) — 3 editions each, 250-cap, buy-link posts scheduled`, made ? "success" : "warn");
 }
 
 // ── Restock sweep: no digital product may ever read "Sold out" ───────────────
@@ -262,6 +344,8 @@ export async function checkAndBoost() {
 promoRouter.get("/status", (req, res) => res.json({
   deal: `Spend $${MIN_SPEND}, get 1 FREE digital piece of choice`, code: PROMO_CODE,
   collection: promoState.collection_handle ? `houseofjreym.store/collections/${promoState.collection_handle}` : "(pending ensure)",
+  pets_collection: promoState.pet_collection_handle ? `houseofjreym.store/collections/${promoState.pet_collection_handle}` : "(pending ensure)",
+  physical_collection: promoState.physical_collection_handle ? `houseofjreym.store/collections/${promoState.physical_collection_handle}` : "(pending ensure)",
   etsy_shop: ETSY_SHOP_URL,
   weekly_target: WEEKLY_TARGET, boost_cron: "daily 15:00 UTC", state: promoState
 }));
@@ -295,6 +379,8 @@ const bootEnsure = async (attempt = 1) => {
   }
 };
 setTimeout(() => bootEnsure(), 25000);
+// One-shot CEO drop (latched — safe across restarts/redeploys)
+setTimeout(() => { fireCeoDropOnce().catch(e => console.log("[promo drop]", e.message)); }, 40000);
 // Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
 cron.schedule("0 0 15 * * *", () => {
   ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
