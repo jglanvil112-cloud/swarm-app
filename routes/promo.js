@@ -88,6 +88,7 @@ export async function ensurePromoAssets() {
         customer_selection: "all",
         entitled_collection_ids: [col.id],
         prerequisite_to_entitlement_purchase: { prerequisite_amount: MIN_SPEND },
+        prerequisite_to_entitlement_quantity_ratio: { entitled_quantity: 1 },
         starts_at: new Date().toISOString()
       }})
     })).json();
