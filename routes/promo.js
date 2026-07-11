@@ -13,9 +13,13 @@
 //     (IG+FB via the normal pipeline, house caption rules enforced).
 //  4) CEO 7/11: HOJ Pets digital-only section + physical goods section split
 //     away from digital; one-shot 3-piece drop off top sellers + trend.
+//  5) CEO 7/11 pt2: /collections/all takeover (site catalog = physical + pet
+//     digital only) + nav links for the new sections.
+//  6) CEO 7/11 pt3: AISHA Etsy auto-list — every active Shopify digital drop
+//     mirrors to Etsy automatically (image + download file + activate).
 //
 //  Env (optional): PROMO_WEEKLY_TARGET (default "150"), PROMO_MIN_SPEND
-//  (default "50"), PROMO_CODE (default "FREEART50").
+//  (default "50"), PROMO_CODE (default "FREEART50"), ETSY_SYNC_PRICE ("7.99").
 //
 //  Everything is idempotent — ensure runs on boot and never duplicates.
 
@@ -40,7 +44,7 @@ const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the t
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
-let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null };
+let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, catalog_handle: null, nav: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null, etsy_sync: null };
 
 // Section description shown on the storefront collection page: what it is,
 // the deal, and the Etsy mirror. Same brand name as the website.
@@ -128,6 +132,28 @@ export async function ensurePromoAssets() {
   });
   if (physCol) promoState.physical_collection_handle = physCol.handle;
 
+  // CEO 7/11 pt2: /collections/all takeover — the site's main Catalog shows
+  // physical pet products + PET digital art only (disjunctive OR rules). The
+  // non-pet Afrocentric art lives on its own section page + Etsy, never mixed
+  // into the pet storefront's catalog again.
+  const catalogCol = await ensureSmartCollection(token, shop, {
+    title: "Catalog", handle: "all", published: true, disjunctive: true,
+    body_html: `<p>House of Jreym pet care — grooming, comfort, and original pet portrait digital art.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece</strong> — code <strong>${PROMO_CODE}</strong> at checkout.</p>`,
+    rules: [
+      { column: "type", relation: "not_equals", condition: DIGITAL_TYPE },
+      { column: "title", relation: "contains", condition: PET_MARK }
+    ]
+  });
+  if (catalogCol) {
+    promoState.catalog_handle = catalogCol.handle;
+    if (catalogCol.handle !== "all") await logAgent("IMANI", `Catalog takeover FAILED — handle "${catalogCol.handle}" (another collection owns /collections/all)`, "warn");
+    else await logAgent("IMANI", `Catalog takeover live: /collections/all = physical + pet digital only (art de-mixed)`, "success");
+  }
+
+  // Nav links for the new sections (best effort — needs online-store navigation scope)
+  try { promoState.nav = await ensureNavLinks(token, shop); }
+  catch (e) { promoState.nav = { ok: false, error: e.message.slice(0, 120) }; }
+
   // Heal sold-out digital variants (failed exclusivity caps leave 0 stock and
   // the whole section shows "Sold out" — restock to the edition size).
   try { promoState.last_restock = await restockDigitalProducts(token, shop); }
@@ -210,6 +236,144 @@ async function ensureAllProductsCollection(token, shop) {
     title: ALL_COLLECTION_TITLE, published: false, disjunctive: false,
     rules: [{ column: "variant_price", relation: "greater_than", condition: "0" }]
   });
+}
+
+// ── Nav: append "Digital Art" + "HOJ Pets" links to the main menu (GraphQL) ──
+// Best effort: if the Shopify token lacks the online-store navigation scope,
+// this logs a warning and the links get added by hand in admin instead.
+const NAV_LINKS = [
+  { title: "Digital Art", url: "/collections/digital-art-instant-downloads" },
+  { title: "HOJ Pets", url: "/collections/hoj-pets-digital-art-instant-downloads" }
+];
+async function ensureNavLinks(token, shop) {
+  const gql = async (query, variables) => (await fetch(`https://${shop}/admin/api/2024-01/graphql.json`, {
+    method: "POST", headers: hdrs(token), body: JSON.stringify({ query, variables })
+  })).json();
+  const q = await gql(`{ menus(first: 25) { nodes { id handle title items { id title type url resourceId items { id title type url resourceId } } } } }`);
+  const menus = q?.data?.menus?.nodes || [];
+  if (!menus.length) return { ok: false, error: (q?.errors?.[0]?.message || "no menus (missing navigation scope?)").slice(0, 140) };
+  const menu = menus.find(m => m.handle === "main-menu") || menus[0];
+  const have = new Set((menu.items || []).map(i => (i.url || i.title || "").toLowerCase()));
+  const missing = NAV_LINKS.filter(l => !have.has(l.url.toLowerCase()) && !have.has(l.title.toLowerCase()));
+  if (!missing.length) return { ok: true, added: 0, menu: menu.handle };
+  const strip = it => {
+    const o = { id: it.id, title: it.title, type: it.type };
+    if (it.url) o.url = it.url;
+    if (it.resourceId) o.resourceId = it.resourceId;
+    if (it.items && it.items.length) o.items = it.items.map(strip);
+    return o;
+  };
+  const items = (menu.items || []).map(strip).concat(missing.map(l => ({ title: l.title, type: "HTTP", url: l.url })));
+  const m = await gql(
+    `mutation menuUpdate($id: ID!, $title: String!, $items: [MenuItemUpdateInput!]!) {
+       menuUpdate(id: $id, title: $title, items: $items) { menu { id } userErrors { field message } } }`,
+    { id: menu.id, title: menu.title, items }
+  );
+  const errs = m?.data?.menuUpdate?.userErrors || [];
+  if (m?.errors?.length || errs.length) {
+    const msg = (m?.errors?.[0]?.message || errs[0]?.message || "unknown").slice(0, 140);
+    await logAgent("IMANI", `Nav menu update failed (${msg}) — add links manually: Online Store → Navigation → Main menu`, "warn");
+    return { ok: false, error: msg };
+  }
+  await logAgent("IMANI", `Nav menu updated: added ${missing.map(l => l.title).join(" + ")} to ${menu.handle}`, "success");
+  return { ok: true, added: missing.length, menu: menu.handle };
+}
+
+// ── AISHA Etsy auto-list: every Shopify digital drop mirrors to Etsy ─────────
+// Cron (every 2h at :10) + boot tick. For each ACTIVE "Digital Wall Art"
+// product with no Etsy twin yet: create draft listing → upload the art as the
+// listing image AND as the digital download file → activate. Latch per product
+// via agent_logs "ETSYSYNC:<shopify_id>" so nothing ever lists twice.
+const ETSY_KEY2 = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
+const ETSY_SECRET2 = process.env.ETSY_SECRET || "";
+const ETSY_SHOP_ID2 = parseInt(process.env.ETSY_SHOP_ID) || 66171116;
+const ETSY_BASE2 = "https://openapi.etsy.com/v3/application";
+const ETSY_PRICE = parseFloat(process.env.ETSY_SYNC_PRICE || "7.99");
+const eAuth = t => ({ Authorization: "Bearer " + t, "x-api-key": ETSY_KEY2 + (ETSY_SECRET2 ? ":" + ETSY_SECRET2 : ""), "Content-Type": "application/json" });
+
+async function getEtsyAccessToken() {
+  try {
+    const { data } = await supabase.from("oauth_tokens").select("access_token,expires_at").eq("platform", "etsy").single();
+    if (data?.access_token && (!data.expires_at || new Date(data.expires_at) > new Date(Date.now() + 60000))) return data.access_token;
+  } catch (e) { /* fall through */ }
+  return null; // expired/missing — the Etsy drip jobs refresh it; next tick picks it up
+}
+
+async function etsyMultipart(t, path, field, buf, fname, mime, extra = {}) {
+  const boundary = "----HoJSync" + Math.random().toString(36).slice(2);
+  const parts = [`--${boundary}\r\nContent-Disposition: form-data; name="${field}"; filename="${fname}"\r\nContent-Type: ${mime}\r\n\r\n`, buf];
+  for (const [k, v] of Object.entries(extra)) parts.push(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}`);
+  parts.push(`\r\n--${boundary}--\r\n`);
+  const body = Buffer.concat(parts.map(p => typeof p === "string" ? Buffer.from(p) : p));
+  const r = await fetch(ETSY_BASE2 + path, {
+    method: "POST",
+    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, "Content-Length": body.length.toString(), Authorization: "Bearer " + t, "x-api-key": ETSY_KEY2 + (ETSY_SECRET2 ? ":" + ETSY_SECRET2 : "") },
+    body
+  });
+  return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+}
+
+async function etsySyncTick(maxPerTick = 3) {
+  const out = { listed: 0, checked: 0, at: new Date().toISOString() };
+  if (!ETSY_SHOP_ID2) return { ...out, error: "no ETSY_SHOP_ID" };
+  const et = await getEtsyAccessToken();
+  if (!et) return { ...out, error: "no fresh etsy token (drips will refresh)" };
+  const { token, shop } = await shopAuth();
+  if (!token || !shop) return { ...out, error: "no shopify auth" };
+
+  const pr = await fetch(`${base(shop)}/products.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&status=active&limit=250&fields=id,title,body_html,tags,image`, { headers: hdrs(token) });
+  const pj = await pr.json();
+  if (!pr.ok) return { ...out, error: JSON.stringify(pj).slice(0, 120) };
+  const products = pj.products || [];
+  out.checked = products.length;
+
+  const { data: logs } = await supabase.from("agent_logs").select("message").like("message", "ETSYSYNC:%").limit(1000);
+  const synced = new Set((logs || []).map(l => (l.message.match(/^ETSYSYNC:(\d+)/) || [])[1]).filter(Boolean));
+  const todo = products.filter(p => !synced.has(String(p.id)) && p.image?.src).slice(0, maxPerTick);
+  if (!todo.length) return out;
+
+  let returnPolicyId = 1;
+  try {
+    const rp = await (await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/return-policies`, { headers: eAuth(et) })).json();
+    const pol = rp.results || rp;
+    if (Array.isArray(pol) && pol.length) returnPolicyId = pol[0].return_policy_id; else if (pol.return_policy_id) returnPolicyId = pol.return_policy_id;
+  } catch (e) { /* default stands */ }
+
+  for (const p of todo) {
+    try {
+      const desc = String(p.body_html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1000)
+        + "\n\nInstant digital download — no physical item is shipped. For personal use only.";
+      const tags = String(p.tags || "").split(",").map(x => x.trim().slice(0, 20)).filter(Boolean).slice(0, 13);
+      const cr = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings`, {
+        method: "POST", headers: eAuth(et),
+        body: JSON.stringify({ title: String(p.title).slice(0, 140), description: desc, price: ETSY_PRICE, quantity: 999, who_made: "i_did", when_made: (process.env.ETSY_WHEN_MADE || "2020_2026"), is_supply: false, taxonomy_id: 2078, tags, state: "draft", type: "download", is_digital: true })
+      });
+      const listing = await cr.json();
+      if (!cr.ok || !listing.listing_id) { await logAgent("AISHA", `Etsy auto-list create failed for ${p.id}: ${JSON.stringify(listing).slice(0, 120)}`, "error"); continue; }
+      const lid = listing.listing_id;
+
+      // artwork bytes = listing image + digital download file
+      const imgRes = await fetch(p.image.src, { signal: AbortSignal.timeout(30000) });
+      if (imgRes.ok) {
+        const buf = Buffer.from(await imgRes.arrayBuffer());
+        const mime = imgRes.headers.get("content-type") || "image/jpeg";
+        const ext = mime.includes("png") ? "png" : "jpg";
+        const iu = await etsyMultipart(et, `/shops/${ETSY_SHOP_ID2}/listings/${lid}/images`, "image", buf, `hoj_${lid}.${ext}`, mime, { rank: "1" });
+        if (!iu.ok) await logAgent("AISHA", `Etsy image upload failed for ${lid} (${iu.status})`, "warn");
+        const fu = await etsyMultipart(et, `/shops/${ETSY_SHOP_ID2}/listings/${lid}/files`, "file", buf, `HOJ-full-res.${ext}`, mime, { name: `HOJ-full-res.${ext}`, rank: "1" });
+        if (!fu.ok) await logAgent("AISHA", `Etsy file attach failed for ${lid} (${fu.status})`, "warn");
+      }
+
+      const act = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/${lid}`, { method: "PATCH", headers: eAuth(et), body: JSON.stringify({ state: "active", return_policy_id: returnPolicyId }) });
+      const actD = await act.json().catch(() => ({}));
+      const live = act.ok && actD.state === "active";
+      await logAgent("AISHA", `ETSYSYNC:${p.id} → ${lid} ${live ? "ACTIVE" : "draft (activate failed)"} — ${String(p.title).slice(0, 60)}`, live ? "success" : "warn");
+      if (live) out.listed++;
+      await new Promise(r => setTimeout(r, 400)); // rate-limit breathing room
+    } catch (e) { await logAgent("AISHA", `Etsy auto-list error for ${p.id}: ${e.message.slice(0, 100)}`, "error"); }
+  }
+  if (out.listed) await logAgent("AISHA", `Etsy auto-list tick: ${out.listed} new listing(s) live at $${ETSY_PRICE}`, "success");
+  return out;
 }
 
 // ── CEO 7/11 one-shot: 3-piece drop off top sellers + freshest trend ─────────
@@ -381,6 +545,11 @@ const bootEnsure = async (attempt = 1) => {
 setTimeout(() => bootEnsure(), 25000);
 // One-shot CEO drop (latched — safe across restarts/redeploys)
 setTimeout(() => { fireCeoDropOnce().catch(e => console.log("[promo drop]", e.message)); }, 40000);
+// Etsy auto-list: boot tick at 6 min (after the drop finishes), then every 2h at :10
+setTimeout(() => { etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message)); }, 360000);
+cron.schedule("0 10 */2 * * *", () => {
+  etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message));
+});
 // Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
 cron.schedule("0 0 15 * * *", () => {
   ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
