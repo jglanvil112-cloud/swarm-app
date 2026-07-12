@@ -21,7 +21,7 @@ export const IBRAHIM_CONFIG = {
   auto_posting: true,   // PERSISTENT-ON (per CEO). Set false or POST /api/ibrahim/pause to hold. Scheduled posts publish automatically.
   phase: "2-auto-posting",
   posts_per_day: 4,   // launch cadence (safe spaced max)
-  reels_per_day: 0,   // reels disabled until a video source is connected
+  reels_per_day: 1,   // motion studio (promo.js) supplies daily AI video — reels live (CEO 7/12)
   // Optimal posting times (EST → UTC)
   post_times_utc: ["13:00", "15:00"],   // 9am, 11am ET — all posts land by 11am ET (CEO 7/8)
   reel_time_utc:  "18:00",              // 2pm EST — peak reel engagement
@@ -227,16 +227,19 @@ async function publishToInstagram(post) {
   if (container.error) throw new Error("Container error: " + container.error.message);
   if (!container.id) throw new Error("No container id: " + JSON.stringify(container));
 
-  // Poll container until Instagram finishes processing (avoids "Media ID is not available")
+  // Poll container until Instagram finishes processing (avoids "Media ID is not available").
+  // Videos (REELS) take 30-150s to process — poll longer than images.
   let ready = false;
-  for (let i = 0; i < 10; i++) {
-    await new Promise(r => setTimeout(r, 2000));
+  const isVideo = containerPayload.media_type === "REELS";
+  const tries = isVideo ? 30 : 10, waitMs = isVideo ? 5000 : 2000;
+  for (let i = 0; i < tries; i++) {
+    await new Promise(r => setTimeout(r, waitMs));
     const sRes = await fetch(`${base}/${container.id}?fields=status_code,status&access_token=${token}`);
     const sd = await sRes.json();
     if (sd.status_code === "FINISHED") { ready = true; break; }
     if (sd.status_code === "ERROR" || sd.status === "ERROR") throw new Error("Container processing failed: " + JSON.stringify(sd));
   }
-  if (!ready) throw new Error("Container still processing after 20s");
+  if (!ready) throw new Error(`Container still processing after ${(tries * waitMs) / 1000}s`);
 
   // Publish
   const pRes = await fetch(`${base}/${userId}/media_publish`, {
@@ -259,10 +262,16 @@ async function publishToFacebook(post) {
   if (!cred?.access_token || !cred?.page_id) throw new Error("No Facebook page credentials");
   if (!post.media_urls?.length) throw new Error("No media URL for FB post " + post.id);
 
-  const r = await fetch(`https://graph.facebook.com/v21.0/${cred.page_id}/photos`, {
+  // CEO 7/12: video posts go to the Page's /videos endpoint; images to /photos
+  const isVideo = post.media_type === "VIDEO" || post.media_type === "REEL" || /\.mp4(\?|$)/i.test(post.media_urls[0]);
+  const path = isVideo ? "videos" : "photos";
+  const body = isVideo
+    ? { file_url: post.media_urls[0], description: post.caption, access_token: cred.access_token }
+    : { url: post.media_urls[0], caption: post.caption, access_token: cred.access_token };
+  const r = await fetch(`https://graph.facebook.com/v21.0/${cred.page_id}/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: post.media_urls[0], caption: post.caption, access_token: cred.access_token })
+    body: JSON.stringify(body)
   });
   const j = await r.json();
   if (j.error) throw new Error("FB publish error: " + j.error.message);
@@ -342,7 +351,7 @@ export async function runAutoPublish() {
     const { data: duePosts } = await supabase
       .from("social_posts")
       .select("*")
-      .in("platform", ["instagram", "all"])
+      .in("platform", ["instagram", "facebook", "all"])
       .eq("status", "scheduled")
       .lte("scheduled_for", new Date().toISOString())
       .order("scheduled_for", { ascending: true })
@@ -361,12 +370,6 @@ export async function runAutoPublish() {
           await logAgent("IBRAHIM", `⏩ Re-slotted stale post ${post.id} → ${slot.toISOString().slice(0,16)}Z`, "info");
           continue;
         }
-        // Reels disabled until a working video source exists — skip any reel that slipped through
-        if (post.media_type === "REEL" || post.is_reel || post.meta?.is_reel) {
-          await supabase.from("social_posts").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", post.id);
-          await logAgent("IBRAHIM", `⏭️ Skipped REEL ${post.id} — reels disabled until video source`, "info");
-          continue;
-        }
         // Check we haven't already hit daily limit
         const today = new Date().toISOString().split("T")[0];
         const { count: todayCount } = await supabase
@@ -382,15 +385,23 @@ export async function runAutoPublish() {
           break;
         }
 
-        const postId = await publishToInstagram(post);
-
-        // Cross-post the same content to the Facebook Page (non-fatal — an FB hiccup must not undo the IG publish)
-        let fbPostId = null;
-        try {
+        // CEO 7/12: platform-specific rows go ONLY to their platform (different
+        // content per page); "all" keeps the classic IG + FB cross-post.
+        let postId = null, fbPostId = null;
+        if (post.platform === "facebook") {
           fbPostId = await publishToFacebook(post);
-          await logAgent("IBRAHIM", `📘 Cross-posted ${post.id} to Facebook (${fbPostId})`, "info");
-        } catch (fbErr) {
-          await logAgent("IBRAHIM", `Facebook cross-post failed for ${post.id}: ${fbErr.message}`, "warn");
+          postId = fbPostId;
+        } else {
+          postId = await publishToInstagram(post);
+          if (post.platform === "all") {
+            // Cross-post to the Facebook Page (non-fatal — an FB hiccup must not undo the IG publish)
+            try {
+              fbPostId = await publishToFacebook(post);
+              await logAgent("IBRAHIM", `📘 Cross-posted ${post.id} to Facebook (${fbPostId})`, "info");
+            } catch (fbErr) {
+              await logAgent("IBRAHIM", `Facebook cross-post failed for ${post.id}: ${fbErr.message}`, "warn");
+            }
+          }
         }
 
         // Column-safe flip (status + meta both proven to exist) so the cron can NEVER re-select a published post → no duplicate posting
