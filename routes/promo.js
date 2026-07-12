@@ -48,9 +48,14 @@ let promoState = { collection_id: null, collection_handle: null, pet_collection_
 
 // Section description shown on the storefront collection page: what it is,
 // the deal, and the Etsy mirror. Same brand name as the website.
-const SECTION_BODY = `<p>Original Afrocentric digital wall art from House of Jreym — instant downloads. Every clean drop includes Classic, 3D, and Holographic editions.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
-const PET_SECTION_BODY = `<p>HOJ Pets — original pet portrait digital art from House of Jreym. Instant downloads only: Classic, 3D, and Holographic editions of every clean drop.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
-const PHYSICAL_SECTION_BODY = `<p>Wearables and physical goods from House of Jreym — made to order and shipped to you.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece of your choice</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
+// BODY_MARK versions the descriptions — bump it and every section refreshes on
+// the next ensure. v3 adds the cross-section link buttons (CEO 7/11).
+const BODY_MARK = "<!-- hoj-v3 -->";
+const SECTION_BUTTONS = `<p><a href="/collections/digital-art-instant-downloads"><strong>🎨 ALL DIGITAL ART →</strong></a> &nbsp;|&nbsp; <a href="/collections/hoj-pets-digital-art-instant-downloads"><strong>🐾 HOJ PETS DIGITAL →</strong></a> &nbsp;|&nbsp; <a href="/collections/all"><strong>🛒 PET SUPPLIES →</strong></a></p>`;
+const SECTION_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>Original digital wall art from House of Jreym — instant downloads. Every clean drop includes Classic, 3D, and Holographic editions plus room-scene previews.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
+const PET_SECTION_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>HOJ Pets — original dog & pet portrait digital art from House of Jreym. Instant downloads only: Classic, 3D, and Holographic editions of every clean drop, with room-scene previews.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
+const PHYSICAL_SECTION_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>Wearables and physical goods from House of Jreym — made to order and shipped to you.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece of your choice</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
+const CATALOG_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>House of Jreym pet care — grooming, comfort, and original pet portrait digital art in Classic, 3D & Holographic editions.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece</strong> — code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
 
 function requireApproval(req, res) {
   if (!APPROVAL_SECRET) { res.status(503).json({ error: "approval not configured" }); return false; }
@@ -92,13 +97,13 @@ export async function ensurePromoAssets() {
   if (!col) return { ok: false, error: "collection create failed" };
   promoState.collection_id = col.id; promoState.collection_handle = col.handle;
 
-  // Keep the section description current: deal messaging + Etsy shop link
-  if (!(col.body_html || "").includes(PROMO_CODE)) {
+  // Keep the section description current (versioned via BODY_MARK)
+  if (!(col.body_html || "").includes(BODY_MARK)) {
     const ur = await fetch(`${base(shop)}/smart_collections/${col.id}.json`, {
       method: "PUT", headers: hdrs(token),
       body: JSON.stringify({ smart_collection: { id: col.id, body_html: SECTION_BODY } })
     });
-    if (ur.ok) await logAgent("IMANI", `Section refreshed: $${MIN_SPEND} deal + Etsy link now live on /collections/${col.handle}`, "success");
+    if (ur.ok) await logAgent("IMANI", `Section refreshed: deal + Etsy link + section buttons live on /collections/${col.handle}`, "success");
   }
 
   // Main digital section excludes pet art — pet pieces live ONLY in HOJ Pets (CEO 7/11)
@@ -138,7 +143,7 @@ export async function ensurePromoAssets() {
   // into the pet storefront's catalog again.
   const catalogCol = await ensureSmartCollection(token, shop, {
     title: "Catalog", handle: "all", published: true, disjunctive: true,
-    body_html: `<p>House of Jreym pet care — grooming, comfort, and original pet portrait digital art.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece</strong> — code <strong>${PROMO_CODE}</strong> at checkout.</p>`,
+    body_html: CATALOG_BODY,
     rules: [
       { column: "type", relation: "not_equals", condition: DIGITAL_TYPE },
       { column: "title", relation: "contains", condition: PET_MARK }
@@ -217,6 +222,7 @@ export async function ensurePromoAssets() {
 }
 
 // ── Generic idempotent smart-collection ensure (find by title, else create) ──
+// Also refreshes an existing collection's description when BODY_MARK is stale.
 async function ensureSmartCollection(token, shop, def) {
   const cl = await (await fetch(`${base(shop)}/smart_collections.json?title=${encodeURIComponent(def.title)}`, { headers: hdrs(token) })).json();
   let col = (cl.smart_collections || [])[0] || null;
@@ -226,6 +232,12 @@ async function ensureSmartCollection(token, shop, def) {
     })).json();
     col = cr.smart_collection || null;
     if (col) await logAgent("IMANI", `Created storefront section "${def.title}" (/collections/${col.handle})`, "success");
+  } else if (def.body_html && def.body_html.includes(BODY_MARK) && !(col.body_html || "").includes(BODY_MARK)) {
+    const ur = await fetch(`${base(shop)}/smart_collections/${col.id}.json`, {
+      method: "PUT", headers: hdrs(token),
+      body: JSON.stringify({ smart_collection: { id: col.id, body_html: def.body_html } })
+    });
+    if (ur.ok) await logAgent("IMANI", `Section description refreshed on /collections/${col.handle}`, "info");
   }
   return col;
 }
@@ -280,10 +292,11 @@ async function ensureNavLinks(token, shop) {
 }
 
 // ── AISHA Etsy auto-list: every Shopify digital drop mirrors to Etsy ─────────
-// Cron (every 2h at :10) + boot tick. For each ACTIVE "Digital Wall Art"
-// product with no Etsy twin yet: create draft listing → upload the art as the
-// listing image AND as the digital download file → activate. Latch per product
-// via agent_logs "ETSYSYNC:<shopify_id>" so nothing ever lists twice.
+// Boot tick + HOURLY cron at :20. For each ACTIVE "Digital Wall Art" product
+// with no Etsy twin yet: create draft listing → upload up to 4 preview pics
+// (editions + room scenes) → attach the art as the digital download file →
+// activate. Latch per product via agent_logs "ETSYSYNC:<shopify_id>" so
+// nothing ever lists twice.
 const ETSY_KEY2 = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
 const ETSY_SECRET2 = process.env.ETSY_SECRET || "";
 const ETSY_SHOP_ID2 = parseInt(process.env.ETSY_SHOP_ID) || 66171116;
@@ -293,10 +306,24 @@ const eAuth = t => ({ Authorization: "Bearer " + t, "x-api-key": ETSY_KEY2 + (ET
 
 async function getEtsyAccessToken() {
   try {
-    const { data } = await supabase.from("oauth_tokens").select("access_token,expires_at").eq("platform", "etsy").single();
+    const { data } = await supabase.from("oauth_tokens").select("access_token,refresh_token,expires_at").eq("platform", "etsy").single();
     if (data?.access_token && (!data.expires_at || new Date(data.expires_at) > new Date(Date.now() + 60000))) return data.access_token;
+    // Self-heal (CEO 7/11): refresh expired tokens right here instead of waiting
+    // for the Etsy drip jobs — no tick ever skips for a stale token.
+    const rt = data?.refresh_token || process.env.ETSY_REFRESH_TOKEN;
+    if (rt) {
+      const r = await fetch("https://api.etsy.com/v3/public/oauth/token", {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", client_id: ETSY_KEY2, refresh_token: rt })
+      });
+      const d = await r.json();
+      if (d.access_token) {
+        await supabase.from("oauth_tokens").upsert({ platform: "etsy", access_token: d.access_token, refresh_token: d.refresh_token || rt, expires_at: new Date(Date.now() + (d.expires_in || 3600) * 1000).toISOString(), updated_at: new Date().toISOString() }, { onConflict: "platform" });
+        return d.access_token;
+      }
+    }
   } catch (e) { /* fall through */ }
-  return null; // expired/missing — the Etsy drip jobs refresh it; next tick picks it up
+  return null;
 }
 
 async function etsyMultipart(t, path, field, buf, fname, mime, extra = {}) {
@@ -313,15 +340,15 @@ async function etsyMultipart(t, path, field, buf, fname, mime, extra = {}) {
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
 }
 
-async function etsySyncTick(maxPerTick = 3) {
+async function etsySyncTick(maxPerTick = 4) {
   const out = { listed: 0, checked: 0, at: new Date().toISOString() };
   if (!ETSY_SHOP_ID2) return { ...out, error: "no ETSY_SHOP_ID" };
   const et = await getEtsyAccessToken();
-  if (!et) return { ...out, error: "no fresh etsy token (drips will refresh)" };
+  if (!et) return { ...out, error: "no fresh etsy token (refresh failed)" };
   const { token, shop } = await shopAuth();
   if (!token || !shop) return { ...out, error: "no shopify auth" };
 
-  const pr = await fetch(`${base(shop)}/products.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&status=active&limit=250&fields=id,title,body_html,tags,image`, { headers: hdrs(token) });
+  const pr = await fetch(`${base(shop)}/products.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&status=active&limit=250&fields=id,title,body_html,tags,image,images`, { headers: hdrs(token) });
   const pj = await pr.json();
   if (!pr.ok) return { ...out, error: JSON.stringify(pj).slice(0, 120) };
   const products = pj.products || [];
@@ -352,16 +379,23 @@ async function etsySyncTick(maxPerTick = 3) {
       if (!cr.ok || !listing.listing_id) { await logAgent("AISHA", `Etsy auto-list create failed for ${p.id}: ${JSON.stringify(listing).slice(0, 120)}`, "error"); continue; }
       const lid = listing.listing_id;
 
-      // artwork bytes = listing image + digital download file
-      const imgRes = await fetch(p.image.src, { signal: AbortSignal.timeout(30000) });
-      if (imgRes.ok) {
-        const buf = Buffer.from(await imgRes.arrayBuffer());
-        const mime = imgRes.headers.get("content-type") || "image/jpeg";
-        const ext = mime.includes("png") ? "png" : "jpg";
-        const iu = await etsyMultipart(et, `/shops/${ETSY_SHOP_ID2}/listings/${lid}/images`, "image", buf, `hoj_${lid}.${ext}`, mime, { rank: "1" });
-        if (!iu.ok) await logAgent("AISHA", `Etsy image upload failed for ${lid} (${iu.status})`, "warn");
-        const fu = await etsyMultipart(et, `/shops/${ETSY_SHOP_ID2}/listings/${lid}/files`, "file", buf, `HOJ-full-res.${ext}`, mime, { name: `HOJ-full-res.${ext}`, rank: "1" });
-        if (!fu.ok) await logAgent("AISHA", `Etsy file attach failed for ${lid} (${fu.status})`, "warn");
+      // Upload up to 4 preview pics (editions + room scenes) — first doubles as the download file
+      const srcs = (p.images && p.images.length ? p.images.map(im => im.src) : [p.image.src]).filter(Boolean).slice(0, 4);
+      for (let i = 0; i < srcs.length; i++) {
+        try {
+          const imgRes = await fetch(srcs[i], { signal: AbortSignal.timeout(30000) });
+          if (!imgRes.ok) continue;
+          const buf = Buffer.from(await imgRes.arrayBuffer());
+          const mime = imgRes.headers.get("content-type") || "image/jpeg";
+          const ext = mime.includes("png") ? "png" : "jpg";
+          const iu = await etsyMultipart(et, `/shops/${ETSY_SHOP_ID2}/listings/${lid}/images`, "image", buf, `hoj_${lid}_${i + 1}.${ext}`, mime, { rank: String(i + 1) });
+          if (!iu.ok) await logAgent("AISHA", `Etsy image ${i + 1} upload failed for ${lid} (${iu.status})`, "warn");
+          if (i === 0) {
+            const fu = await etsyMultipart(et, `/shops/${ETSY_SHOP_ID2}/listings/${lid}/files`, "file", buf, `HOJ-full-res.${ext}`, mime, { name: `HOJ-full-res.${ext}`, rank: "1" });
+            if (!fu.ok) await logAgent("AISHA", `Etsy file attach failed for ${lid} (${fu.status})`, "warn");
+          }
+          await new Promise(r => setTimeout(r, 250));
+        } catch (e) { /* image optional — listing still activates */ }
       }
 
       const act = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/${lid}`, { method: "PATCH", headers: eAuth(et), body: JSON.stringify({ state: "active", return_policy_id: returnPolicyId }) });
@@ -456,7 +490,7 @@ async function schedulePromoPost(delayHours = 2) {
   const link = promoState.collection_handle ? `houseofjreym.store/collections/${promoState.collection_handle}` : "houseofjreym.store";
   const when = new Date(Date.now() + delayHours * 3600e3); when.setUTCMinutes(0, 0, 0);
   const caption = enforceCaptionRules(
-    `DEAL ALERT 💰 Spend $${MIN_SPEND} at House of Jreym and take ANY digital art piece FREE — your pick, Classic, 3D, or Holographic edition. Original Afrocentric art, instant download, yours forever. Use code ${PROMO_CODE} at checkout. ✊🏾✨ #HouseOfJreym #AfrocentricArt #BlackArt #DigitalDownload #FreeArt #ArtDeals`,
+    `DEAL ALERT 💰 Spend $${MIN_SPEND} at House of Jreym and take ANY digital art piece FREE — your pick, Classic, 3D, or Holographic edition. Original art, instant download, yours forever. Use code ${PROMO_CODE} at checkout. ✨ #HouseOfJreym #WallArt #DigitalDownload #FreeArt #ArtDeals`,
     link
   );
   // reuse latest owned artwork already in the posting pipeline for the visual
@@ -545,9 +579,9 @@ const bootEnsure = async (attempt = 1) => {
 setTimeout(() => bootEnsure(), 25000);
 // One-shot CEO drop (latched — safe across restarts/redeploys)
 setTimeout(() => { fireCeoDropOnce().catch(e => console.log("[promo drop]", e.message)); }, 40000);
-// Etsy auto-list: boot tick at 6 min (after the drop finishes), then every 2h at :10
+// Etsy auto-list: boot tick at 6 min (after the drop finishes), then HOURLY at :20
 setTimeout(() => { etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message)); }, 360000);
-cron.schedule("0 10 */2 * * *", () => {
+cron.schedule("0 20 * * * *", () => {
   etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message));
 });
 // Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
