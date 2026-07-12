@@ -63,6 +63,16 @@ async function falGenerate(model, prompt) {
   return url;
 }
 
+// ── fal retry wrapper (CEO 7/11 self-heal): one transient failure never kills a drop ──
+async function falGenerateRetry(model, prompt, tries = 2) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try { return await falGenerate(model, prompt); }
+    catch (e) { last = e; await new Promise(r => setTimeout(r, 4000)); }
+  }
+  throw last;
+}
+
 // ── Claude-vision IP / quality gate (the load-bearing safeguard for unreviewed gen) ──
 async function ipVisionGate(imageUrl) {
   if (!ANTHROPIC_KEY) return { risky: true, reason: "no vision key — held for safety" };
@@ -85,14 +95,16 @@ async function ipVisionGate(imageUrl) {
 }
 
 // ── main pipeline ──
+// CEO 7/11: themes are no longer forced Afrocentric — sports, moods, pets and
+// trending topics all flow through as-is; the theme itself carries the vibe.
 export async function runPodGen({ theme = "Afrocentric heritage", style = "design", dry = false } = {}) {
   const uid = ("HOJ-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6)).toUpperCase();
   if (IP_BLOCK.some(t => theme.toLowerCase().includes(t))) return { ok: false, reason: "theme tripped IP blocklist", uid };
   const model = MODELS[style] || MODELS.design;
-  const prompt = `Original Afrocentric ${theme} wall-art design. Bold, culturally rooted, high-contrast, clean print-ready composition, museum-quality digital art. Pure imagery with absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere in the image. No brand names or logos, no trademarks, no copyrighted characters, no real people — 100% original artwork.`;
+  const prompt = `Original "${theme}" themed wall-art design. Bold, high-contrast, clean print-ready composition, museum-quality digital art. Pure imagery with absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere in the image. No brand names or logos, no trademarks, no copyrighted characters, no real people — 100% original artwork.`;
   if (dry) return { ok: true, dry: true, uid, model, prompt };
 
-  const imageUrl = await falGenerate(model, prompt);
+  const imageUrl = await falGenerateRetry(model, prompt);
   const gate = await ipVisionGate(imageUrl);
   const pass = !gate.risky;
   const status = (pass && AUTO_PUBLISH) ? "active" : "draft";
@@ -112,13 +124,27 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
         if (!vGate.risky) { versionImages.push({ src: vUrl }); versionsIncluded.push(v.label); }
       } catch (e) { /* version optional — base still ships */ }
     }
+
+    // ── Scenery previews (CEO 7/11): the piece staged in real rooms — NEVER people ──
+    const sceneries = [
+      "displayed as a large framed print on a bright modern living room wall, stylish cozy interior, warm natural light, completely empty room",
+      "displayed as an elegant framed print above a minimalist bedroom headboard, soft morning light, completely empty room",
+      "displayed as a framed print in a clean art gallery corner with a plant and bench, bright even lighting, completely empty space"
+    ];
+    for (const s of sceneries) {
+      try {
+        const sUrl = await falGenerate(MODELS.art, `Original "${theme}" themed wall-art ${s}. Absolutely no people, no humans, no faces, no hands, no words, letters, text, logos or watermarks anywhere.`);
+        const sGate = await ipVisionGate(sUrl);
+        if (!sGate.risky) versionImages.push({ src: sUrl });
+      } catch (e) { /* previews optional — base still ships */ }
+    }
   }
 
   const product = {
-    title: `Afrocentric ${theme} — Original Digital Wall Art (${uid})`,
-    body_html: `<p>Original Afrocentric ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong></p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
+    title: `${theme} — Original Digital Wall Art (${uid})`,
+    body_html: `<p>Original ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Preview photos show the piece staged in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
     vendor: "House of Jreym", product_type: "Digital Wall Art", status,
-    tags: `originals, afrocentric, digital download, 3d, holographic, ${theme}, ${uid}`,
+    tags: `originals, digital download, wall art, 3d, holographic, ${theme}, ${uid}`,
     images: versionImages,
     variants: [{ price: "10.99", requires_shipping: false, taxable: true, inventory_management: null }]
   };
@@ -146,7 +172,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     try {
       const when = new Date(Date.now() + 3 * 3600e3); when.setUTCMinutes(0, 0, 0);
       const link = handle ? `houseofjreym.store/products/${handle}` : "houseofjreym.store";
-      const caption = enforceCaptionRules(`NEW DROP 🔥 "${theme}" — original Afrocentric wall art, instant digital download. Limited edition of 250 (${uid}). Launch price $8.79 (was $10.99). 🛍 ${link} ✊🏾✨ #HouseOfJreym #AfrocentricArt #BlackArt #DigitalDownload #LimitedEdition`, link); // house rules
+      const caption = enforceCaptionRules(`NEW DROP 🔥 "${theme}" — original wall art, instant digital download. Comes in Classic, 3D & Holographic editions ✨ Limited edition of 250 (${uid}). Launch price $8.79 (was $10.99). 🛍 ${link} #HouseOfJreym #WallArt #DigitalDownload #3DArt #HolographicArt #LimitedEdition`, link); // house rules
       await supabase.from("social_posts").insert({
         platform: "all", status: "scheduled", caption, media_urls: [imageUrl], media_type: "IMAGE",
         scheduled_for: when.toISOString(), keyword: "autodrop-" + uid,
@@ -168,7 +194,9 @@ podgenRouter.post("/run", async (req, res) => {
 });
 
 // POST /api/podgen/batch (GATED) — generate a catalog in the background. body { count?, themes? }
-const DEFAULT_THEMES = ["Juneteenth Celebration","Melanin Queen","Kente Heritage","Sankofa Wisdom","Black Excellence","Ankara Bloom","Afro Muse","Diaspora Roots","Golden Heritage","Naija Pride","Black Love","Ancestral Power"];
+// CEO 7/11: theme pool widened past Afrocentric — dogs (HOJ Pets), sports, moods.
+const DEFAULT_THEMES = ["Melanin Queen","Regal Pet Portrait — crowned royal dog","Basketball Court Legends","Kente Heritage","Chill Lo-fi Sunset Mood","Sankofa Wisdom","Retro Football Stadium Energy","Black Excellence","Golden Retriever Pet Portrait — sunny garden","Ankara Bloom","Midnight City Dreams Mood","Boxing Champion Spirit"];
+const DOG_THEMES = ["Regal Pet Portrait — crowned royal dog","Golden Retriever Pet Portrait — sunny garden","French Bulldog Pet Portrait — neon pop art","Playful Puppy Pet Portrait — soft watercolor","Majestic German Shepherd Pet Portrait — mountain sunrise","Dapper Poodle Pet Portrait — renaissance style"];
 podgenRouter.post("/batch", async (req, res) => {
   if (!requireApproval(req, res)) return;
   const count = Math.min(20, Math.max(1, req.body?.count || 12));
@@ -214,6 +242,8 @@ async function latestTrendThemes(n) {
 if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
   try {
     const themes = await latestTrendThemes(DAILY_COUNT);
+    // CEO 7/11: slot 0 is always a dog Pet Portrait (feeds the HOJ Pets section daily)
+    themes[0] = DOG_THEMES[Math.floor(Date.now() / 86400000) % DOG_THEMES.length];
     await logAgent("NANA", `Daily auto-drop starting: ${themes.join(" | ")}`, "info");
     let made = 0;
     for (let i = 0; i < themes.length; i++) {
