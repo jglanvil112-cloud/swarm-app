@@ -370,7 +370,10 @@ async function etsySyncTick(maxPerTick = 4) {
     try {
       const desc = String(p.body_html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1000)
         + "\n\nInstant digital download — no physical item is shipped. For personal use only.";
-      const tags = String(p.tags || "").split(",").map(x => x.trim().slice(0, 20)).filter(Boolean).slice(0, 13);
+      // Etsy tag rules: letters/numbers/spaces/hyphens only — strip em-dashes & symbols
+      const tags = [...new Set(String(p.tags || "").split(",")
+        .map(x => x.replace(/[^A-Za-z0-9' -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 20).trim())
+        .filter(x => x.length > 1))].slice(0, 13);
       const cr = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings`, {
         method: "POST", headers: eAuth(et),
         body: JSON.stringify({ title: String(p.title).slice(0, 140), description: desc, price: ETSY_PRICE, quantity: 999, who_made: "i_did", when_made: (process.env.ETSY_WHEN_MADE || "2020_2026"), is_supply: false, taxonomy_id: 2078, tags, state: "draft", type: "download", is_digital: true })
