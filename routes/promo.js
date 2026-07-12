@@ -44,7 +44,7 @@ const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the t
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
-let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, catalog_handle: null, nav: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null, etsy_sync: null };
+let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, catalog_handle: null, nav: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null, etsy_sync: null, last_motion: null };
 
 // Section description shown on the storefront collection page: what it is,
 // the deal, and the Etsy mirror. Same brand name as the website.
@@ -413,6 +413,98 @@ async function etsySyncTick(maxPerTick = 4) {
   return out;
 }
 
+// ── IMANI Motion Studio (CEO 7/12): daily AI video, DIFFERENT piece per page ──
+// Every day at 16:30 UTC (12:30pm ET): pick two different recent art pieces,
+// animate each with fal.ai image-to-video (slow cinematic push-in, no people),
+// then schedule an Instagram REEL with one piece and a Facebook video with the
+// other — so the pages never show the same thing. Latched per day.
+const FAL_KEY2 = process.env.FAL_KEY || process.env.FAL_AI_KEY || "";
+// Seedance (ByteDance — the CapCut AI family) via fal, forced HD (CEO 7/12)
+const MOTION_MODEL = process.env.MOTION_MODEL || "fal-ai/bytedance/seedance/v1/pro/fast/image-to-video";
+
+async function falVideo(imageUrl, prompt) {
+  if (!FAL_KEY2) throw new Error("FAL_KEY missing");
+  const auth = { Authorization: `Key ${FAL_KEY2}`, "Content-Type": "application/json" };
+  const sub = await fetch(`https://queue.fal.run/${MOTION_MODEL}`, {
+    method: "POST", headers: auth,
+    body: JSON.stringify({ prompt, image_url: imageUrl, duration: "5", resolution: "1080p", aspect_ratio: "9:16" })
+  });
+  const j = await sub.json();
+  if (!j.request_id) throw new Error("fal video submit failed: " + JSON.stringify(j).slice(0, 140));
+  const statusUrl = j.status_url || `https://queue.fal.run/${MOTION_MODEL}/requests/${j.request_id}/status`;
+  const respUrl = j.response_url || `https://queue.fal.run/${MOTION_MODEL}/requests/${j.request_id}`;
+  for (let i = 0; i < 96; i++) { // videos render slowly — up to ~8 min
+    await new Promise(r => setTimeout(r, 5000));
+    const st = await (await fetch(statusUrl, { headers: { Authorization: `Key ${FAL_KEY2}` } })).json();
+    if (st.status === "COMPLETED") break;
+    if (st.status === "FAILED" || st.status === "ERROR") throw new Error("fal video generation failed");
+  }
+  const out = await (await fetch(respUrl, { headers: { Authorization: `Key ${FAL_KEY2}` } })).json();
+  const url = out.video?.url || out.video_url || out.videos?.[0]?.url;
+  if (!url) throw new Error("fal video: no url in result");
+  // HD quality check: a real 1080p clip is multi-MB — tiny/failed renders never post
+  try {
+    const head = await fetch(url, { method: "HEAD" });
+    const bytes = parseInt(head.headers.get("content-length") || "0");
+    if (bytes && bytes < 400000) throw new Error(`video too small (${Math.round(bytes / 1024)}KB) — failed HD check`);
+  } catch (e) { if (/HD check/.test(e.message)) throw e; /* HEAD unsupported — let it pass */ }
+  return url;
+}
+
+async function motionTick() {
+  const day = new Date().toISOString().slice(0, 10);
+  const MARK = "MOTION:" + day;
+  try {
+    const { data, error } = await supabase.from("agent_logs").select("id").eq("message", MARK).limit(1);
+    if (error || (data && data.length)) return { skipped: "already ran today" };
+  } catch (e) { return { skipped: "latch check failed" }; }
+  await logAgent("IMANI", MARK, "info"); // latch before spending
+
+  const { token, shop } = await shopAuth();
+  if (!token || !shop) return { error: "no shopify auth" };
+  const pr = await fetch(`${base(shop)}/products.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&status=active&limit=50&fields=id,title,handle,image`, { headers: hdrs(token) });
+  const pj = await pr.json();
+  const pool = (pj.products || []).filter(p => p.image?.src);
+  if (pool.length < 2) return { error: "not enough art with images" };
+
+  // rotate through the catalog by day so the pair is fresh every day
+  const dayIdx = Math.floor(Date.now() / 86400000);
+  const pick = [pool[dayIdx % pool.length], pool[(dayIdx + 7) % pool.length]];
+  if (pick[0].id === pick[1].id) pick[1] = pool[(dayIdx + 1) % pool.length];
+
+  const motionPrompt = "Slow cinematic camera push-in on this framed wall artwork, subtle parallax and depth, gentle warm light shift, elegant gallery ambience. No people, no humans, no hands, no text or captions.";
+  const results = [];
+  const plans = [
+    { p: pick[0], platform: "instagram", media_type: "REEL", meta: { pipeline: "motion", is_reel: true },
+      cap: t => `This piece MOVES 🎬 "${t}" — original wall art brought to life. Own it as an instant digital download in Classic, 3D & Holographic editions.` },
+    { p: pick[1], platform: "facebook", media_type: "VIDEO", meta: { pipeline: "motion" },
+      cap: t => `Watch "${t}" come alive on the wall 🖼️ Original art, instant digital download — Classic, 3D & Holographic editions included.` }
+  ];
+  for (const plan of plans) {
+    try {
+      const title = String(plan.p.title).split("—")[0].trim();
+      const videoUrl = await falVideo(plan.p.image.src, motionPrompt);
+      const link = `houseofjreym.store/products/${plan.p.handle}`;
+      const caption = enforceCaptionRules(`${plan.cap(title)} 🛍 ${link}\n\n#HouseOfJreym #WallArt #DigitalDownload #3DArt #HolographicArt`, link);
+      const when = new Date(Date.now() + 10 * 60000);
+      const { error } = await supabase.from("social_posts").insert({
+        platform: plan.platform, status: "scheduled", caption,
+        media_urls: [videoUrl], media_type: plan.media_type,
+        scheduled_for: when.toISOString(), keyword: "motion-" + day + "-" + plan.platform,
+        created_by: "IMANI", meta: { ...plan.meta, product_id: plan.p.id }
+      });
+      if (error) throw new Error(error.message);
+      results.push({ platform: plan.platform, product: title, ok: true });
+      await logAgent("IMANI", `🎬 Motion ${plan.platform.toUpperCase()}: "${title}" video scheduled for ${when.toISOString().slice(11, 16)}Z`, "success");
+    } catch (e) {
+      results.push({ platform: plan.platform, ok: false, error: e.message.slice(0, 100) });
+      await logAgent("IMANI", `Motion ${plan.platform} failed: ${e.message.slice(0, 120)}`, "warn");
+    }
+  }
+  promoState.last_motion = { at: new Date().toISOString(), results };
+  return { ok: true, results };
+}
+
 // ── CEO 7/11 one-shot: 3-piece drop off top sellers + freshest trend ─────────
 // Fires ONCE (agent_logs marker is the latch), 40s after boot. Each piece runs
 // the full podgen loop: fal.ai gen → vision IP gate → Shopify product with 3
@@ -587,6 +679,9 @@ setTimeout(() => { etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch
 cron.schedule("0 20 * * * *", () => {
   etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message));
 });
+// Motion studio: daily 16:30 UTC (12:30pm ET) + latched boot tick 9 min after start
+cron.schedule("0 30 16 * * *", () => { motionTick().catch(e => console.log("[motion]", e.message)); });
+setTimeout(() => { motionTick().catch(e => console.log("[motion]", e.message)); }, 540000);
 // Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
 cron.schedule("0 0 15 * * *", () => {
   ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
