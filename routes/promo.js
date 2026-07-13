@@ -44,7 +44,7 @@ const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the t
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
-let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, catalog_handle: null, nav: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null, etsy_sync: null, last_motion: null };
+let promoState = { collection_id: null, collection_handle: null, pet_collection_handle: null, physical_collection_handle: null, catalog_handle: null, nav: null, price_rule_id: null, code_ok: false, last_ensure: null, last_check: null, last_restock: null, last_drop: null, etsy_sync: null, last_motion: null, floor: null, last_pet_promo: null };
 
 // Section description shown on the storefront collection page: what it is,
 // the deal, and the Etsy mirror. Same brand name as the website.
@@ -472,7 +472,7 @@ async function motionTick() {
   const pick = [pool[dayIdx % pool.length], pool[(dayIdx + 7) % pool.length]];
   if (pick[0].id === pick[1].id) pick[1] = pool[(dayIdx + 1) % pool.length];
 
-  const motionPrompt = "Slow cinematic camera push-in on this framed wall artwork, subtle parallax and depth, gentle warm light shift, elegant gallery ambience. No people, no humans, no hands, no text or captions.";
+  const motionPrompt = "Slow cinematic camera push-in on this frameless wall artwork, subtle parallax and depth, gentle warm light shift, elegant gallery ambience. No picture frame, no people, no humans, no hands, no text or captions.";
   const results = [];
   const plans = [
     { p: pick[0], platform: "instagram", media_type: "REEL", meta: { pipeline: "motion", is_reel: true },
@@ -632,6 +632,64 @@ export async function checkAndBoost() {
   return { ok: true, boosted: true, revenue_7d: +revenue.toFixed(2), target: WEEKLY_TARGET, post };
 }
 
+// ── Product floor (CEO 7/12): HOJ always has >= 100 buyable digital products ──
+// Counts ACTIVE Digital Wall Art; if under the floor, fires podgen to top up.
+// Runs at boot (8 min) + daily. Uses a diverse theme pool (not just Afrocentric).
+const FLOOR_MIN = parseInt(process.env.PRODUCT_FLOOR || "100", 10);
+const FLOOR_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Retro Arcade Neon Nights","Boxing Champion Spirit","Street Graffiti Color Explosion","Golden Retriever Pet Portrait — sunny garden","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Skate Park Motion Blur","Cosmic Space Dreamscape","Midnight City Dreams Mood","Anime-Style Rainy City Mood","Vintage Muscle Car Sunset","French Bulldog Pet Portrait — neon pop art","Surfer Sunset Wave Mood","Mountain Hiking Adventure Vibe"];
+
+async function ensureProductFloor() {
+  const { token, shop } = await shopAuth();
+  if (!token || !shop) return { error: "no shopify auth" };
+  // Count active digital products
+  const r = await fetch(`${base(shop)}/products/count.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&status=active`, { headers: hdrs(token) });
+  const j = await r.json();
+  const count = j.count || 0;
+  if (count >= FLOOR_MIN) { promoState.floor = { count, min: FLOOR_MIN, topped: 0, at: new Date().toISOString() }; return { ok: true, count, topped: 0 }; }
+  // Top up — but cap each run at 8 so we never blow the fal budget in one shot
+  const need = Math.min(8, FLOOR_MIN - count);
+  await logAgent("IMANI", `Product floor: ${count}/${FLOOR_MIN} buyable — generating ${need} to top up`, "warn");
+  const dayN = Math.floor(Date.now() / 86400000);
+  let made = 0;
+  for (let i = 0; i < need; i++) {
+    try { const rr = await runPodGen({ theme: FLOOR_THEMES[(dayN + i) % FLOOR_THEMES.length], style: i % 2 ? "art" : "design" }); if (rr?.productId) made++; }
+    catch (e) { console.log("[floor]", e.message); }
+  }
+  promoState.floor = { count: count + made, min: FLOOR_MIN, topped: made, at: new Date().toISOString() };
+  await logAgent("IMANI", `Product floor top-up: +${made} (now ~${count + made}/${FLOOR_MIN})`, made ? "success" : "warn");
+  return { ok: true, count: count + made, topped: made };
+}
+
+// ── Trending pet-product promotion (CEO 7/12): rotate buy-link posts for the ──
+// physical pet supplies so the store's real products get promoted daily too.
+async function promotePetProductsTick() {
+  const { token, shop } = await shopAuth();
+  if (!token || !shop) return { error: "no shopify auth" };
+  const r = await fetch(`${base(shop)}/products.json?product_type=Pet%20Supplies&status=active&limit=50&fields=id,title,handle,image,variants`, { headers: hdrs(token) });
+  let items = (await r.json()).products || [];
+  if (!items.length) { // fallback: any non-digital active product that ships
+    const r2 = await fetch(`${base(shop)}/products.json?status=active&limit=100&fields=id,title,handle,image,product_type,variants`, { headers: hdrs(token) });
+    items = ((await r2.json()).products || []).filter(p => p.product_type !== DIGITAL_TYPE && p.image?.src);
+  }
+  items = items.filter(p => p.image?.src);
+  if (!items.length) return { ok: true, promoted: 0, note: "no physical products yet" };
+  const dayN = Math.floor(Date.now() / 86400000);
+  const p = items[dayN % items.length];
+  const link = `houseofjreym.store/products/${p.handle}`;
+  const price = p.variants?.[0]?.price ? `$${p.variants[0].price}` : "";
+  const caption = enforceCaptionRules(`🐾 Trending in the shop: ${String(p.title).split("—")[0].trim()} ${price ? "— " + price : ""}. Treat your pet to the good stuff. 🛍 ${link} #PetCare #DogsOfInstagram #CatsOfInstagram #PetProducts #HouseOfJreym`, link);
+  const when = new Date(Date.now() + 30 * 60000); when.setUTCMinutes(0, 0, 0);
+  const { error } = await supabase.from("social_posts").insert({
+    platform: "all", status: "scheduled", caption, media_urls: [p.image.src], media_type: "IMAGE",
+    scheduled_for: when.toISOString(), keyword: "petpromo-" + p.id, created_by: "IMANI",
+    meta: { pipeline: "pet-promo", product_id: p.id }
+  });
+  if (error) { await logAgent("IMANI", `Pet promo insert failed: ${error.message}`, "warn"); return { ok: false }; }
+  await logAgent("IMANI", `🐾 Pet-product promo scheduled: ${String(p.title).slice(0, 50)}`, "success");
+  promoState.last_pet_promo = { at: new Date().toISOString(), product: p.title };
+  return { ok: true, promoted: 1 };
+}
+
 // ── Endpoints ────────────────────────────────────────────────────────────────
 // GET /api/promo/status — public config/state view
 promoRouter.get("/status", (req, res) => res.json({
@@ -682,6 +740,11 @@ cron.schedule("0 20 * * * *", () => {
 // Motion studio: daily 16:30 UTC (12:30pm ET) + latched boot tick 9 min after start
 cron.schedule("0 30 16 * * *", () => { motionTick().catch(e => console.log("[motion]", e.message)); });
 setTimeout(() => { motionTick().catch(e => console.log("[motion]", e.message)); }, 540000);
+// Product floor: boot tick at 8 min, then daily 07:00 UTC — keep >= 100 buyable
+setTimeout(() => { ensureProductFloor().catch(e => console.log("[floor]", e.message)); }, 480000);
+cron.schedule("0 0 7 * * *", () => { ensureProductFloor().catch(e => console.log("[floor]", e.message)); });
+// Trending pet-product promo: daily 19:00 UTC (3pm ET)
+cron.schedule("0 0 19 * * *", () => { promotePetProductsTick().catch(e => console.log("[pet promo]", e.message)); });
 // Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
 cron.schedule("0 0 15 * * *", () => {
   ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
