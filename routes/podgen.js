@@ -41,7 +41,7 @@ function requireApproval(req, res) {
 }
 
 // ── fal.ai generation via queue API (submit -> poll status -> fetch result) ──
-async function falGenerate(model, prompt, imageSize = "square_hd") {
+async function falGenerate(model, prompt, imageSize = { width: 1200, height: 1200 }) {
   if (!FAL_KEY) throw new Error("FAL_KEY missing — add it in Render (swarm-app service → Environment)");
   const auth = { "Authorization": `Key ${FAL_KEY}`, "Content-Type": "application/json" };
   const sub = await fetch(`https://queue.fal.run/${model}`, {
@@ -58,24 +58,28 @@ async function falGenerate(model, prompt, imageSize = "square_hd") {
     if (s.status === "FAILED" || s.status === "ERROR") throw new Error("fal generation failed");
   }
   const out = await (await fetch(respUrl, { headers: { "Authorization": `Key ${FAL_KEY}` } })).json();
-  const url = out.images?.[0]?.url || out.image?.url;
+  const img = out.images?.[0] || out.image || {};
+  const url = img.url;
   if (!url) throw new Error("fal: no image url in result");
-  return url;
+  return { url, w: img.width || 0, h: img.height || 0 };
 }
 
 // ── fal retry wrapper (CEO 7/11 self-heal): one transient failure never kills a drop ──
 // CEO 7/12: first attempt renders at high resolution (PODGEN_IMG_SIZE, default
 // 1440px); the fallback attempt uses the safe square_hd preset so an oversized
 // request can never kill a drop.
-const IMG_PX = Math.max(1024, parseInt(process.env.PODGEN_IMG_SIZE || "1440", 10));
+const IMG_PX = Math.max(1152, parseInt(process.env.PODGEN_IMG_SIZE || "1440", 10)); // request size — never below ~1080
+const MIN_HQ = 1080; // CEO 7/13: nothing under 1080p is ever posted
 async function falGenerateRetry(model, prompt, tries = 2) {
   let last;
   for (let i = 0; i < tries; i++) {
-    try { return await falGenerate(model, prompt, i === 0 ? { width: IMG_PX, height: IMG_PX } : "square_hd"); }
+    try { const px = i === 0 ? IMG_PX : 1200; return await falGenerate(model, prompt, { width: px, height: px }); }
     catch (e) { last = e; await new Promise(r => setTimeout(r, 4000)); }
   }
   throw last;
 }
+// short side of a fal result (falls back to requested size if the API omits dims)
+const shortSide = r => Math.min(r.w || IMG_PX, r.h || IMG_PX);
 
 // ── Claude-vision IP / quality gate (the load-bearing safeguard for unreviewed gen) ──
 async function ipVisionGate(imageUrl) {
@@ -105,10 +109,12 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
   const uid = ("HOJ-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6)).toUpperCase();
   if (IP_BLOCK.some(t => theme.toLowerCase().includes(t))) return { ok: false, reason: "theme tripped IP blocklist", uid };
   const model = MODELS[style] || MODELS.design;
-  const prompt = `Original "${theme}" themed wall-art design. Bold, high-contrast, clean print-ready composition, museum-quality digital art. FULL-BLEED edge-to-edge: the artwork fills the entire canvas with no picture frame, no border, no matting, no mockup — maximize the art to use all available space at the highest possible detail. Pure imagery with absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere in the image. No brand names or logos, no trademarks, no copyrighted characters, no real people — 100% original artwork.`;
+  const prompt = `Original "${theme}" wall art — PHOTOREALISTIC, hyper-realistic, ultra-detailed, cinematic lighting and true-to-life depth, WITH A SURPRISING CREATIVE PLOT-TWIST element that makes the scene unexpected and scroll-stopping. Gallery quality, print-ready. FULL-BLEED edge-to-edge: fills the entire canvas with no picture frame, no border, no matting, no mockup — maximized to use all space at the highest possible detail. Absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere. No brand names or logos, no trademarks, no copyrighted characters, no real identifiable people — 100% original artwork.`;
   if (dry) return { ok: true, dry: true, uid, model, prompt };
 
-  const imageUrl = await falGenerateRetry(model, prompt);
+  const baseGen = await falGenerateRetry(model, prompt);
+  const imageUrl = baseGen.url;
+  const hiRes = shortSide(baseGen) >= MIN_HQ; // CEO 7/13: only >=1080p is postable
   const gate = await ipVisionGate(imageUrl);
   const pass = !gate.risky;
   const status = (pass && AUTO_PUBLISH) ? "active" : "draft";
@@ -123,9 +129,9 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     ];
     for (const v of variants3) {
       try {
-        const vUrl = await falGenerateRetry(MODELS.art, v.p);
-        const vGate = await ipVisionGate(vUrl);
-        if (!vGate.risky) { versionImages.push({ src: vUrl }); versionsIncluded.push(v.label); }
+        const vGen = await falGenerateRetry(MODELS.art, v.p);
+        const vGate = await ipVisionGate(vGen.url);
+        if (!vGate.risky && shortSide(vGen) >= MIN_HQ) { versionImages.push({ src: vGen.url }); versionsIncluded.push(v.label); }
       } catch (e) { /* version optional — base still ships */ }
     }
 
@@ -137,9 +143,9 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     ];
     for (const s of sceneries) {
       try {
-        const sUrl = await falGenerateRetry(MODELS.art, `Original "${theme}" themed wall-art ${s}. The artwork is maximized edge-to-edge with no picture frame anywhere. Absolutely no people, no humans, no faces, no hands, no words, letters, text, logos or watermarks anywhere.`);
-        const sGate = await ipVisionGate(sUrl);
-        if (!sGate.risky) versionImages.push({ src: sUrl });
+        const sGen = await falGenerateRetry(MODELS.art, `Photorealistic ultra-detailed "${theme}" wall art ${s}. Cinematic and lifelike, maximized edge-to-edge with no picture frame anywhere. Absolutely no people, no humans, no faces, no hands, no words, letters, text, logos or watermarks anywhere.`);
+        const sGate = await ipVisionGate(sGen.url);
+        if (!sGate.risky && shortSide(sGen) >= MIN_HQ) versionImages.push({ src: sGen.url });
       } catch (e) { /* previews optional — base still ships */ }
     }
   }
@@ -171,8 +177,8 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     } catch (e) { await logAgent("KWAME", `Auto-cap failed for ${uid}: ${e.message.slice(0, 80)}`, "warn"); }
   }
 
-  // ── Closed loop 2: auto-schedule a buy-link post for the new design (IG+FB via IBRAHIM, respects 4/day cap)
-  if (pass && productId) {
+  // ── Closed loop 2: auto-schedule a buy-link post — ONLY if the art is >=1080p (CEO 7/13)
+  if (pass && hiRes && productId) {
     try {
       const when = new Date(Date.now() + 3 * 3600e3); when.setUTCMinutes(0, 0, 0);
       const link = handle ? `houseofjreym.store/products/${handle}` : "houseofjreym.store";
@@ -186,8 +192,8 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     } catch (e) { await logAgent("IBRAHIM", `Auto-post schedule failed for ${uid}: ${e.message.slice(0, 80)}`, "warn"); }
   }
 
-  await logAgent("AMARA", `PODgen ${uid}: ${pass ? "PASSED gate" : "HELD [" + gate.reason + "]"} → ${status} product ${productId || "(create failed)"}`, pass ? "success" : "warn");
-  return { ok: true, uid, gate, status, productId, imageUrl };
+  await logAgent("AMARA", `PODgen ${uid}: ${pass ? "PASSED gate" : "HELD [" + gate.reason + "]"}${hiRes ? "" : " [SUB-1080p — no auto-post]"} → ${status} product ${productId || "(create failed)"}`, pass ? "success" : "warn");
+  return { ok: true, uid, gate, status, productId, imageUrl, hiRes };
 }
 
 // POST /api/podgen/run (GATED) — body { theme?, style?: design|text|art, dry?: true }
@@ -199,9 +205,11 @@ podgenRouter.post("/run", async (req, res) => {
 
 // POST /api/podgen/batch (GATED) — generate a catalog in the background. body { count?, themes? }
 // CEO 7/11: theme pool widened past Afrocentric — dogs (HOJ Pets), sports, moods.
-const DEFAULT_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Retro Arcade Neon Nights","Melanin Queen","Boxing Champion Spirit","Chill Lo-fi Sunset Mood","Street Graffiti Color Explosion","Golden Retriever Pet Portrait — sunny garden","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Kente Heritage","Skate Park Motion Blur","Cosmic Space Dreamscape","Midnight City Dreams Mood","Black Excellence","Anime-Style Rainy City Mood"];
-// Non-Afrocentric variety pool — daily slot 3 rotates through this so the feed
-// always mixes sports / pop-culture vibes / moods (CEO 7/12)
+const DEFAULT_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Melanin Queen — radiant joy","Retro Arcade Neon Nights","Kente Heritage Celebration","Boxing Champion Spirit","Black Joy & Community","Chill Lo-fi Sunset Mood","Afrocentric Royalty & Excellence","Golden Retriever Pet Portrait — sunny garden","Street Graffiti Color Explosion","Sankofa Wisdom","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Ankara Bloom Vibrance","Cosmic Space Dreamscape"];
+// Positive Afrocentric pool — daily slot 1 pulls from here so >=30% (~33%) of the
+// feed stays proudly Afrocentric (CEO 7/13).
+const AFRO_THEMES = ["Melanin Queen — radiant joy","Kente Heritage Celebration","Black Joy & Community","Afrocentric Royalty & Excellence","Sankofa Wisdom","Ankara Bloom Vibrance","Black Excellence & Pride","Diaspora Roots & Unity"];
+// Non-Afrocentric variety pool — sports / pop-culture vibes / moods (CEO 7/12)
 const VARIETY_THEMES = ["Basketball Court Legends","Retro Arcade Neon Nights","Boxing Champion Spirit","Street Graffiti Color Explosion","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Skate Park Motion Blur","Cosmic Space Dreamscape","Chill Lo-fi Sunset Mood","Anime-Style Rainy City Mood","Midnight City Dreams Mood","Vintage Muscle Car Sunset"];
 const DOG_THEMES = ["Regal Pet Portrait — crowned royal dog","Golden Retriever Pet Portrait — sunny garden","French Bulldog Pet Portrait — neon pop art","Playful Puppy Pet Portrait — soft watercolor","Majestic German Shepherd Pet Portrait — mountain sunrise","Dapper Poodle Pet Portrait — renaissance style"];
 podgenRouter.post("/batch", async (req, res) => {
@@ -249,10 +257,11 @@ async function latestTrendThemes(n) {
 if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
   try {
     const themes = await latestTrendThemes(DAILY_COUNT);
-    // CEO 7/11: slot 0 is always a dog Pet Portrait (feeds the HOJ Pets section daily)
+    // Balanced daily mix (CEO 7/13): slot0 dog (pets), slot1 positive Afrocentric
+    // (guarantees >=30% / ~33% Afrocentric), slot2 sports/pop-culture/mood variety.
     const dayN = Math.floor(Date.now() / 86400000);
     themes[0] = DOG_THEMES[dayN % DOG_THEMES.length];
-    // CEO 7/12: slot 2 is always sports/pop-culture/mood — never two Afrocentric slots
+    if (themes.length >= 2) themes[1] = AFRO_THEMES[dayN % AFRO_THEMES.length];
     if (themes.length >= 3) themes[2] = VARIETY_THEMES[dayN % VARIETY_THEMES.length];
     await logAgent("NANA", `Daily auto-drop starting: ${themes.join(" | ")}`, "info");
     let made = 0;
