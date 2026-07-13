@@ -41,11 +41,11 @@ function requireApproval(req, res) {
 }
 
 // ── fal.ai generation via queue API (submit -> poll status -> fetch result) ──
-async function falGenerate(model, prompt) {
+async function falGenerate(model, prompt, imageSize = "square_hd") {
   if (!FAL_KEY) throw new Error("FAL_KEY missing — add it in Render (swarm-app service → Environment)");
   const auth = { "Authorization": `Key ${FAL_KEY}`, "Content-Type": "application/json" };
   const sub = await fetch(`https://queue.fal.run/${model}`, {
-    method: "POST", headers: auth, body: JSON.stringify({ prompt, image_size: "square_hd" })
+    method: "POST", headers: auth, body: JSON.stringify({ prompt, image_size: imageSize })
   });
   const j = await sub.json();
   if (!j.request_id) throw new Error("fal submit failed: " + JSON.stringify(j).slice(0, 160));
@@ -64,10 +64,14 @@ async function falGenerate(model, prompt) {
 }
 
 // ── fal retry wrapper (CEO 7/11 self-heal): one transient failure never kills a drop ──
+// CEO 7/12: first attempt renders at high resolution (PODGEN_IMG_SIZE, default
+// 1440px); the fallback attempt uses the safe square_hd preset so an oversized
+// request can never kill a drop.
+const IMG_PX = Math.max(1024, parseInt(process.env.PODGEN_IMG_SIZE || "1440", 10));
 async function falGenerateRetry(model, prompt, tries = 2) {
   let last;
   for (let i = 0; i < tries; i++) {
-    try { return await falGenerate(model, prompt); }
+    try { return await falGenerate(model, prompt, i === 0 ? { width: IMG_PX, height: IMG_PX } : "square_hd"); }
     catch (e) { last = e; await new Promise(r => setTimeout(r, 4000)); }
   }
   throw last;
@@ -101,7 +105,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
   const uid = ("HOJ-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6)).toUpperCase();
   if (IP_BLOCK.some(t => theme.toLowerCase().includes(t))) return { ok: false, reason: "theme tripped IP blocklist", uid };
   const model = MODELS[style] || MODELS.design;
-  const prompt = `Original "${theme}" themed wall-art design. Bold, high-contrast, clean print-ready composition, museum-quality digital art. Pure imagery with absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere in the image. No brand names or logos, no trademarks, no copyrighted characters, no real people — 100% original artwork.`;
+  const prompt = `Original "${theme}" themed wall-art design. Bold, high-contrast, clean print-ready composition, museum-quality digital art. FULL-BLEED edge-to-edge: the artwork fills the entire canvas with no picture frame, no border, no matting, no mockup — maximize the art to use all available space at the highest possible detail. Pure imagery with absolutely no words, letters, numbers, text, typography, signatures, or watermarks anywhere in the image. No brand names or logos, no trademarks, no copyrighted characters, no real people — 100% original artwork.`;
   if (dry) return { ok: true, dry: true, uid, model, prompt };
 
   const imageUrl = await falGenerateRetry(model, prompt);
@@ -119,21 +123,21 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     ];
     for (const v of variants3) {
       try {
-        const vUrl = await falGenerate(MODELS.art, v.p);
+        const vUrl = await falGenerateRetry(MODELS.art, v.p);
         const vGate = await ipVisionGate(vUrl);
         if (!vGate.risky) { versionImages.push({ src: vUrl }); versionsIncluded.push(v.label); }
       } catch (e) { /* version optional — base still ships */ }
     }
 
-    // ── Scenery previews (CEO 7/11): the piece staged in real rooms — NEVER people ──
+    // ── Scenery previews (CEO 7/12): FRAMELESS gallery-wrapped canvas on a wall — NEVER people, NEVER a picture frame ──
     const sceneries = [
-      "displayed as a large framed print on a bright modern living room wall, stylish cozy interior, warm natural light, completely empty room",
-      "displayed as an elegant framed print above a minimalist bedroom headboard, soft morning light, completely empty room",
-      "displayed as a framed print in a clean art gallery corner with a plant and bench, bright even lighting, completely empty space"
+      "shown as a large frameless gallery-wrapped canvas (edges wrapped, absolutely no picture frame or border) filling a bright modern living room wall, warm natural light, completely empty room",
+      "shown as a big frameless edge-to-edge canvas print (no frame, no matting) above a minimalist bedroom headboard, soft morning light, completely empty room",
+      "shown as a frameless full-bleed canvas print (no frame) on a clean gallery wall with a plant and bench, bright even lighting, completely empty space"
     ];
     for (const s of sceneries) {
       try {
-        const sUrl = await falGenerate(MODELS.art, `Original "${theme}" themed wall-art ${s}. Absolutely no people, no humans, no faces, no hands, no words, letters, text, logos or watermarks anywhere.`);
+        const sUrl = await falGenerateRetry(MODELS.art, `Original "${theme}" themed wall-art ${s}. The artwork is maximized edge-to-edge with no picture frame anywhere. Absolutely no people, no humans, no faces, no hands, no words, letters, text, logos or watermarks anywhere.`);
         const sGate = await ipVisionGate(sUrl);
         if (!sGate.risky) versionImages.push({ src: sUrl });
       } catch (e) { /* previews optional — base still ships */ }
@@ -142,7 +146,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
 
   const product = {
     title: `${theme} — Original Digital Wall Art (${uid})`,
-    body_html: `<p>Original ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Preview photos show the piece staged in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
+    body_html: `<p>Original ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Full-bleed, frameless — the art fills the whole space at maximum quality. Preview photos show it as a frameless canvas in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
     vendor: "House of Jreym", product_type: "Digital Wall Art", status,
     tags: `originals, digital download, wall art, 3d, holographic, ${theme}, ${uid}`,
     images: versionImages,
@@ -195,7 +199,10 @@ podgenRouter.post("/run", async (req, res) => {
 
 // POST /api/podgen/batch (GATED) — generate a catalog in the background. body { count?, themes? }
 // CEO 7/11: theme pool widened past Afrocentric — dogs (HOJ Pets), sports, moods.
-const DEFAULT_THEMES = ["Melanin Queen","Regal Pet Portrait — crowned royal dog","Basketball Court Legends","Kente Heritage","Chill Lo-fi Sunset Mood","Sankofa Wisdom","Retro Football Stadium Energy","Black Excellence","Golden Retriever Pet Portrait — sunny garden","Ankara Bloom","Midnight City Dreams Mood","Boxing Champion Spirit"];
+const DEFAULT_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Retro Arcade Neon Nights","Melanin Queen","Boxing Champion Spirit","Chill Lo-fi Sunset Mood","Street Graffiti Color Explosion","Golden Retriever Pet Portrait — sunny garden","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Kente Heritage","Skate Park Motion Blur","Cosmic Space Dreamscape","Midnight City Dreams Mood","Black Excellence","Anime-Style Rainy City Mood"];
+// Non-Afrocentric variety pool — daily slot 3 rotates through this so the feed
+// always mixes sports / pop-culture vibes / moods (CEO 7/12)
+const VARIETY_THEMES = ["Basketball Court Legends","Retro Arcade Neon Nights","Boxing Champion Spirit","Street Graffiti Color Explosion","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Skate Park Motion Blur","Cosmic Space Dreamscape","Chill Lo-fi Sunset Mood","Anime-Style Rainy City Mood","Midnight City Dreams Mood","Vintage Muscle Car Sunset"];
 const DOG_THEMES = ["Regal Pet Portrait — crowned royal dog","Golden Retriever Pet Portrait — sunny garden","French Bulldog Pet Portrait — neon pop art","Playful Puppy Pet Portrait — soft watercolor","Majestic German Shepherd Pet Portrait — mountain sunrise","Dapper Poodle Pet Portrait — renaissance style"];
 podgenRouter.post("/batch", async (req, res) => {
   if (!requireApproval(req, res)) return;
@@ -243,7 +250,10 @@ if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
   try {
     const themes = await latestTrendThemes(DAILY_COUNT);
     // CEO 7/11: slot 0 is always a dog Pet Portrait (feeds the HOJ Pets section daily)
-    themes[0] = DOG_THEMES[Math.floor(Date.now() / 86400000) % DOG_THEMES.length];
+    const dayN = Math.floor(Date.now() / 86400000);
+    themes[0] = DOG_THEMES[dayN % DOG_THEMES.length];
+    // CEO 7/12: slot 2 is always sports/pop-culture/mood — never two Afrocentric slots
+    if (themes.length >= 3) themes[2] = VARIETY_THEMES[dayN % VARIETY_THEMES.length];
     await logAgent("NANA", `Daily auto-drop starting: ${themes.join(" | ")}`, "info");
     let made = 0;
     for (let i = 0; i < themes.length; i++) {
