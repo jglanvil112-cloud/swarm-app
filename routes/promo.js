@@ -535,6 +535,40 @@ async function fireCeoDropOnce() {
   await logAgent("IMANI", `CEO 3-piece drop done: ${made}/3 created (${themes.join(" | ")}) — 3 editions each, 250-cap, buy-link posts scheduled`, made ? "success" : "warn");
 }
 
+// ── CEO 7/15 one-shot: INSTANT SHOWCASE — 2 premium HQ art drops + immediate ──
+// Etsy mirror, so BOTH storefronts (Shopify + Etsy) get fresh top-tier product
+// on this deploy. Each piece runs the full podgen loop (3 editions, room scenes,
+// watermark previews, clean delivery). Latched via agent_logs so it fires once.
+const SHOWCASE_MARKER = "CEO showcase 2026-07-15: 2-piece premium instant drop fired";
+async function fireInstantShowcaseOnce() {
+  try {
+    const { data, error } = await supabase.from("agent_logs").select("id").eq("message", SHOWCASE_MARKER).limit(1);
+    if (error || (data && data.length)) return; // already fired (or can't verify — don't risk duplicates)
+  } catch (e) { return; }
+  await logAgent("IMANI", SHOWCASE_MARKER, "info"); // latch BEFORE generating
+  const themes = [
+    "Black Excellence — regal golden-hour family portrait, museum-grade, ultra-detailed",
+    "Optical-illusion cosmic lion — photorealistic with a surreal plot twist"
+  ];
+  try { // upgrade the 2nd slot to NANA's freshest trend keyword when available
+    const { data: t } = await supabase.from("tasks").select("result").eq("task_type", "trend_research")
+      .eq("status", "completed").order("updated_at", { ascending: false }).limit(1);
+    const kw = (t?.[0]?.result?.trends || []).map(x => (typeof x === "string" ? x : x?.keyword))
+      .find(k => typeof k === "string" && k.trim());
+    if (kw) themes[1] = kw.trim();
+  } catch (e) { /* fallback theme stands */ }
+  let made = 0; const ids = [];
+  for (const theme of themes) {
+    try { const r = await runPodGen({ theme, style: "art" }); if (r?.productId) { made++; ids.push(r.productId); } }
+    catch (e) { console.log("[showcase]", e.message); }
+  }
+  // Immediately mirror the new actives to Etsy so both storefronts get them NOW.
+  let etsy = null;
+  try { etsy = await etsySyncTick(); promoState.etsy_sync = etsy; } catch (e) { console.log("[showcase etsy]", e.message); }
+  promoState.last_showcase = { at: new Date().toISOString(), made, ids, etsy };
+  await logAgent("IMANI", `Instant showcase: ${made}/2 premium products created + Etsy mirror run`, made ? "success" : "warn");
+}
+
 // ── Restock sweep: no digital product may ever read "Sold out" ───────────────
 // The limited-edition cap (KWAME) enables tracking then sets stock to 250; when
 // the set step fails the variant is left tracked at 0 and the storefront shows
@@ -727,6 +761,19 @@ promoRouter.post("/pet-now", async (req, res) => {
   if (!requireApproval(req, res)) return;
   try { res.json(await promotePetProductsTick(parseInt(req.body?.count) || 3)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// POST /api/promo/showcase-now (GATED) — generate 2 premium HQ art drops + Etsy mirror now
+promoRouter.post("/showcase-now", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try {
+    const themes = Array.isArray(req.body?.themes) && req.body.themes.length ? req.body.themes.slice(0, 4) : null;
+    let made = 0; const ids = [];
+    for (const theme of themes || ["Black Excellence — museum-grade regal portrait", "Optical-illusion cosmic lion — photorealistic plot twist"]) {
+      try { const r = await runPodGen({ theme, style: "art" }); if (r?.productId) { made++; ids.push(r.productId); } } catch (e) { /* next */ }
+    }
+    let etsy = null; try { etsy = await etsySyncTick(); promoState.etsy_sync = etsy; } catch (e) { /* sync self-heals hourly */ }
+    res.json({ ok: true, made, ids, etsy });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // Boot: ensure section + deal exist (idempotent, waits for server/token warmup).
 // Retries every 5 min (up to 4 tries) so a cold token or Shopify hiccup at boot
@@ -744,6 +791,8 @@ const bootEnsure = async (attempt = 1) => {
 setTimeout(() => bootEnsure(), 25000);
 // One-shot CEO drop (latched — safe across restarts/redeploys)
 setTimeout(() => { fireCeoDropOnce().catch(e => console.log("[promo drop]", e.message)); }, 40000);
+// One-shot INSTANT SHOWCASE (latched): 2 premium HQ drops + immediate Etsy mirror
+setTimeout(() => { fireInstantShowcaseOnce().catch(e => console.log("[showcase]", e.message)); }, 55000);
 // Etsy auto-list: boot tick at 6 min (after the drop finishes), then HOURLY at :20
 setTimeout(() => { etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message)); }, 360000);
 cron.schedule("0 20 * * * *", () => {
