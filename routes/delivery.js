@@ -42,10 +42,18 @@ async function productDownloadLinks(shop, token, productIds) {
   const links = {};
   for (const id of productIds) {
     try {
-      const r = await fetch(`${base(shop)}/products/${id}.json?fields=id,title,image,images`, { headers: hdrs(token) });
+      const r = await fetch(`${base(shop)}/products/${id}.json?fields=id,title,image,images,body_html`, { headers: hdrs(token) });
       const j = await r.json();
       const labels = ["Classic", "3D Edition", "Holographic Edition"];
-      const files = (j.product?.images || []).slice(0, 3).map((im, i) => ({ label: labels[i] || `Version ${i + 1}`, url: im.src }));
+      // CEO 7/15: deliver the CLEAN (un-watermarked) originals hidden in the body
+      // as <!--CLEAN:url1|url2|url3-->. Fall back to product images for older items.
+      const clean = (String(j.product?.body_html || "").match(/<!--CLEAN:([^>]+?)-->/) || [])[1];
+      let files;
+      if (clean) {
+        files = clean.split("|").filter(Boolean).slice(0, 3).map((u, i) => ({ label: labels[i] || `Version ${i + 1}`, url: u }));
+      } else {
+        files = (j.product?.images || []).slice(0, 3).map((im, i) => ({ label: labels[i] || `Version ${i + 1}`, url: im.src }));
+      }
       if (!files.length && j.product?.image?.src) files.push({ label: "Classic", url: j.product.image.src });
       if (files.length) links[id] = { title: j.product.title, url: files[0].url, files };
     } catch (e) { /* skip */ }
