@@ -317,6 +317,14 @@ async function checkEngagementGuard() {
 
 // ─── AUTO-PUBLISH ENGINE ──────────────────────────────────────────────────────
 
+// CEO 7/15: INSTAGRAM = PET CONTENT ONLY. A post qualifies for Instagram if it
+// came from the pet-promo pipeline or its caption/keyword carries clear pet
+// signals. Everything else (art drops, music) stays off IG and routes to FB.
+function isPetContent(post) {
+  if (post?.meta?.pipeline === "pet-promo") return true;
+  const t = `${post?.caption || ""} ${post?.keyword || ""}`.toLowerCase();
+  return /🐾|\bpet\b|\bpets\b|\bdog\b|\bdogs\b|\bcat\b|\bcats\b|\bpuppy\b|\bkitten\b|\bpaw\b|petcare|dogsofinstagram|catsofinstagram|petproducts/.test(t);
+}
 
 // Next upcoming daytime slot (13:00/15:00 UTC). Stale posts re-slot here instead of
 // publishing whenever the UTC-midnight cap reset frees them (killed the 8pm ET flush loop).
@@ -387,10 +395,25 @@ export async function runAutoPublish() {
 
         // CEO 7/12: platform-specific rows go ONLY to their platform (different
         // content per page); "all" keeps the classic IG + FB cross-post.
+        // CEO 7/15: Instagram is PET-ONLY. Non-pet rows never touch IG — they
+        // route to the Facebook Page instead so nothing publishes off-brand to IG.
+        const petOnly = isPetContent(post);
         let postId = null, fbPostId = null;
         if (post.platform === "facebook") {
           fbPostId = await publishToFacebook(post);
           postId = fbPostId;
+        } else if (!petOnly) {
+          // Non-pet content: keep it OFF Instagram, send to Facebook only.
+          try {
+            fbPostId = await publishToFacebook(post);
+            postId = fbPostId;
+            await logAgent("IBRAHIM", `🚫 IG pet-only: non-pet post ${post.id} routed to Facebook instead`, "info");
+          } catch (fbErr) {
+            // FB unavailable — don't spam IG and don't loop forever: shelve it.
+            await supabase.from("social_posts").update({ status: "skipped", meta: { ...(post.meta || {}), skip_reason: "ig-pet-only;fb-unavailable" } }).eq("id", post.id);
+            await logAgent("IBRAHIM", `⏸️ Non-pet post ${post.id} held (IG pet-only, FB down): ${fbErr.message}`, "warn");
+            continue;
+          }
         } else {
           postId = await publishToInstagram(post);
           if (post.platform === "all") {

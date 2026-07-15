@@ -662,7 +662,7 @@ async function ensureProductFloor() {
 
 // ── Trending pet-product promotion (CEO 7/12): rotate buy-link posts for the ──
 // physical pet supplies so the store's real products get promoted daily too.
-async function promotePetProductsTick() {
+async function promotePetProductsTick(count = 1) {
   const { token, shop } = await shopAuth();
   if (!token || !shop) return { error: "no shopify auth" };
   const r = await fetch(`${base(shop)}/products.json?product_type=Pet%20Supplies&status=active&limit=50&fields=id,title,handle,image,variants`, { headers: hdrs(token) });
@@ -673,21 +673,28 @@ async function promotePetProductsTick() {
   }
   items = items.filter(p => p.image?.src);
   if (!items.length) return { ok: true, promoted: 0, note: "no physical products yet" };
+  // CEO 7/15: post SEVERAL distinct trending pet products per run (staggered
+  // slots) so the pet feed ramps toward quota fast instead of one-a-day.
   const dayN = Math.floor(Date.now() / 86400000);
-  const p = items[dayN % items.length];
-  const link = `houseofjreym.store/products/${p.handle}`;
-  const price = p.variants?.[0]?.price ? `$${p.variants[0].price}` : "";
-  const caption = enforceCaptionRules(`🐾 Trending in the shop: ${String(p.title).split("—")[0].trim()} ${price ? "— " + price : ""}. Treat your pet to the good stuff. 🛍 ${link} #PetCare #DogsOfInstagram #CatsOfInstagram #PetProducts #HouseOfJreym`, link);
-  const when = new Date(Date.now() + 30 * 60000); when.setUTCMinutes(0, 0, 0);
-  const { error } = await supabase.from("social_posts").insert({
-    platform: "all", status: "scheduled", caption, media_urls: [p.image.src], media_type: "IMAGE",
-    scheduled_for: when.toISOString(), keyword: "petpromo-" + p.id, created_by: "IMANI",
-    meta: { pipeline: "pet-promo", product_id: p.id }
-  });
-  if (error) { await logAgent("IMANI", `Pet promo insert failed: ${error.message}`, "warn"); return { ok: false }; }
-  await logAgent("IMANI", `🐾 Pet-product promo scheduled: ${String(p.title).slice(0, 50)}`, "success");
-  promoState.last_pet_promo = { at: new Date().toISOString(), product: p.title };
-  return { ok: true, promoted: 1 };
+  const n = Math.min(Math.max(1, count), items.length);
+  let promoted = 0;
+  for (let i = 0; i < n; i++) {
+    const p = items[(dayN + i) % items.length];
+    const link = `houseofjreym.store/products/${p.handle}`;
+    const price = p.variants?.[0]?.price ? `$${p.variants[0].price}` : "";
+    const caption = enforceCaptionRules(`🐾 Trending in the shop: ${String(p.title).split("—")[0].trim()} ${price ? "— " + price : ""}. Treat your pet to the good stuff. 🛍 ${link} #PetCare #DogsOfInstagram #CatsOfInstagram #PetProducts #HouseOfJreym`, link);
+    const when = new Date(Date.now() + (30 + i * 90) * 60000); when.setUTCMinutes(0, 0, 0);
+    const { error } = await supabase.from("social_posts").insert({
+      platform: "all", status: "scheduled", caption, media_urls: [p.image.src], media_type: "IMAGE",
+      scheduled_for: when.toISOString(), keyword: "petpromo-" + p.id + "-" + when.toISOString().slice(0, 13), created_by: "IMANI",
+      meta: { pipeline: "pet-promo", product_id: p.id }
+    });
+    if (error) { await logAgent("IMANI", `Pet promo insert failed: ${error.message}`, "warn"); continue; }
+    promoted++;
+    promoState.last_pet_promo = { at: new Date().toISOString(), product: p.title };
+  }
+  if (promoted) await logAgent("IMANI", `🐾 ${promoted} trending pet-product promo(s) scheduled`, "success");
+  return { ok: true, promoted };
 }
 
 // ── Endpoints ────────────────────────────────────────────────────────────────
@@ -714,6 +721,11 @@ promoRouter.post("/check", async (req, res) => {
 promoRouter.post("/post-now", async (req, res) => {
   if (!requireApproval(req, res)) return;
   try { res.json(await schedulePromoPost(req.body?.delay_hours ?? 2)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// POST /api/promo/pet-now (GATED) — push N trending pet-product promos immediately
+promoRouter.post("/pet-now", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try { res.json(await promotePetProductsTick(parseInt(req.body?.count) || 3)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Boot: ensure section + deal exist (idempotent, waits for server/token warmup).
@@ -743,8 +755,11 @@ setTimeout(() => { motionTick().catch(e => console.log("[motion]", e.message)); 
 // Product floor: boot tick at 8 min, then daily 07:00 UTC — keep >= 100 buyable
 setTimeout(() => { ensureProductFloor().catch(e => console.log("[floor]", e.message)); }, 480000);
 cron.schedule("0 0 7 * * *", () => { ensureProductFloor().catch(e => console.log("[floor]", e.message)); });
-// Trending pet-product promo: daily 19:00 UTC (3pm ET)
-cron.schedule("0 0 19 * * *", () => { promotePetProductsTick().catch(e => console.log("[pet promo]", e.message)); });
+// Trending pet-product promo (CEO 7/15): fire IMMEDIATELY on boot (3 min) with a
+// burst of 3, then every 6 hours (2 each) — pet supplies ramp toward quota fast
+// instead of a single 19:00 post.
+setTimeout(() => { promotePetProductsTick(3).catch(e => console.log("[pet promo]", e.message)); }, 180000);
+cron.schedule("0 0 */6 * * *", () => { promotePetProductsTick(2).catch(e => console.log("[pet promo]", e.message)); });
 // Daily 15:00 UTC (11am ET): re-ensure assets (self-heal restocks/deal), then boost check
 cron.schedule("0 0 15 * * *", () => {
   ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
