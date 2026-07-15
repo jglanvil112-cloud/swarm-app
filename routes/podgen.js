@@ -11,6 +11,7 @@
 //    (This is a single global switch, NOT per-design approval.)
 
 import express from "express";
+import sharp from "sharp";
 import { supabase, logAgent } from "../lib/supabase.js";
 import { enforceCaptionRules } from "../lib/captionRules.js";
 
@@ -39,6 +40,32 @@ function requireApproval(req, res) {
   if (k !== APPROVAL_SECRET) { res.status(401).json({ error: "unauthorized" }); return false; }
   return true;
 }
+
+// ── HOJ watermark (CEO 7/15): subtle tiled wordmark on all PUBLIC images so
+// screenshots can't be passed off as originals. The buyer's DOWNLOAD stays clean
+// (delivery reads the clean URL from a hidden <!--CLEAN:...--> tag in the body).
+// GET /api/podgen/wm?u=<image-url> — fetches, stamps, returns JPEG. Shopify and
+// the socials point at this proxy; if anything fails it 302s to the clean image
+// so a product/post is never blocked by a watermark hiccup.
+const WM = u => `${APP_URL}/api/podgen/wm?u=${encodeURIComponent(u)}`;
+podgenRouter.get("/wm", async (req, res) => {
+  const u = req.query.u;
+  if (!u) return res.status(400).send("u required");
+  try {
+    const buf = Buffer.from(await (await fetch(u, { signal: AbortSignal.timeout(30000) })).arrayBuffer());
+    const img = sharp(buf); const meta = await img.metadata();
+    const w = meta.width || 1200, h = meta.height || 1200, fs = Math.round(w / 24);
+    const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+      <defs><pattern id="p" width="${Math.round(w/2)}" height="${Math.round(h/3)}" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
+        <text x="8" y="${fs+8}" font-family="Arial, sans-serif" font-size="${fs}" fill="#ffffff" fill-opacity="0.09" font-weight="bold">HOUSE OF JREYM</text>
+      </pattern></defs>
+      <rect width="${w}" height="${h}" fill="url(#p)"/>
+      <text x="${Math.round(w/2)}" y="${h-14}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${Math.round(fs*0.7)}" fill="#ffffff" fill-opacity="0.30" font-weight="bold" stroke="#000000" stroke-opacity="0.15" stroke-width="0.5">houseofjreym.store</text>
+    </svg>`;
+    const out = await img.composite([{ input: Buffer.from(svg), blend: "over" }]).jpeg({ quality: 92 }).toBuffer();
+    res.set("Content-Type", "image/jpeg").set("Cache-Control", "public, max-age=86400").send(out);
+  } catch (e) { res.redirect(302, u); } // self-heal: never block on a watermark failure
+});
 
 // ── fal.ai generation via queue API (submit -> poll status -> fetch result) ──
 async function falGenerate(model, prompt, imageSize = { width: 1200, height: 1200 }) {
@@ -150,12 +177,15 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
     }
   }
 
+  // CLEAN originals stay hidden in the body for zero-touch delivery; Shopify pulls
+  // the PUBLIC images through the watermark proxy so the storefront is stamped.
+  const cleanList = versionImages.map(v => v.src).join("|");
   const product = {
     title: `${theme} — Original Digital Wall Art (${uid})`,
-    body_html: `<p>Original ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Full-bleed, frameless — the art fills the whole space at maximum quality. Preview photos show it as a frameless canvas in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p>`,
+    body_html: `<p>Original ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Full-bleed, frameless — the art fills the whole space at maximum quality. Preview photos show it as a frameless canvas in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p><!--CLEAN:${cleanList}-->`,
     vendor: "House of Jreym", product_type: "Digital Wall Art", status,
     tags: `originals, digital download, wall art, 3d, holographic, ${theme}, ${uid}`,
-    images: versionImages,
+    images: versionImages.map(v => ({ src: WM(v.src) })),
     variants: [{ price: "10.99", requires_shipping: false, taxable: true, inventory_management: null }]
   };
   let productId = null, variantId = null, handle = null;
@@ -184,7 +214,7 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
       const link = handle ? `houseofjreym.store/products/${handle}` : "houseofjreym.store";
       const caption = enforceCaptionRules(`NEW DROP 🔥 "${theme}" — original wall art, instant digital download. Comes in Classic, 3D & Holographic editions ✨ Limited edition of 250 (${uid}). Launch price $8.79 (was $10.99). 🛍 ${link} #HouseOfJreym #WallArt #DigitalDownload #3DArt #HolographicArt #LimitedEdition`, link); // house rules
       await supabase.from("social_posts").insert({
-        platform: "all", status: "scheduled", caption, media_urls: [imageUrl], media_type: "IMAGE",
+        platform: "all", status: "scheduled", caption, media_urls: [WM(imageUrl)], media_type: "IMAGE",
         scheduled_for: when.toISOString(), keyword: "autodrop-" + uid,
         meta: { pipeline: "podgen-autopost", product_id: productId, uid }
       });
@@ -205,12 +235,15 @@ podgenRouter.post("/run", async (req, res) => {
 
 // POST /api/podgen/batch (GATED) — generate a catalog in the background. body { count?, themes? }
 // CEO 7/11: theme pool widened past Afrocentric — dogs (HOJ Pets), sports, moods.
-const DEFAULT_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Melanin Queen — radiant joy","Retro Arcade Neon Nights","Kente Heritage Celebration","Boxing Champion Spirit","Black Joy & Community","Chill Lo-fi Sunset Mood","Afrocentric Royalty & Excellence","Golden Retriever Pet Portrait — sunny garden","Street Graffiti Color Explosion","Sankofa Wisdom","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Ankara Bloom Vibrance","Cosmic Space Dreamscape"];
+const DEFAULT_THEMES = ["Optical Illusion Op-Art Hypnotic","Regal Pet Portrait — crowned royal dog","Melanin Queen — radiant joy","Mid-Century Modern Abstract Shapes","Kente Heritage Celebration","Impossible Geometry Escher-Style Illusion","Black Joy & Community","Minimalist Botanical Line Art","Afrocentric Royalty & Excellence","Golden Retriever Pet Portrait — sunny garden","Retro Wavy Checkerboard Pop","Sankofa Wisdom","Abstract Geometric Bauhaus","Quirky Animal Bathroom Humor Poster","Ankara Bloom Vibrance","Golden Art-Nouveau Floral"];
+// Trending-alternatives pool inspired by Etsy digital-print best-sellers + optical
+// illusions (CEO 7/15) — used to keep the catalog fresh and competitive.
+const TREND_THEMES = ["Optical Illusion Op-Art Hypnotic","Impossible Geometry Escher-Style Illusion","Mid-Century Modern Abstract Shapes","Retro Wavy Checkerboard Pop","Minimalist Botanical Line Art","Vintage Newspaper Collage Aesthetic","Quirky Animal Bathroom Humor Poster","Abstract Geometric Bauhaus","Golden Art-Nouveau Floral","Surreal Melting Dreamscape","Anaglyph 3D Depth Illusion","Moody Abstract Ink Wash"];
 // Positive Afrocentric pool — daily slot 1 pulls from here so >=30% (~33%) of the
 // feed stays proudly Afrocentric (CEO 7/13).
 const AFRO_THEMES = ["Melanin Queen — radiant joy","Kente Heritage Celebration","Black Joy & Community","Afrocentric Royalty & Excellence","Sankofa Wisdom","Ankara Bloom Vibrance","Black Excellence & Pride","Diaspora Roots & Unity"];
 // Non-Afrocentric variety pool — sports / pop-culture vibes / moods (CEO 7/12)
-const VARIETY_THEMES = ["Basketball Court Legends","Retro Arcade Neon Nights","Boxing Champion Spirit","Street Graffiti Color Explosion","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Skate Park Motion Blur","Cosmic Space Dreamscape","Chill Lo-fi Sunset Mood","Anime-Style Rainy City Mood","Midnight City Dreams Mood","Vintage Muscle Car Sunset"];
+const VARIETY_THEMES = ["Optical Illusion Op-Art Hypnotic","Basketball Court Legends","Impossible Geometry Escher-Style Illusion","Mid-Century Modern Abstract Shapes","Boxing Champion Spirit","Retro Wavy Checkerboard Pop","Minimalist Botanical Line Art","Y2K Chrome Aesthetic","Abstract Geometric Bauhaus","Quirky Animal Bathroom Humor Poster","Golden Art-Nouveau Floral","Vintage Newspaper Collage Aesthetic","Cosmic Space Dreamscape","Anime-Style Rainy City Mood","Surreal Melting Dreamscape","Vintage Muscle Car Sunset"];
 const DOG_THEMES = ["Regal Pet Portrait — crowned royal dog","Golden Retriever Pet Portrait — sunny garden","French Bulldog Pet Portrait — neon pop art","Playful Puppy Pet Portrait — soft watercolor","Majestic German Shepherd Pet Portrait — mountain sunrise","Dapper Poodle Pet Portrait — renaissance style"];
 podgenRouter.post("/batch", async (req, res) => {
   if (!requireApproval(req, res)) return;
