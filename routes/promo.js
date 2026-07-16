@@ -356,7 +356,12 @@ async function etsySyncTick(maxPerTick = 4) {
 
   const { data: logs } = await supabase.from("agent_logs").select("message").like("message", "ETSYSYNC:%").limit(1000);
   const synced = new Set((logs || []).map(l => (l.message.match(/^ETSYSYNC:(\d+)/) || [])[1]).filter(Boolean));
-  const todo = products.filter(p => !synced.has(String(p.id)) && p.image?.src).slice(0, maxPerTick);
+  // CEO 7/15: Etsy carries the GENERAL art gallery only. Pet portraits live ONLY
+  // on the HOJ pet storefront — never mirror a "Pet Portrait" piece to Etsy.
+  const petRe = new RegExp(PET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const isPet = p => petRe.test(String(p.title || "")) || petRe.test(String(p.tags || ""));
+  out.skipped_pet = products.filter(isPet).length;
+  const todo = products.filter(p => !synced.has(String(p.id)) && p.image?.src && !isPet(p)).slice(0, maxPerTick);
   if (!todo.length) return out;
 
   let returnPolicyId = 1;
