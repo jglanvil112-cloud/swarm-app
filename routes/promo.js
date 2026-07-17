@@ -55,12 +55,12 @@ let promoState = { collection_id: null, collection_handle: null, pet_collection_
 // the deal, and the Etsy mirror. Same brand name as the website.
 // BODY_MARK versions the descriptions — bump it and every section refreshes on
 // the next ensure. v3 adds the cross-section link buttons (CEO 7/11).
-const BODY_MARK = "<!-- hoj-v3 -->";
-const SECTION_BUTTONS = `<p><a href="/collections/digital-art-instant-downloads"><strong>🎨 ALL DIGITAL ART →</strong></a> &nbsp;|&nbsp; <a href="/collections/hoj-pets-digital-art-instant-downloads"><strong>🐾 HOJ PETS DIGITAL →</strong></a> &nbsp;|&nbsp; <a href="/collections/all"><strong>🛒 PET SUPPLIES →</strong></a></p>`;
+const BODY_MARK = "<!-- hoj-v4 -->";
+const SECTION_BUTTONS = `<p><a href="/collections/digital-art-instant-downloads"><strong>🎨 DIGITAL ART →</strong></a> &nbsp;|&nbsp; <a href="/collections/hoj-pets-digital-art-instant-downloads"><strong>🐾 PET ART DOWNLOADS →</strong></a> &nbsp;|&nbsp; <a href="/collections/all"><strong>🛒 PET SUPPLIES →</strong></a></p>`;
 const SECTION_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>Original digital wall art from House of Jreym — instant downloads. Every clean drop includes Classic, 3D, and Holographic editions plus room-scene previews.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
 const PET_SECTION_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>HOJ Pets — original dog & pet portrait digital art from House of Jreym. Instant downloads only: Classic, 3D, and Holographic editions of every clean drop, with room-scene previews.</p><p><strong>🎁 THE DEAL: spend $${MIN_SPEND}, get ANY one digital piece FREE</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p><p>Prefer Etsy? Shop our digital originals at <a href="${ETSY_SHOP_URL}">${ETSY_SHOP_URL.replace("https://www.", "")}</a>.</p>`;
 const PHYSICAL_SECTION_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>Wearables and physical goods from House of Jreym — made to order and shipped to you.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece of your choice</strong> — use code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
-const CATALOG_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>House of Jreym pet care — grooming, comfort, and original pet portrait digital art in Classic, 3D & Holographic editions.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece</strong> — code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
+const CATALOG_BODY = `${BODY_MARK}${SECTION_BUTTONS}<p>House of Jreym pet supplies — grooming, comfort & care products, shipped to you. <strong>Looking for our pet portrait art?</strong> Those are instant downloads in the <a href="/collections/hoj-pets-digital-art-instant-downloads">🐾 PET ART DOWNLOADS</a> section — kept separate from these physical items.</p><p><strong>🎁 Every $${MIN_SPEND} you spend unlocks a FREE digital art piece of your choice</strong> — code <strong>${PROMO_CODE}</strong> at checkout.</p>`;
 
 function requireApproval(req, res) {
   if (!APPROVAL_SECRET) { res.status(503).json({ error: "approval not configured" }); return false; }
@@ -142,22 +142,28 @@ export async function ensurePromoAssets() {
   });
   if (physCol) promoState.physical_collection_handle = physCol.handle;
 
-  // CEO 7/11 pt2: /collections/all takeover — the site's main Catalog shows
-  // physical pet products + PET digital art only (disjunctive OR rules). The
-  // non-pet Afrocentric art lives on its own section page + Etsy, never mixed
-  // into the pet storefront's catalog again.
+  // CEO 7/15: /collections/all is the ITEM catalog — PHYSICAL products ONLY.
+  // Digital pet art is a separate downloadable section (HOJ Pets), no longer
+  // mixed into the item listings. Non-pet art lives on its own page + Etsy.
   const catalogCol = await ensureSmartCollection(token, shop, {
-    title: "Catalog", handle: "all", published: true, disjunctive: true,
+    title: "Catalog", handle: "all", published: true, disjunctive: false,
     body_html: CATALOG_BODY,
-    rules: [
-      { column: "type", relation: "not_equals", condition: DIGITAL_TYPE },
-      { column: "title", relation: "contains", condition: PET_MARK }
-    ]
+    rules: [{ column: "type", relation: "not_equals", condition: DIGITAL_TYPE }]
   });
   if (catalogCol) {
     promoState.catalog_handle = catalogCol.handle;
+    // If an older catalog still carries the pet-digital OR-rule (or is disjunctive),
+    // rewrite it to physical-only so downloads aren't mixed into the item section.
+    const stillMixed = catalogCol.disjunctive || (catalogCol.rules || []).some(r => r.column === "title" && r.relation === "contains" && r.condition === PET_MARK);
+    if (stillMixed) {
+      const cu = await fetch(`${base(shop)}/smart_collections/${catalogCol.id}.json`, {
+        method: "PUT", headers: hdrs(token),
+        body: JSON.stringify({ smart_collection: { id: catalogCol.id, disjunctive: false, rules: [{ column: "type", relation: "not_equals", condition: DIGITAL_TYPE }] } })
+      });
+      if (cu.ok) await logAgent("IMANI", "Item catalog de-mixed: /collections/all = physical products only (digital pet art moved to its own PET ART DOWNLOADS section)", "success");
+    }
     if (catalogCol.handle !== "all") await logAgent("IMANI", `Catalog takeover FAILED — handle "${catalogCol.handle}" (another collection owns /collections/all)`, "warn");
-    else await logAgent("IMANI", `Catalog takeover live: /collections/all = physical + pet digital only (art de-mixed)`, "success");
+    else await logAgent("IMANI", `Item catalog live: /collections/all = physical items only; pet downloads in their own section`, "success");
   }
 
   // Nav links for the new sections (best effort — needs online-store navigation scope)
@@ -260,7 +266,8 @@ async function ensureAllProductsCollection(token, shop) {
 // this logs a warning and the links get added by hand in admin instead.
 const NAV_LINKS = [
   { title: "Digital Art", url: "/collections/digital-art-instant-downloads" },
-  { title: "HOJ Pets", url: "/collections/hoj-pets-digital-art-instant-downloads" }
+  { title: "Pet Art Downloads", url: "/collections/hoj-pets-digital-art-instant-downloads" },
+  { title: "Pet Supplies", url: "/collections/all" }
 ];
 async function ensureNavLinks(token, shop) {
   const gql = async (query, variables) => (await fetch(`https://${shop}/admin/api/2024-01/graphql.json`, {
