@@ -41,6 +41,11 @@ const PET_COLLECTION_TITLE = "HOJ Pets — Digital Art (Instant Downloads)";
 const PHYSICAL_COLLECTION_TITLE = "Physical Goods — Shipped to You";
 const DIGITAL_TYPE = "Digital Wall Art";
 const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the title — that's what routes them to the pets section
+// Broader pet-title matcher (CEO 7/15): catches every pet-art variant so none
+// slips onto Etsy or out of the pet section. Portrait-scoped + paw emoji only,
+// so it never false-matches general art that merely mentions a pet in passing.
+const PET_TITLE_RE = /pet portrait|dog portrait|cat portrait|puppy portrait|kitten portrait|🐾/i;
+const isPetTitle = s => PET_TITLE_RE.test(String(s || ""));
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
@@ -357,9 +362,8 @@ async function etsySyncTick(maxPerTick = 4) {
   const { data: logs } = await supabase.from("agent_logs").select("message").like("message", "ETSYSYNC:%").limit(1000);
   const synced = new Set((logs || []).map(l => (l.message.match(/^ETSYSYNC:(\d+)/) || [])[1]).filter(Boolean));
   // CEO 7/15: Etsy carries the GENERAL art gallery only. Pet portraits live ONLY
-  // on the HOJ pet storefront — never mirror a "Pet Portrait" piece to Etsy.
-  const petRe = new RegExp(PET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-  const isPet = p => petRe.test(String(p.title || "")) || petRe.test(String(p.tags || ""));
+  // on the HOJ pet storefront — never mirror a pet piece to Etsy.
+  const isPet = p => isPetTitle(p.title) || isPetTitle(p.tags);
   out.skipped_pet = products.filter(isPet).length;
   const todo = products.filter(p => !synced.has(String(p.id)) && p.image?.src && !isPet(p)).slice(0, maxPerTick);
   if (!todo.length) return out;
@@ -739,8 +743,7 @@ async function promotePetProductsTick(count = 1) {
 // ── CEO 7/15 one-shot: Etsy DE-PET sweep ─────────────────────────────────────
 // Deactivate any pet-portrait listing already mirrored to Etsy BEFORE the de-mix
 // fix, so Etsy carries the general art gallery only. Idempotent + latched.
-const DEPET_MARKER = "CEO 2026-07-15: Etsy pet-portrait de-mix sweep done";
-const PET_RE = new RegExp(PET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+const DEPET_MARKER = "CEO 2026-07-15b: Etsy pet-portrait de-mix sweep done";
 async function sweepEtsyPetListings() {
   const out = { ok: true, checked: 0, deactivated: 0, ids: [], failed: [] };
   const et = await getEtsyAccessToken();
@@ -753,7 +756,7 @@ async function sweepEtsyPetListings() {
     const results = j.results || [];
     out.checked += results.length;
     for (const l of results) {
-      if (!PET_RE.test(String(l.title || ""))) continue;
+      if (!isPetTitle(l.title) && !isPetTitle((l.tags || []).join(" "))) continue;
       const lid = l.listing_id;
       let done = false;
       // Etsy v3 updateListing — try PATCH then PUT (state=inactive), form-encoded.
