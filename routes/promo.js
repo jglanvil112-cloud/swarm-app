@@ -736,6 +736,50 @@ async function promotePetProductsTick(count = 1) {
   return { ok: true, promoted };
 }
 
+// ── CEO 7/15 one-shot: Etsy DE-PET sweep ─────────────────────────────────────
+// Deactivate any pet-portrait listing already mirrored to Etsy BEFORE the de-mix
+// fix, so Etsy carries the general art gallery only. Idempotent + latched.
+const DEPET_MARKER = "CEO 2026-07-15: Etsy pet-portrait de-mix sweep done";
+const PET_RE = new RegExp(PET_MARK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+async function sweepEtsyPetListings() {
+  const out = { ok: true, checked: 0, deactivated: 0, ids: [], failed: [] };
+  const et = await getEtsyAccessToken();
+  if (!et) return { ok: false, error: "no fresh etsy token" };
+  const formHdr = { Authorization: "Bearer " + et, "x-api-key": ETSY_KEY2 + (ETSY_SECRET2 ? ":" + ETSY_SECRET2 : ""), "Content-Type": "application/x-www-form-urlencoded" };
+  for (let offset = 0; offset < 1000; offset += 100) {
+    const r = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/active?limit=100&offset=${offset}`, { headers: eAuth(et) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { out.error = JSON.stringify(j).slice(0, 120); break; }
+    const results = j.results || [];
+    out.checked += results.length;
+    for (const l of results) {
+      if (!PET_RE.test(String(l.title || ""))) continue;
+      const lid = l.listing_id;
+      let done = false;
+      // Etsy v3 updateListing — try PATCH then PUT (state=inactive), form-encoded.
+      for (const method of ["PATCH", "PUT"]) {
+        try {
+          const ur = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/${lid}`, { method, headers: formHdr, body: new URLSearchParams({ state: "inactive" }) });
+          if (ur.ok) { done = true; break; }
+        } catch (e) { /* try next method */ }
+      }
+      if (done) { out.deactivated++; out.ids.push(lid); await logAgent("AISHA", `Etsy de-pet: deactivated pet listing ${lid} "${String(l.title).slice(0, 40)}"`, "success"); }
+      else { out.failed.push(lid); await logAgent("AISHA", `Etsy de-pet: could not deactivate ${lid}`, "warn"); }
+    }
+    if (results.length < 100) break;
+  }
+  return out;
+}
+async function sweepEtsyPetListingsOnce() {
+  try {
+    const { data, error } = await supabase.from("agent_logs").select("id").eq("message", DEPET_MARKER).limit(1);
+    if (error || (data && data.length)) return; // already swept (or can't verify — don't re-run)
+  } catch (e) { return; }
+  const r = await sweepEtsyPetListings();
+  await logAgent("AISHA", DEPET_MARKER, r.ok ? "info" : "warn");
+  if (r.ok) await logAgent("AISHA", `Etsy de-pet sweep: ${r.deactivated} pet listing(s) deactivated, ${r.checked} checked`, r.deactivated ? "success" : "info");
+}
+
 // ── Endpoints ────────────────────────────────────────────────────────────────
 // GET /api/promo/status — public config/state view
 promoRouter.get("/status", (req, res) => res.json({
@@ -765,6 +809,11 @@ promoRouter.post("/post-now", async (req, res) => {
 promoRouter.post("/pet-now", async (req, res) => {
   if (!requireApproval(req, res)) return;
   try { res.json(await promotePetProductsTick(parseInt(req.body?.count) || 3)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// POST /api/promo/etsy-depet (GATED) — deactivate any pet-portrait Etsy listing now
+promoRouter.post("/etsy-depet", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  try { res.json(await sweepEtsyPetListings()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // POST /api/promo/showcase-now (GATED) — generate 2 premium HQ art drops + Etsy mirror now
 promoRouter.post("/showcase-now", async (req, res) => {
@@ -798,6 +847,8 @@ setTimeout(() => bootEnsure(), 25000);
 setTimeout(() => { fireCeoDropOnce().catch(e => console.log("[promo drop]", e.message)); }, 40000);
 // One-shot INSTANT SHOWCASE (latched): 2 premium HQ drops + immediate Etsy mirror
 setTimeout(() => { fireInstantShowcaseOnce().catch(e => console.log("[showcase]", e.message)); }, 55000);
+// One-shot Etsy DE-PET sweep (latched): pull any pet portrait already on Etsy
+setTimeout(() => { sweepEtsyPetListingsOnce().catch(e => console.log("[etsy depet]", e.message)); }, 240000);
 // Etsy auto-list: boot tick at 6 min (after the drop finishes), then HOURLY at :20
 setTimeout(() => { etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message)); }, 360000);
 cron.schedule("0 20 * * * *", () => {
