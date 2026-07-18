@@ -46,6 +46,14 @@ const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the t
 // so it never false-matches general art that merely mentions a pet in passing.
 const PET_TITLE_RE = /pet portrait|dog portrait|cat portrait|puppy portrait|kitten portrait|🐾/i;
 const isPetTitle = s => PET_TITLE_RE.test(String(s || ""));
+// CEO 7/15: strip the word "Magic" from all public-facing text (titles/tags/desc)
+// on both the pet store and Etsy. "Black Girl Magic"/"Melanin Magic" are remapped.
+const MAGIC_RE = /\bmagical\b|\bmagic\b/i;
+const scrubMagic = s => String(s || "")
+  .replace(/black girl magic/gi, "Black Girl Power").replace(/melanin magic/gi, "Melanin")
+  .replace(/\bmagical\b/gi, "").replace(/\bmagic\b/gi, "")
+  .replace(/\s{2,}/g, " ").replace(/\s+([,.])/g, "$1").replace(/,\s*,/g, ",").replace(/^[\s,]+|[\s,]+$/g, "").trim();
+const hasMagic = s => MAGIC_RE.test(String(s || ""));
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
@@ -384,15 +392,16 @@ async function etsySyncTick(maxPerTick = 4) {
 
   for (const p of todo) {
     try {
-      const desc = String(p.body_html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1000)
+      const desc = scrubMagic(String(p.body_html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1000))
         + "\n\nInstant digital download — no physical item is shipped. For personal use only.";
-      // Etsy tag rules: letters/numbers/spaces/hyphens only — strip em-dashes & symbols
-      const tags = [...new Set(String(p.tags || "").split(",")
-        .map(x => x.replace(/[^A-Za-z0-9' -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 20).trim())
+      // Etsy tag rules: letters/numbers/spaces/hyphens only — strip em-dashes & symbols.
+      // CEO 7/15: scrub the word "Magic" out of every tag before it's listed.
+      const tags = [...new Set(scrubMagic(String(p.tags || "")).split(",")
+        .map(x => scrubMagic(x).replace(/[^A-Za-z0-9' -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 20).trim())
         .filter(x => x.length > 1))].slice(0, 13);
       const cr = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings`, {
         method: "POST", headers: eAuth(et),
-        body: JSON.stringify({ title: String(p.title).slice(0, 140), description: desc, price: ETSY_PRICE, quantity: 999, who_made: "i_did", when_made: (process.env.ETSY_WHEN_MADE || "2020_2026"), is_supply: false, taxonomy_id: 2078, tags, state: "draft", type: "download", is_digital: true })
+        body: JSON.stringify({ title: scrubMagic(String(p.title)).slice(0, 140), description: desc, price: ETSY_PRICE, quantity: 999, who_made: "i_did", when_made: (process.env.ETSY_WHEN_MADE || "2020_2026"), is_supply: false, taxonomy_id: 2078, tags, state: "draft", type: "download", is_digital: true })
       });
       const listing = await cr.json();
       if (!cr.ok || !listing.listing_id) { await logAgent("AISHA", `Etsy auto-list create failed for ${p.id}: ${JSON.stringify(listing).slice(0, 120)}`, "error"); continue; }
@@ -790,6 +799,65 @@ async function sweepEtsyPetListingsOnce() {
   if (r.ok) await logAgent("AISHA", `Etsy de-pet sweep: ${r.deactivated} pet listing(s) deactivated, ${r.checked} checked`, r.deactivated ? "success" : "info");
 }
 
+// ── CEO 7/15 one-shot: DE-MAGIC sweep ────────────────────────────────────────
+// Strip the word "Magic" (incl. "Black Girl Magic" → "Black Girl Power") from
+// every EXISTING Shopify product + Etsy listing title/tags. Latched + /demagic.
+const DEMAGIC_MARKER = "CEO 2026-07-15: de-magic sweep done";
+async function sweepMagic() {
+  const out = { ok: true, shopify: { checked: 0, fixed: 0 }, etsy: { checked: 0, fixed: 0 } };
+  const { token, shop } = await shopAuth();
+  if (token && shop) {
+    try {
+      const pr = await fetch(`${base(shop)}/products.json?limit=250&fields=id,title,tags`, { headers: hdrs(token) });
+      const products = (await pr.json()).products || [];
+      out.shopify.checked = products.length;
+      for (const p of products) {
+        if (!hasMagic(p.title) && !hasMagic(p.tags)) continue;
+        const ur = await fetch(`${base(shop)}/products/${p.id}.json`, { method: "PUT", headers: hdrs(token), body: JSON.stringify({ product: { id: p.id, title: scrubMagic(p.title), tags: scrubMagic(p.tags) } }) });
+        if (ur.ok) { out.shopify.fixed++; await logAgent("AISHA", `De-magic: scrubbed Shopify product ${p.id}`, "success"); }
+      }
+    } catch (e) { out.shopify.error = e.message.slice(0, 120); }
+  }
+  try {
+    const et = await getEtsyAccessToken();
+    if (et) {
+      const formHdr = { Authorization: "Bearer " + et, "x-api-key": ETSY_KEY2 + (ETSY_SECRET2 ? ":" + ETSY_SECRET2 : ""), "Content-Type": "application/x-www-form-urlencoded" };
+      for (let offset = 0; offset < 1000; offset += 100) {
+        const r = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/active?limit=100&offset=${offset}`, { headers: eAuth(et) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { out.etsy.error = JSON.stringify(j).slice(0, 120); break; }
+        const results = j.results || [];
+        out.etsy.checked += results.length;
+        for (const l of results) {
+          const tagStr = (l.tags || []).join(",");
+          if (!hasMagic(l.title) && !hasMagic(tagStr)) continue;
+          const newTitle = scrubMagic(l.title).slice(0, 140);
+          const newTags = [...new Set(scrubMagic(tagStr).split(",").map(x => x.replace(/[^A-Za-z0-9' -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 20).trim()).filter(x => x.length > 1))].slice(0, 13).join(",");
+          let done = false;
+          for (const method of ["PATCH", "PUT"]) {
+            try {
+              const ur = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/${l.listing_id}`, { method, headers: formHdr, body: new URLSearchParams({ title: newTitle, tags: newTags }) });
+              if (ur.ok) { done = true; break; }
+            } catch (e) { /* try next */ }
+          }
+          if (done) { out.etsy.fixed++; await logAgent("AISHA", `De-magic: scrubbed Etsy listing ${l.listing_id}`, "success"); }
+        }
+        if (results.length < 100) break;
+      }
+    }
+  } catch (e) { out.etsy.error = e.message.slice(0, 120); }
+  return out;
+}
+async function sweepMagicOnce() {
+  try {
+    const { data, error } = await supabase.from("agent_logs").select("id").eq("message", DEMAGIC_MARKER).limit(1);
+    if (error || (data && data.length)) return;
+  } catch (e) { return; }
+  const r = await sweepMagic();
+  await logAgent("AISHA", DEMAGIC_MARKER, "info");
+  await logAgent("AISHA", `De-magic sweep: Shopify ${r.shopify.fixed} fixed, Etsy ${r.etsy.fixed} fixed`, "success");
+}
+
 // ── Endpoints ────────────────────────────────────────────────────────────────
 // GET /api/promo/status — public config/state view
 promoRouter.get("/status", (req, res) => res.json({
@@ -876,6 +944,10 @@ promoRouter.post("/etsy-depet", async (req, res) => {
   if (!requireApproval(req, res)) return;
   try { res.json(await sweepEtsyPetListings()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// GET/POST /api/promo/demagic — strip "Magic" from all existing Shopify + Etsy items
+promoRouter.all("/demagic", async (req, res) => {
+  try { res.json(await sweepMagic()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // POST /api/promo/showcase-now (GATED) — generate 2 premium HQ art drops + Etsy mirror now
 promoRouter.post("/showcase-now", async (req, res) => {
   if (!requireApproval(req, res)) return;
@@ -910,6 +982,8 @@ setTimeout(() => { fireCeoDropOnce().catch(e => console.log("[promo drop]", e.me
 setTimeout(() => { fireInstantShowcaseOnce().catch(e => console.log("[showcase]", e.message)); }, 55000);
 // One-shot Etsy DE-PET sweep (latched): pull any pet portrait already on Etsy
 setTimeout(() => { sweepEtsyPetListingsOnce().catch(e => console.log("[etsy depet]", e.message)); }, 240000);
+// One-shot DE-MAGIC sweep (latched): strip "Magic" from existing Shopify + Etsy items
+setTimeout(() => { sweepMagicOnce().catch(e => console.log("[demagic]", e.message)); }, 300000);
 // Etsy auto-list: boot tick at 6 min (after the drop finishes), then HOURLY at :20
 setTimeout(() => { etsySyncTick().then(r => { promoState.etsy_sync = r; }).catch(e => console.log("[etsy sync]", e.message)); }, 360000);
 cron.schedule("0 20 * * * *", () => {

@@ -180,11 +180,17 @@ export async function runPodGen({ theme = "Afrocentric heritage", style = "desig
   // CLEAN originals stay hidden in the body for zero-touch delivery; Shopify pulls
   // the PUBLIC images through the watermark proxy so the storefront is stamped.
   const cleanList = versionImages.map(v => v.src).join("|");
+  // CEO 7/15: strip the word "Magic" from all public-facing text (title/tags/desc).
+  const scrubMagic = s => String(s || "")
+    .replace(/black girl magic/gi, "Black Girl Power").replace(/melanin magic/gi, "Melanin")
+    .replace(/\bmagical\b/gi, "").replace(/\bmagic\b/gi, "")
+    .replace(/\s{2,}/g, " ").replace(/\s+—/g, " —").replace(/,\s*,/g, ",").replace(/^[\s,]+|[\s,]+$/g, "").trim();
+  const cleanTheme = scrubMagic(theme);
   const product = {
-    title: `${theme} — Original Digital Wall Art (${uid})`,
-    body_html: `<p>Original ${theme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Full-bleed, frameless — the art fills the whole space at maximum quality. Preview photos show it as a frameless canvas in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p><!--CLEAN:${cleanList}-->`,
+    title: `${cleanTheme} — Original Digital Wall Art (${uid})`,
+    body_html: `<p>Original ${cleanTheme} wall art from House of Jreym — a print-ready digital download. Design ID <strong>${uid}</strong>.</p><p><strong>Includes ${versionsIncluded.length} digital version${versionsIncluded.length>1?"s":""}: ${versionsIncluded.join(", ")}.</strong> Full-bleed, frameless — the art fills the whole space at maximum quality. Preview photos show it as a frameless canvas in real rooms.</p><p><strong>Instant digital download</strong> — no physical item is shipped. For personal use only; may not be resold or redistributed.</p><!--CLEAN:${cleanList}-->`,
     vendor: "House of Jreym", product_type: "Digital Wall Art", status,
-    tags: `originals, digital download, wall art, 3d, holographic, ${theme}, ${uid}`,
+    tags: scrubMagic(`originals, digital download, wall art, 3d, holographic, ${cleanTheme}, ${uid}`),
     images: versionImages.map(v => ({ src: WM(v.src) })),
     variants: [{ price: "10.99", requires_shipping: false, taxable: true, inventory_management: null }]
   };
