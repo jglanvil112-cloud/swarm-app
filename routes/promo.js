@@ -800,6 +800,57 @@ promoRouter.get("/status", (req, res) => res.json({
   etsy_shop: ETSY_SHOP_URL,
   weekly_target: WEEKLY_TARGET, boost_cron: "daily 15:00 UTC", state: promoState
 }));
+// GET /api/promo/sections — PUBLIC spillover checker. Reads each section's live
+// rules + product mix and returns pass/fail flags for every spillover direction.
+// Open in a browser to confirm the pet store is clean. ?fix=1 re-runs the
+// catalog de-mix (rewrites /collections/all to physical-only) on the spot.
+promoRouter.get("/sections", async (req, res) => {
+  try {
+    const { token, shop } = await shopAuth();
+    if (!token || !shop) return res.status(503).json({ error: "no shopify auth" });
+    const wanted = {
+      "digital-art-instant-downloads": "General Digital Art (Etsy-facing)",
+      "hoj-pets-digital-art-instant-downloads": "Pet Art Downloads",
+      "physical-goods-shipped-to-you": "Physical Goods",
+      "all": "Item Catalog (Pet Supplies)"
+    };
+    const cl = await (await fetch(`${base(shop)}/smart_collections.json?limit=250`, { headers: hdrs(token) })).json();
+    const out = {};
+    let catalogCol = null;
+    for (const c of cl.smart_collections || []) {
+      if (!wanted[c.handle]) continue;
+      if (c.handle === "all") catalogCol = c;
+      const cj = await (await fetch(`${base(shop)}/collections/${c.id}/products.json?limit=250&fields=id,title,product_type`, { headers: hdrs(token) })).json();
+      const prods = cj.products || [];
+      out[c.handle] = {
+        name: wanted[c.handle], disjunctive: c.disjunctive, rules: c.rules,
+        product_count: prods.length,
+        digital: prods.filter(p => p.product_type === DIGITAL_TYPE).length,
+        physical: prods.filter(p => p.product_type !== DIGITAL_TYPE).length,
+        pet_titled: prods.filter(p => isPetTitle(p.title)).length,
+        sample: prods.slice(0, 6).map(p => `${p.title} [${p.product_type}]`)
+      };
+    }
+    // Optional on-the-spot fix: force the item catalog to physical-only.
+    let fixed = null;
+    if (req.query.fix && catalogCol && (catalogCol.disjunctive || (catalogCol.rules || []).some(r => r.relation === "contains"))) {
+      const cu = await fetch(`${base(shop)}/smart_collections/${catalogCol.id}.json`, {
+        method: "PUT", headers: hdrs(token),
+        body: JSON.stringify({ smart_collection: { id: catalogCol.id, disjunctive: false, rules: [{ column: "type", relation: "not_equals", condition: DIGITAL_TYPE }] } })
+      });
+      fixed = cu.ok ? "item catalog rewritten to physical-only" : "fix failed";
+    }
+    const cat = out["all"] || {}, pet = out["hoj-pets-digital-art-instant-downloads"] || {}, gen = out["digital-art-instant-downloads"] || {};
+    res.json({
+      checks: {
+        "item_catalog_physical_only (no art in pet items)": (cat.digital || 0) === 0,
+        "pet_downloads_pet_only (no physical/general spill)": (pet.physical || 0) === 0,
+        "general_art_no_pet (no pet spill into Etsy gallery)": (pet ? (gen.pet_titled || 0) === 0 : true)
+      },
+      fixed, sections: out
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // POST /api/promo/ensure (GATED) — force-create collection + deal now
 promoRouter.post("/ensure", async (req, res) => {
   if (!requireApproval(req, res)) return;
