@@ -956,6 +956,40 @@ promoRouter.post("/etsy-depet", async (req, res) => {
 promoRouter.all("/demagic", async (req, res) => {
   try { res.json(await sweepMagic()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// GET/POST /api/promo/decollage — CEO 2026-07-18: remove the theme-boilerplate
+// "This season Best Seller" Collage section from the shared collection template
+// (renders on Pet Art Downloads + every other collection page). Idempotent.
+promoRouter.all("/decollage", async (req, res) => {
+  const out = { ok: false, theme: null, removed: [], note: null };
+  try {
+    const { token, shop } = await shopAuth();
+    if (!token || !shop) return res.status(503).json({ ...out, error: "no shopify auth" });
+    const th = await (await fetch(`${base(shop)}/themes.json?role=main`, { headers: hdrs(token) })).json();
+    const theme = (th.themes || [])[0];
+    if (!theme) return res.status(502).json({ ...out, error: th.errors ? JSON.stringify(th.errors).slice(0, 160) : "no main theme (token may lack read_themes scope)" });
+    out.theme = { id: theme.id, name: theme.name };
+    const key = "templates/collection.json";
+    const ar = await fetch(`${base(shop)}/themes/${theme.id}/assets.json?asset[key]=${encodeURIComponent(key)}`, { headers: hdrs(token) });
+    const aj = await ar.json().catch(() => ({}));
+    if (!ar.ok || !aj.asset?.value) return res.status(502).json({ ...out, error: aj.errors ? JSON.stringify(aj.errors).slice(0, 160) : "asset read failed (token may lack read_themes scope)" });
+    const tpl = JSON.parse(aj.asset.value);
+    for (const [k, v] of Object.entries(tpl.sections || {})) {
+      if (k === "main") continue;
+      if (/collage/i.test(k) || /collage/i.test(String(v?.type || ""))) { out.removed.push(k); delete tpl.sections[k]; }
+    }
+    if (!out.removed.length) { out.ok = true; out.note = "no collage section present — already clean"; return res.json(out); }
+    tpl.order = (tpl.order || []).filter(k => !out.removed.includes(k));
+    const pr = await fetch(`${base(shop)}/themes/${theme.id}/assets.json`, {
+      method: "PUT", headers: hdrs(token),
+      body: JSON.stringify({ asset: { key, value: JSON.stringify(tpl, null, 2) } })
+    });
+    const pj = await pr.json().catch(() => ({}));
+    if (!pr.ok) return res.status(502).json({ ...out, error: pj.errors ? JSON.stringify(pj.errors).slice(0, 160) : "asset write failed (token may lack write_themes scope)" });
+    out.ok = true;
+    await logAgent("IMANI", `De-collage: removed section(s) ${out.removed.join(", ")} from ${key} on theme ${theme.id}`, "success");
+    res.json(out);
+  } catch (e) { res.status(500).json({ ...out, error: e.message.slice(0, 160) }); }
+});
 // POST /api/promo/showcase-now (GATED) — generate 2 premium HQ art drops + Etsy mirror now
 promoRouter.post("/showcase-now", async (req, res) => {
   if (!requireApproval(req, res)) return;
