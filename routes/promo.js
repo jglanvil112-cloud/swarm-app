@@ -25,7 +25,7 @@
 
 import express from "express";
 import cron from "node-cron";
-import { supabase, logAgent } from "../lib/supabase.js";
+import { supabase, logAgent, saveAgentOutput } from "../lib/supabase.js";
 import { enforceCaptionRules } from "../lib/captionRules.js";
 import { runPodGen } from "./podgen.js";
 
@@ -44,7 +44,7 @@ const PET_MARK = "Pet Portrait"; // pet digital drops carry this phrase in the t
 // Broader pet-title matcher (CEO 7/15): catches every pet-art variant so none
 // slips onto Etsy or out of the pet section. Portrait-scoped + paw emoji only,
 // so it never false-matches general art that merely mentions a pet in passing.
-const PET_TITLE_RE = /pet portrait|dog portrait|cat portrait|puppy portrait|kitten portrait|🐾/i;
+const PET_TITLE_RE = /pet portrait|french bulldog|frenchie|bulldog|paw print|dog portrait|cat portrait|puppy portrait|kitten portrait|🐾/i;
 const isPetTitle = s => PET_TITLE_RE.test(String(s || ""));
 // CEO 7/15: strip the word "Magic" from all public-facing text (titles/tags/desc)
 // on both the pet store and Etsy. "Black Girl Magic"/"Melanin Magic" are remapped.
@@ -702,7 +702,9 @@ export async function checkAndBoost() {
 // Counts ACTIVE Digital Wall Art; if under the floor, fires podgen to top up.
 // Runs at boot (8 min) + daily. Uses a diverse theme pool (not just Afrocentric).
 const FLOOR_MIN = parseInt(process.env.PRODUCT_FLOOR || "100", 10);
-const FLOOR_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Retro Arcade Neon Nights","Boxing Champion Spirit","Street Graffiti Color Explosion","Golden Retriever Pet Portrait — sunny garden","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Skate Park Motion Blur","Cosmic Space Dreamscape","Midnight City Dreams Mood","Anime-Style Rainy City Mood","Vintage Muscle Car Sunset","French Bulldog Pet Portrait — neon pop art","Surfer Sunset Wave Mood","Mountain Hiking Adventure Vibe"];
+const FLOOR_THEMES = ["Basketball Court Legends","Regal Pet Portrait — crowned royal dog","Retro Arcade Neon Nights","Boxing Champion Spirit","Street Graffiti Color Explosion","Golden Retriever Pet Portrait — sunny garden","Football Stadium Friday Lights","Y2K Chrome Aesthetic","Skate Park Motion Blur","Cosmic Space Dreamscape","Midnight City Dreams Mood","Anime-Style Rainy City Mood","Vintage Muscle Car Sunset","French Bulldog Pet Portrait — neon pop art","Surfer Sunset Wave Mood","Mountain Hiking Adventure Vibe","Black Excellence — museum-grade regal portrait","West African Kente Geometry — royal gold palette","Black Art History — ancestral pride tribute","Caribbean Carnival Joy — vibrant celebration of life","Latin Heritage Bloom — golden-hour family pride","Lunar Festival Lanterns — radiant night of hope","Indigenous Heritage Sunrise — sacred land in golden glow","Mediterranean Coastal Serenity — sunlit peace","Holi Color Celebration — pure joy in motion","Japanese Sakura Tranquility — renewal in bloom","Mexican Talavera Sunburst — heritage in full color","Brazilian Carnival Energy — rhythm and light","Middle Eastern Geometric Splendor — timeless artistry","Celtic Emerald Heritage — ancient strength in green and gold","Polynesian Ocean Voyager — courage on open water","Korean Hanbok Garden Elegance — grace in springtime","Filipino Fiesta Radiance — community in celebration","Optical Illusion Infinite Staircase — mind-bending depth","3D Pop-Out Holographic Depth — leaps off the wall","Impossible Geometry Mind-Bender — Escher-inspired wonder","Anamorphic Street Art Illusion — sidewalk that opens into another world","Hypnotic Moiré Wave Pattern — mesmerizing motion in stillness"];
+const CULTURE_CALENDAR = {0:"Lunar New Year Radiance — family, fortune and fresh starts",1:"Black History Month Tribute — excellence across generations",2:"Women's History Glory — trailblazers in golden light",3:"Earth Renewal Celebration — every culture honoring spring",4:"AAPI Heritage Brilliance — artistry across the Pacific",5:"Caribbean-American Heritage Joy — island pride in full color",6:"Global Unity Summer — every flag, one uplifting light",7:"Harvest of Cultures — abundance celebrated worldwide",8:"Hispanic Heritage Fiesta — legacy in vibrant celebration",9:"Diwali Festival of Lights — hope illuminated",10:"Native American Heritage Honor — wisdom of the land",11:"Kwanzaa & Global Festivals of Light — community and joy"};
+const cultureThemeOfToday = () => CULTURE_CALENDAR[new Date().getUTCMonth()] || "Global Unity — every culture in uplifting light";
 
 async function ensureProductFloor() {
   const { token, shop } = await shopAuth();
@@ -718,7 +720,7 @@ async function ensureProductFloor() {
   const dayN = Math.floor(Date.now() / 86400000);
   let made = 0;
   for (let i = 0; i < need; i++) {
-    try { const rr = await runPodGen({ theme: FLOOR_THEMES[(dayN + i) % FLOOR_THEMES.length], style: i % 2 ? "art" : "design" }); if (rr?.productId) made++; }
+    try { const th = i === 0 ? cultureThemeOfToday() : FLOOR_THEMES[(dayN + i) % FLOOR_THEMES.length]; const rr = await runPodGen({ theme: th, style: i % 2 ? "art" : "design" }); if (rr?.productId) made++; }
     catch (e) { console.log("[floor]", e.message); }
   }
   promoState.floor = { count: count + made, min: FLOOR_MIN, topped: made, at: new Date().toISOString() };
@@ -766,7 +768,7 @@ async function promotePetProductsTick(count = 1) {
 // ── CEO 7/15 one-shot: Etsy DE-PET sweep ─────────────────────────────────────
 // Deactivate any pet-portrait listing already mirrored to Etsy BEFORE the de-mix
 // fix, so Etsy carries the general art gallery only. Idempotent + latched.
-const DEPET_MARKER = "CEO 2026-07-15b: Etsy pet-portrait de-mix sweep done";
+const DEPET_MARKER = "CEO 2026-07-19: Etsy de-pet sweep v3 (breed names incl. french bulldog) done";
 async function sweepEtsyPetListings() {
   const out = { ok: true, checked: 0, deactivated: 0, ids: [], failed: [] };
   const et = await getEtsyAccessToken();
@@ -1047,4 +1049,58 @@ cron.schedule("0 0 15 * * *", () => {
   ensurePromoAssets().catch(e => console.log("[promo] ensure:", e.message))
     .then(() => checkAndBoost()).catch(e => console.log("[promo] check:", e.message));
 });
-console.log(`[promo] armed — ${PROMO_CODE}: spend $${MIN_SPEND} → free digital piece; boost check daily 15:00 UTC`);
+console.log(`[promo] armed — ${PROMO_CODE}: spend ${MIN_SPEND} → free digital piece; boost check daily 15:00 UTC`);
+
+// ── CEO 2026-07-19: WATERMARK BACKFILL + SWARM GUARDIAN (self-healing) ───
+const WM_LAUNCH = "2026-07-15T00:00:00Z";
+async function wmBackfillTick(maxPerTick = 4) {
+  try {
+    const { token, shop } = await shopAuth();
+    if (!token || !shop) return { skip: "no shopify auth" };
+    const pr = await fetch(`${base(shop)}/products.json?product_type=${encodeURIComponent(DIGITAL_TYPE)}&status=active&limit=250&fields=id,title,created_at,images`, { headers: hdrs(token) });
+    const products = ((await pr.json()).products || []).filter(p => p.created_at && p.created_at < WM_LAUNCH && (p.images || []).length);
+    if (!products.length) return { done: true };
+    const { data: done } = await supabase.from("agent_outputs").select("etsy_title").eq("output_type", "wm_backfill");
+    const doneIds = new Set((done || []).map(d => d.etsy_title));
+    let stamped = 0;
+    for (const p of products.filter(x => !doneIds.has(String(x.id)))) {
+      if (stamped >= maxPerTick) break;
+      try {
+        const wmImages = p.images.slice(0, 6).map(im => ({ src: `${APP_URL}/api/podgen/wm?u=${encodeURIComponent(im.src)}` }));
+        const ur = await fetch(`${base(shop)}/products/${p.id}.json`, { method: "PUT", headers: hdrs(token), body: JSON.stringify({ product: { id: p.id, images: wmImages } }) });
+        if (ur.ok) { stamped++; await saveAgentOutput({ taskId: null, agent: "AISHA", outputType: "wm_backfill", etsyTitle: String(p.id), confidence: 1 }); await logAgent("AISHA", `WM backfill: stamped ${(p.images||[]).length} image(s) on "${String(p.title).slice(0,40)}"`, "success"); }
+      } catch (e) { }
+    }
+    return { stamped };
+  } catch (e) { return { error: e.message }; }
+}
+promoRouter.all("/wm-backfill", async (req, res) => { try { res.json(await wmBackfillTick(6)); } catch (e) { res.status(500).json({ error: e.message }); } });
+setTimeout(() => { wmBackfillTick().catch(e => console.log("[wm backfill]", e.message)); }, 660000);
+cron.schedule("0 40 * * * *", () => { wmBackfillTick().catch(e => console.log("[wm backfill]", e.message)); });
+
+async function guardianTick() {
+  const out = { checked: [], healed: [] };
+  try {
+    const since = new Date(Date.now() - 26 * 3600 * 1000).toISOString();
+    const { data: logs } = await supabase.from("agent_logs").select("message,created_at").gte("created_at", since).limit(2000);
+    const seen = pat => (logs || []).some(l => pat.test(String(l.message || "")));
+    const jobs = [
+      { name: "product_floor",  ran: seen(/floor|Product floor|topped/i),                 heal: () => ensureProductFloor() },
+      { name: "etsy_sync",      ran: seen(/Etsy (draft|listing|synced|image)/i),          heal: () => etsySyncTick(4) },
+      { name: "motion_video",   ran: seen(/Motion (INSTAGRAM|FACEBOOK)|\ud83c\udfac/i),             heal: () => motionTick() },
+      { name: "boost_engine",   ran: seen(/boost|Boost|promo post/i),                     heal: () => checkAndBoost() }
+    ];
+    for (const j of jobs) {
+      out.checked.push(j.name);
+      if (!j.ran) {
+        try { await j.heal(); out.healed.push(j.name); await logAgent("ABENA", `GUARDIAN self-heal: ${j.name} missed its window — re-fired`, "warn"); }
+        catch (e) { await logAgent("ABENA", `GUARDIAN: ${j.name} re-fire failed (${String(e.message).slice(0,60)})`, "error"); }
+      }
+    }
+    await logAgent("ABENA", out.healed.length ? `GUARDIAN heartbeat: healed ${out.healed.join(", ")}` : "GUARDIAN heartbeat: all engines continuous", "info");
+  } catch (e) { console.log("[guardian]", e.message); }
+  return out;
+}
+promoRouter.all("/guardian", async (req, res) => { try { res.json(await guardianTick()); } catch (e) { res.status(500).json({ error: e.message }); } });
+cron.schedule("0 10 */6 * * *", () => { guardianTick().catch(e => console.log("[guardian]", e.message)); });
+console.log("[promo] guardian armed — 6h self-heal watch + hourly WM backfill drip");
