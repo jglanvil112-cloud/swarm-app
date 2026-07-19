@@ -54,6 +54,13 @@ const scrubMagic = s => String(s || "")
   .replace(/\bmagical\b/gi, "").replace(/\bmagic\b/gi, "")
   .replace(/\s{2,}/g, " ").replace(/\s+([,.])/g, "$1").replace(/,\s*,/g, ",").replace(/^[\s,]+|[\s,]+$/g, "").trim();
 const hasMagic = s => MAGIC_RE.test(String(s || ""));
+// Description-safe scrubs: same word remaps, but no whitespace/punctuation
+// collapsing — preserves HTML markup (Shopify body_html) and paragraph
+// newlines (Etsy descriptions).
+const scrubMagicDesc = s => String(s || "")
+  .replace(/black girl magic/gi, "Black Girl Power").replace(/melanin magic/gi, "Melanin")
+  .replace(/\bmagical\b/gi, "").replace(/\bmagic\b/gi, "")
+  .replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([,.])/g, "$1");
 const RESTOCK_QTY = parseInt(process.env.PROMO_RESTOCK_QTY || "250");
 const ETSY_SHOP_URL = `https://www.etsy.com/shop/${process.env.SHOP_NAME || "HOUSEOFJREYM"}`;
 
@@ -802,18 +809,18 @@ async function sweepEtsyPetListingsOnce() {
 // ── CEO 7/15 one-shot: DE-MAGIC sweep ────────────────────────────────────────
 // Strip the word "Magic" (incl. "Black Girl Magic" → "Black Girl Power") from
 // every EXISTING Shopify product + Etsy listing title/tags. Latched + /demagic.
-const DEMAGIC_MARKER = "CEO 2026-07-15: de-magic sweep done";
+const DEMAGIC_MARKER = "CEO 2026-07-18: de-magic sweep v2 (titles+tags+descriptions) done";
 async function sweepMagic() {
   const out = { ok: true, shopify: { checked: 0, fixed: 0 }, etsy: { checked: 0, fixed: 0 } };
   const { token, shop } = await shopAuth();
   if (token && shop) {
     try {
-      const pr = await fetch(`${base(shop)}/products.json?limit=250&fields=id,title,tags`, { headers: hdrs(token) });
+      const pr = await fetch(`${base(shop)}/products.json?limit=250&fields=id,title,tags,body_html`, { headers: hdrs(token) });
       const products = (await pr.json()).products || [];
       out.shopify.checked = products.length;
       for (const p of products) {
-        if (!hasMagic(p.title) && !hasMagic(p.tags)) continue;
-        const ur = await fetch(`${base(shop)}/products/${p.id}.json`, { method: "PUT", headers: hdrs(token), body: JSON.stringify({ product: { id: p.id, title: scrubMagic(p.title), tags: scrubMagic(p.tags) } }) });
+        if (!hasMagic(p.title) && !hasMagic(p.tags) && !hasMagic(p.body_html)) continue;
+        const ur = await fetch(`${base(shop)}/products/${p.id}.json`, { method: "PUT", headers: hdrs(token), body: JSON.stringify({ product: { id: p.id, title: scrubMagic(p.title), tags: scrubMagic(p.tags), body_html: scrubMagicDesc(p.body_html) } }) });
         if (ur.ok) { out.shopify.fixed++; await logAgent("AISHA", `De-magic: scrubbed Shopify product ${p.id}`, "success"); }
       }
     } catch (e) { out.shopify.error = e.message.slice(0, 120); }
@@ -830,13 +837,14 @@ async function sweepMagic() {
         out.etsy.checked += results.length;
         for (const l of results) {
           const tagStr = (l.tags || []).join(",");
-          if (!hasMagic(l.title) && !hasMagic(tagStr)) continue;
+          if (!hasMagic(l.title) && !hasMagic(tagStr) && !hasMagic(l.description)) continue;
+          const newDesc = scrubMagicDesc(l.description);
           const newTitle = scrubMagic(l.title).slice(0, 140);
           const newTags = [...new Set(scrubMagic(tagStr).split(",").map(x => x.replace(/[^A-Za-z0-9' -]/g, " ").replace(/\s+/g, " ").trim().slice(0, 20).trim()).filter(x => x.length > 1))].slice(0, 13).join(",");
           let done = false;
           for (const method of ["PATCH", "PUT"]) {
             try {
-              const ur = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/${l.listing_id}`, { method, headers: formHdr, body: new URLSearchParams({ title: newTitle, tags: newTags }) });
+              const ur = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings/${l.listing_id}`, { method, headers: formHdr, body: new URLSearchParams({ title: newTitle, tags: newTags, ...(newDesc ? { description: newDesc } : {}) }) });
               if (ur.ok) { done = true; break; }
             } catch (e) { /* try next */ }
           }
