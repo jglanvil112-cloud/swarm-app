@@ -336,3 +336,28 @@ cron.schedule("0 5 * * *",()=>runPodgenTrendDrop(0));
 cron.schedule("0 9 * * *",()=>runPodgenTrendDrop(1));
 cron.schedule("0 12 * * *",()=>runPodgenTrendDrop(2));
 console.log("[PODGEN-TREND] 3x/day trend auto-drop registered (05/09/12 UTC → posts by 11am ET) ✅");
+
+// ── CEO 2026-07-20: ONE-TIME 24-PRODUCT TRENDING DROP ────────────────────────
+// Fires once on the next boot: 24 fresh products across the brand's Afrocentric
+// core, optical illusions, this month's culture theme, and 2026's best-selling
+// wall-art aesthetics. Each flows the full loop (fal.ai -> IP gate -> HOJ Shopify
+// publish, watermarked, Classic/3D/Holographic, 250-cap -> auto buy-link post),
+// and the Etsy sync ticks mirror them to Etsy. Latched via scheduler_state so it
+// never repeats. Staggered 90s after boot so startup isn't starved.
+import { bulkTrendDrop } from "../routes/podgen.js";
+(async () => {
+  try {
+    const { data: g } = await supabase.from("scheduler_state").select("run_count").eq("job_name", "trend_drop_24_0720").limit(1);
+    if (g && g.length) return;
+    await updateSchedulerState("trend_drop_24_0720", "started");
+    setTimeout(async () => {
+      try {
+        await logAgent("AMARA", "24-product trending drop starting (Afrocentric + optical illusion + culture + 2026 best-sellers)", "info");
+        const r = await bulkTrendDrop({ count: 24 });
+        await updateSchedulerState("trend_drop_24_0720", "ok");
+        await logAgent("AMARA", `24-product trending drop finished: ${r.made} live of ${r.count}`, r.made ? "success" : "warn");
+      } catch (e) { console.error("[TREND-DROP-24]", e.message); }
+    }, 90000);
+  } catch (e) { console.error("[TREND-DROP-24 seed]", e.message); }
+})();
+console.log("[TREND-DROP-24] one-time trending drop seed armed ✅");

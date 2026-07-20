@@ -315,3 +315,67 @@ console.log("[podgen] daily auto-drop " + (DAILY_ON ? ("ON — 08:30 UTC, " + DA
 
 // GET /api/podgen/status — public config check (no secrets): confirms auto-publish state remotely
 podgenRouter.get("/status",(req,res)=>res.json({auto_publish:AUTO_PUBLISH,daily_drop_on:DAILY_ON,daily_count:DAILY_COUNT,trend_drop_utc:"05:00 / 09:00 / 12:00",uptime_s:Math.round(process.uptime()),mem_mb:Math.round(process.memoryUsage().rss/1048576),ts:new Date().toISOString()}));
+
+// ── TRENDING DROP (CEO 2026-07-20) ───────────────────────────────────────────
+// 24-theme mix balancing the brand's Afrocentric core (>=1/3), optical illusions,
+// this month's culture theme, and 2026's best-selling wall-art aesthetics
+// (sophisticated neutrals, romantic pastels, botanical line art, bold contrast,
+// contemporary folk, mid-century, AI-surreal). All original + IP-safe.
+export const TRENDING_2026_MIX = [
+  // Afrocentric core (8)
+  "Afrocentric Royalty & Excellence — regal golden portrait",
+  "Melanin Queen — radiant joy in golden light",
+  "Kente Heritage Celebration — royal color geometry",
+  "Sankofa Wisdom — ancestral symbol in gold",
+  "Black Joy & Community — vibrant togetherness",
+  "Diaspora Roots & Unity — constellation of heritage",
+  "Ankara Bloom Vibrance — bold pattern florals",
+  "Nubian Elegance — timeless profile in bronze and gold",
+  // Optical illusion / AI-surreal (5)
+  "Optical Illusion Op-Art Hypnotic — mind-bending depth",
+  "Impossible Geometry Escher-Style Illusion",
+  "Anamorphic 3D Pop-Out Depth Illusion",
+  "Surreal Melting Dreamscape — AI surrealism",
+  "Hypnotic Moire Wave Pattern — motion in stillness",
+  // 2026 best-selling aesthetics (7)
+  "Sophisticated Neutrals — beige and cream line-art minimalism",
+  "Romantic Pastel Abstract — lavender and mint softness",
+  "Botanical Line Art — elegant minimalist greenery",
+  "Bold Color Contrast Abstract — primary energy",
+  "Contemporary Folk Geometry — brocade motifs reimagined",
+  "Mid-Century Modern Abstract Shapes — retro palette",
+  "Coastal Serenity Landscape — sunlit ocean calm",
+  // Global culture uplift (4) — July = Global Unity Summer
+  "Global Unity Summer — every culture in uplifting light",
+  "Caribbean Carnival Joy — vibrant celebration of life",
+  "Lunar Festival Lanterns — radiant night of hope",
+  "Mexican Talavera Sunburst — heritage in full color",
+];
+
+// Generate N products sequentially (each: fal.ai gen -> IP gate -> Shopify publish
+// watermarked in Classic/3D/Holographic -> 250-cap -> auto buy-link post; Etsy
+// mirror ticks pick them up). Runs in the background so callers return instantly.
+export async function bulkTrendDrop({ count = 24, themes = null } = {}) {
+  const pool = (themes && themes.length) ? themes : TRENDING_2026_MIX;
+  let made = 0, held = 0, failed = 0;
+  for (let i = 0; i < count; i++) {
+    const theme = pool[i % pool.length];
+    const style = i % 3 === 0 ? "art" : (i % 3 === 1 ? "design" : "text");
+    try {
+      const r = await runPodGen({ theme, style });
+      if (r && r.productId) made++; else held++;
+    } catch (e) { failed++; console.log("[trend-drop]", e.message); }
+    if ((i + 1) % 6 === 0) await logAgent("AMARA", `Trend drop progress: ${made} live / ${i + 1} attempted`, "info");
+  }
+  await logAgent("AMARA", `Trend drop complete: ${made} live, ${held} held, ${failed} failed (of ${count})`, made ? "success" : "warn");
+  return { count, made, held, failed };
+}
+
+// GET/POST /api/podgen/trend-drop?count=24&key=<APPROVAL_SECRET> — on-demand bulk drop.
+// Key-gated (fal.ai costs money); runs in background, returns immediately.
+podgenRouter.all("/trend-drop", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  const count = Math.min(40, Math.max(1, parseInt(req.query.count || (req.body && req.body.count) || "24", 10)));
+  res.json({ ok: true, started: count, note: "generating in background (~1-2 min each); watch /api/podgen/status and the shop" });
+  bulkTrendDrop({ count }).catch(e => console.log("[trend-drop fatal]", e.message));
+});
