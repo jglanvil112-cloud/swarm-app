@@ -82,7 +82,7 @@ async function falGenerate(model, prompt, imageSize = { width: 1200, height: 120
     await new Promise(r => setTimeout(r, 2000));
     const s = await (await fetch(statusUrl, { headers: { "Authorization": `Key ${FAL_KEY}` } })).json();
     if (s.status === "COMPLETED") break;
-    if (s.status === "FAILED" || s.status === "ERROR") throw new Error("fal generation failed");
+    if (s.status === "FAILED" || s.status === "ERROR") throw new Error("fal generation failed: " + JSON.stringify(s).slice(0, 200));
   }
   const out = await (await fetch(respUrl, { headers: { "Authorization": `Key ${FAL_KEY}` } })).json();
   const img = out.images?.[0] || out.image || {};
@@ -314,7 +314,7 @@ if (DAILY_ON) cron.schedule("30 8 * * *", async () => {
 console.log("[podgen] daily auto-drop " + (DAILY_ON ? ("ON — 08:30 UTC, " + DAILY_COUNT + "/day") : "OFF"));
 
 // GET /api/podgen/status — public config check (no secrets): confirms auto-publish state remotely
-podgenRouter.get("/status",(req,res)=>res.json({auto_publish:AUTO_PUBLISH,daily_drop_on:DAILY_ON,daily_count:DAILY_COUNT,trend_drop_utc:"05:00 / 09:00 / 12:00",uptime_s:Math.round(process.uptime()),mem_mb:Math.round(process.memoryUsage().rss/1048576),ts:new Date().toISOString()}));
+podgenRouter.get("/status",(req,res)=>res.json({auto_publish:AUTO_PUBLISH,daily_drop_on:DAILY_ON,daily_count:DAILY_COUNT,fal_key_present:!!FAL_KEY,last_trend_drop:LAST_TREND_DROP,trend_drop_utc:"05:00 / 09:00 / 12:00",uptime_s:Math.round(process.uptime()),mem_mb:Math.round(process.memoryUsage().rss/1048576),ts:new Date().toISOString()}));
 
 // ── TRENDING DROP (CEO 2026-07-20) ───────────────────────────────────────────
 // 24-theme mix balancing the brand's Afrocentric core (>=1/3), optical illusions,
@@ -355,20 +355,31 @@ export const TRENDING_2026_MIX = [
 // Generate N products sequentially (each: fal.ai gen -> IP gate -> Shopify publish
 // watermarked in Classic/3D/Holographic -> 250-cap -> auto buy-link post; Etsy
 // mirror ticks pick them up). Runs in the background so callers return instantly.
+let LAST_TREND_DROP = null; // surfaced on /api/podgen/status for remote diagnosis
+export function lastTrendDrop() { return LAST_TREND_DROP; }
+
 export async function bulkTrendDrop({ count = 24, themes = null } = {}) {
   const pool = (themes && themes.length) ? themes : TRENDING_2026_MIX;
-  let made = 0, held = 0, failed = 0;
+  let made = 0, held = 0, failed = 0, firstError = null;
   for (let i = 0; i < count; i++) {
     const theme = pool[i % pool.length];
     const style = i % 3 === 0 ? "art" : (i % 3 === 1 ? "design" : "text");
     try {
       const r = await runPodGen({ theme, style });
       if (r && r.productId) made++; else held++;
-    } catch (e) { failed++; console.log("[trend-drop]", e.message); }
+    } catch (e) {
+      failed++;
+      if (!firstError) {
+        firstError = String(e && e.message || e).slice(0, 240);
+        // Surface the REAL cause once (fal credits/model/etc.) — not just console.
+        await logAgent("AMARA", `Trend drop error (1st of many if repeated): ${firstError}`, "error");
+      }
+    }
     if ((i + 1) % 6 === 0) await logAgent("AMARA", `Trend drop progress: ${made} live / ${i + 1} attempted`, "info");
   }
-  await logAgent("AMARA", `Trend drop complete: ${made} live, ${held} held, ${failed} failed (of ${count})`, made ? "success" : "warn");
-  return { count, made, held, failed };
+  LAST_TREND_DROP = { at: new Date().toISOString(), count, made, held, failed, firstError };
+  await logAgent("AMARA", `Trend drop complete: ${made} live, ${held} held, ${failed} failed (of ${count})${firstError ? " — " + firstError : ""}`, made ? "success" : "warn");
+  return LAST_TREND_DROP;
 }
 
 // GET/POST /api/podgen/trend-drop?count=24&key=<APPROVAL_SECRET> — on-demand bulk drop.

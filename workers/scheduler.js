@@ -347,14 +347,14 @@ console.log("[PODGEN-TREND] 3x/day trend auto-drop registered (05/09/12 UTC → 
 import { bulkTrendDrop } from "../routes/podgen.js";
 (async () => {
   try {
-    const { data: g } = await supabase.from("scheduler_state").select("run_count").eq("job_name", "trend_drop_24_0720").limit(1);
+    const { data: g } = await supabase.from("scheduler_state").select("run_count").eq("job_name", "trend_drop_24b_0720").limit(1);
     if (g && g.length) return;
-    await updateSchedulerState("trend_drop_24_0720", "started");
+    await updateSchedulerState("trend_drop_24b_0720", "started");
     setTimeout(async () => {
       try {
         await logAgent("AMARA", "24-product trending drop starting (Afrocentric + optical illusion + culture + 2026 best-sellers)", "info");
         const r = await bulkTrendDrop({ count: 24 });
-        await updateSchedulerState("trend_drop_24_0720", "ok");
+        await updateSchedulerState("trend_drop_24b_0720", "ok");
         await logAgent("AMARA", `24-product trending drop finished: ${r.made} live of ${r.count}`, r.made ? "success" : "warn");
       } catch (e) { console.error("[TREND-DROP-24]", e.message); }
     }, 90000);
