@@ -390,3 +390,16 @@ podgenRouter.all("/trend-drop", async (req, res) => {
   res.json({ ok: true, started: count, note: "generating in background (~1-2 min each); watch /api/podgen/status and the shop" });
   bulkTrendDrop({ count }).catch(e => console.log("[trend-drop fatal]", e.message));
 });
+
+// AUTO-RESUME on fal.ai top-up: while the last drop failed on an exhausted/locked
+// balance, retry every 2h. A locked fal submit fails instantly and free, so this
+// costs nothing until credits return — then the 24 products generate and the
+// check self-disables (made>0). Zero human touch after the top-up.
+cron.schedule("20 */2 * * *", async () => {
+  const l = LAST_TREND_DROP;
+  if (!l || l.made > 0) return;
+  if (!/exhaust|locked|balance|insufficient|quota|credit|402/i.test(l.firstError || "")) return;
+  await logAgent("AMARA", "fal.ai balance retry — re-attempting 24-product trending drop", "info");
+  bulkTrendDrop({ count: 24 }).catch(e => console.log("[trend retry]", e.message));
+});
+console.log("[TREND-DROP] fal-balance auto-resume armed (2h retry until credits return) ✅");
