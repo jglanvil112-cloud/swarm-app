@@ -1,11 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isPrivateIp, timingSafeEqualText } from "../lib/security.js";
+import {
+  isPrivateIp,
+  timingSafeEqualText,
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+} from "../lib/security.js";
 
 test("timingSafeEqualText requires exact text", () => {
   assert.equal(timingSafeEqualText("abc", "abc"), true);
   assert.equal(timingSafeEqualText("abc", "abd"), false);
   assert.equal(timingSafeEqualText("abc", "abcd"), false);
+});
+
+test("signed admin sessions validate and reject tampering", () => {
+  const previous = process.env.API_SECRET;
+  process.env.API_SECRET = "test-only-secret-value";
+  try {
+    const now = Date.now();
+    const token = createAdminSessionToken(now);
+    assert.equal(verifyAdminSessionToken(token, now + 1000), true);
+    assert.equal(verifyAdminSessionToken(`${token}00`, now + 1000), false);
+    assert.equal(verifyAdminSessionToken(token, now + 13 * 60 * 60 * 1000), false);
+  } finally {
+    if (previous === undefined) delete process.env.API_SECRET;
+    else process.env.API_SECRET = previous;
+  }
 });
 
 test("private IPv4 ranges are blocked", () => {
