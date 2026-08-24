@@ -63,8 +63,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || "";
 
 function getAnthropic() {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 }
 
 function getOpenAI() {
@@ -73,15 +72,26 @@ function getOpenAI() {
   catch { return null; }
 }
 
-// Etsy has a small public surface: OAuth callback plus public catalog/reviews.
-// Every other Etsy endpoint, including all write and maintenance endpoints, requires API_SECRET.
 function etsyAccessGuard(req, res, next) {
   const publicGetPaths = new Set(["/callback", "/listings", "/reviews"]);
   if (req.method === "GET" && publicGetPaths.has(req.path)) return next();
   return requireApiSecret(req, res, next);
 }
 
-// Protected operational routers. This removes the old broad public-prefix bypass.
+function instagramAccessGuard(req, res, next) {
+  if (req.method === "GET" && req.path === "/callback") return next();
+  return requireApiSecret(req, res, next);
+}
+
+function shopifyAccessGuard(req, res, next) {
+  // OAuth callback must remain reachable by Shopify. The legacy order webhook is
+  // intentionally not public until it has raw-body HMAC verification; hourly order
+  // sync remains the supported fallback.
+  if (req.method === "GET" && req.path === "/callback") return next();
+  return requireApiSecret(req, res, next);
+}
+
+// Administrative and cost-bearing routers fail closed behind API_SECRET.
 app.use("/api/tasks", requireApiSecret, tasksRouter);
 app.use("/api/pipeline", requireApiSecret, pipelineRouter);
 app.use("/api/audit", requireApiSecret, auditRouter);
@@ -91,17 +101,14 @@ app.use("/api/delivery", requireApiSecret, deliveryRouter);
 app.use("/api/promo", requireApiSecret, promoRouter);
 app.use("/api/printify", requireApiSecret, printifyRouter);
 app.use("/api/metrics", requireApiSecret, metricsRouter);
+app.use("/api/social", requireApiSecret, socialRouter);
+app.use("/api/ibrahim", requireApiSecret, ibrahimRouter);
 app.use("/api/etsy", etsyAccessGuard, etsyRouter);
+app.use("/api/instagram", instagramAccessGuard, instagramRouter);
+app.use("/api/shopify", shopifyAccessGuard, shopifyRouter);
 
-// Approval has a separate x-approval-key and fails closed in routes/approve.js.
+// Approval is deliberately separate from API_SECRET and fails closed inside the router.
 app.use("/api/approve", approveRouter);
-
-// These routers contain platform OAuth/webhook surfaces, so keep their internal
-// platform verification intact instead of applying a blanket API-secret wrapper.
-app.use("/api/shopify", shopifyRouter);
-app.use("/api/social", socialRouter);
-app.use("/api/instagram", instagramRouter);
-app.use("/api/ibrahim", ibrahimRouter);
 
 const aiRate = new Map();
 function aiRateLimit(req, res, next) {
@@ -131,6 +138,7 @@ app.get("/api/health", (_req, res) => {
       openai: Boolean(process.env.OPENAI_API_KEY),
       shopify: Boolean(process.env.SHOPIFY_DOMAIN),
       etsy: Boolean(process.env.ETSY_KEY || process.env.ETSY_API_KEY),
+      instagram: Boolean(process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET),
       supabase: Boolean(SUPABASE_URL && SUPABASE_KEY),
       printify: Boolean(process.env.PRINTIFY_API_KEY),
       api_secret: Boolean(process.env.API_SECRET),
@@ -138,7 +146,9 @@ app.get("/api/health", (_req, res) => {
     },
     controls: {
       human_etsy_approval: true,
+      file_required_before_publish: process.env.ALLOW_PUBLISH_WITHOUT_FILE !== "true",
       autonomous_product_drops: process.env.AUTONOMOUS_PRODUCT_DROPS === "true",
+      public_shopify_webhooks: false,
     },
   });
 });
@@ -182,6 +192,7 @@ app.get("/api/health/openai", async (_req, res) => {
 
 app.get("/api/health/supabase", async (_req, res) => {
   try {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ status: "fail", reason: "Supabase not configured" });
     const started = Date.now();
     const response = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
       headers: { apikey: SUPABASE_KEY },
@@ -201,7 +212,11 @@ app.get("/api/health/shopify", async (_req, res) => {
     let token = process.env.SHOPIFY_ACCESS_TOKEN || "";
     let domain = process.env.SHOPIFY_DOMAIN || process.env.SHOPIFY_STORE || "";
     try {
-      const { data: rows } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform", "shopify").limit(1);
+      const { data: rows } = await supabase
+        .from("oauth_tokens")
+        .select("access_token,shop")
+        .eq("platform", "shopify")
+        .limit(1);
       if (rows?.[0]?.access_token) token = rows[0].access_token;
       if (rows?.[0]?.shop) domain = rows[0].shop;
     } catch {}
@@ -223,9 +238,8 @@ app.get("/api/health/etsy", async (_req, res) => {
     const key = process.env.ETSY_KEY || process.env.ETSY_API_KEY || "";
     const secret = process.env.ETSY_SECRET || "";
     if (!key) return res.json({ status: "needs_token", reason: "ETSY_KEY not set" });
-    const xkey = secret ? `${key}:${secret}` : key;
     const response = await fetch("https://openapi.etsy.com/v3/application/openapi-ping", {
-      headers: { "x-api-key": xkey },
+      headers: { "x-api-key": secret ? `${key}:${secret}` : key },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return res.json({ status: "needs_token", http: response.status });
@@ -340,7 +354,8 @@ app.post("/api/swarm/analyze", requireApiSecret, aiRateLimit, async (req, res) =
     });
     const raw = (response.content?.[0]?.text || "").trim().replace(/```json\n?/g, "").replace(/```\n?/g, "");
     let plays;
-    try { plays = JSON.parse(raw); } catch { return res.status(500).json({ error: "Parse failed" }); }
+    try { plays = JSON.parse(raw); }
+    catch { return res.status(500).json({ error: "Parse failed" }); }
     res.json({ plays: Array.isArray(plays) ? plays : [plays], agent: "SWARM-X", model: response.model });
   } catch (error) {
     res.status(500).json({ error: error.message });
