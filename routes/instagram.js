@@ -1,66 +1,154 @@
+// routes/instagram.js — Instagram OAuth, token maintenance, and publishing
 import express from "express";
+import crypto from "crypto";
 import { logAgent, supabase } from "../lib/supabase.js";
+import { fetchWithRetry } from "../lib/security.js";
+
 export const instagramRouter = express.Router();
 
-const APP_URL = process.env.APP_URL || "https://swarm-app-3nch.onrender.com";
-const IG_APP_ID     = "1018858183882731";
-const IG_APP_SECRET = "faf388b0ba788c5d20e949d8973f2a07";
-const IG_REDIRECT   = APP_URL + "/api/instagram/callback";
+const APP_URL = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || "https://swarm-app-3nch.onrender.com").replace(/\/$/, "");
+const IG_APP_ID = process.env.INSTAGRAM_APP_ID || "";
+const IG_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "";
+const IG_REDIRECT = `${APP_URL}/api/instagram/callback`;
+const IG_GRAPH = "https://graph.instagram.com/v21.0";
 
-// Helper: get live token from Supabase (falls back to env var)
+function assertOAuthConfig() {
+  if (!IG_APP_ID || !IG_APP_SECRET) throw new Error("INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET are required");
+}
+
+async function getLiveCredentials() {
+  const { data } = await supabase
+    .from("social_credentials")
+    .select("access_token,page_id,account_id,username,token_expires_at")
+    .eq("platform", "instagram")
+    .single();
+  return data || null;
+}
+
 async function getLiveToken() {
-  try {
-    const { data } = await supabase.from("social_credentials")
-      .select("access_token").eq("platform", "instagram").single();
-    if (data?.access_token) return data.access_token;
-  } catch {}
-  return process.env.INSTAGRAM_ACCESS_TOKEN || "";
+  const stored = await getLiveCredentials();
+  return stored?.access_token || process.env.INSTAGRAM_ACCESS_TOKEN || "";
 }
 
-// Resolve the IG Business account id directly from the token (Instagram Login)
 async function resolveIgId(token) {
-  try {
-    const r = await fetch(`https://graph.instagram.com/v21.0/me?fields=user_id,id,username&access_token=${token}`);
-    const d = await r.json();
-    if (d.user_id) return String(d.user_id);
-    if (d.id) return String(d.id);
-  } catch {}
-  return null;
+  if (!token) return null;
+  const response = await fetchWithRetry(`${IG_GRAPH}/me?fields=user_id,id,username&access_token=${encodeURIComponent(token)}`, {}, {
+    retries: 1,
+    timeoutMs: 10_000,
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return String(data.user_id || data.id || "") || null;
 }
 
-async function getLiveUserId() {
-  try {
-    const { data } = await supabase.from("social_credentials")
-      .select("page_id,account_id").eq("platform", "instagram").single();
-    if (data?.page_id) return data.page_id;
-  } catch {}
-  return process.env.INSTAGRAM_USER_ID || "17841436491512867";
+async function resolveUserId(token) {
+  const stored = await getLiveCredentials();
+  return stored?.page_id || stored?.account_id || await resolveIgId(token) || process.env.INSTAGRAM_USER_ID || null;
 }
 
-// ─── OAUTH FLOW ───────────────────────────────────────────────────────────────
+async function saveInstagramCredential({ accessToken, userId, username, expiresAt }) {
+  const { error } = await supabase.from("social_credentials").upsert({
+    platform: "instagram",
+    access_token: accessToken,
+    page_id: userId || null,
+    account_id: userId || null,
+    username: username || null,
+    connected: true,
+    token_expires_at: expiresAt || null,
+    meta: { app_id: IG_APP_ID },
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "platform" });
+  if (error) throw new Error(error.message);
+}
 
-// GET /api/instagram/auth — start IG OAuth, redirect to Instagram login
-instagramRouter.get("/auth", (req, res) => {
+async function exchangeLongLivedToken(shortToken) {
+  assertOAuthConfig();
+  const response = await fetchWithRetry(
+    `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(IG_APP_SECRET)}&access_token=${encodeURIComponent(shortToken)}`,
+    {},
+    { retries: 2, timeoutMs: 12_000 },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw new Error(data.error?.message || `long-lived token exchange ${response.status}`);
+  return {
+    accessToken: data.access_token || shortToken,
+    expiresAt: new Date(Date.now() + Number(data.expires_in || 5183944) * 1000).toISOString(),
+  };
+}
+
+async function createOAuthState() {
+  const state = `ig_${crypto.randomBytes(20).toString("hex")}`;
+  const { error } = await supabase.from("oauth_states").insert({
+    state,
+    verifier: "instagram-oauth",
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(`Instagram OAuth state save failed: ${error.message}`);
+  return state;
+}
+
+async function consumeOAuthState(state) {
+  if (!state) return false;
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("oauth_states")
+    .select("state,created_at")
+    .eq("state", state)
+    .gte("created_at", cutoff)
+    .single();
+  if (error || !data) return false;
+  await supabase.from("oauth_states").delete().eq("state", state);
+  return true;
+}
+
+function oauthUrl(state) {
   const scopes = [
     "instagram_business_basic",
     "instagram_business_manage_messages",
     "instagram_business_manage_comments",
     "instagram_business_content_publish",
-    "instagram_business_manage_insights"
+    "instagram_business_manage_insights",
   ].join(",");
-  const url = `https://www.instagram.com/oauth/authorize?client_id=${IG_APP_ID}&redirect_uri=${encodeURIComponent(IG_REDIRECT)}&response_type=code&scope=${scopes}`;
-  res.redirect(url);
+  const params = new URLSearchParams({
+    client_id: IG_APP_ID,
+    redirect_uri: IG_REDIRECT,
+    response_type: "code",
+    scope: scopes,
+    state,
+  });
+  return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+}
+
+instagramRouter.get("/auth", async (_req, res) => {
+  try {
+    assertOAuthConfig();
+    res.redirect(oauthUrl(await createOAuthState()));
+  } catch (error) {
+    res.status(503).json({ error: error.message });
+  }
 });
 
-// GET /api/instagram/callback — Instagram OAuth callback, exchanges code for token
+instagramRouter.get("/auth-url", async (_req, res) => {
+  try {
+    assertOAuthConfig();
+    const state = await createOAuthState();
+    res.json({ url: oauthUrl(state), redirect_uri: IG_REDIRECT });
+  } catch (error) {
+    res.status(503).json({ error: error.message });
+  }
+});
+
+// Public OAuth callback. Server routing leaves only this Instagram path unauthenticated.
 instagramRouter.get("/callback", async (req, res) => {
-  const { code, error } = req.query;
-  if (error) return res.redirect(`/swarm_shop_os_v5.html?error=${encodeURIComponent(error)}`);
-  if (!code)  return res.redirect("/swarm_shop_os_v5.html?error=no_ig_code");
+  const { code, state, error: oauthError } = req.query;
+  if (oauthError) return res.redirect(`/swarm_shop_os_v7.html?error=${encodeURIComponent(String(oauthError))}`);
+  if (!code || !(await consumeOAuthState(String(state || "")))) {
+    return res.status(403).send("Invalid or expired Instagram OAuth state");
+  }
 
   try {
-    // Exchange code for short-lived token
-    const r = await fetch("https://api.instagram.com/oauth/access_token", {
+    assertOAuthConfig();
+    const tokenResponse = await fetchWithRetry("https://api.instagram.com/oauth/access_token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -68,144 +156,158 @@ instagramRouter.get("/callback", async (req, res) => {
         client_secret: IG_APP_SECRET,
         grant_type: "authorization_code",
         redirect_uri: IG_REDIRECT,
-        code
-      })
-    });
-    const shortData = await r.json();
-    if (shortData.error_type || shortData.error_message) {
-      throw new Error(`Short-token exchange failed: ${shortData.error_message}`);
+        code: String(code),
+      }),
+    }, { retries: 2, timeoutMs: 12_000 });
+    const shortData = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok || !shortData.access_token) {
+      throw new Error(shortData.error_message || `short-token exchange ${tokenResponse.status}`);
     }
 
-    // Exchange for long-lived token (60 days)
-    const ll = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${IG_APP_SECRET}&access_token=${shortData.access_token}`);
-    const llData = await ll.json();
-    const finalToken = llData.access_token || shortData.access_token;
-    const expiresIn  = llData.expires_in  || 5183944; // 60 days
-    const expiresAt  = new Date(Date.now() + expiresIn * 1000).toISOString();
-    const userId     = shortData.user_id?.toString() || "17841436491512867";
+    const longLived = await exchangeLongLivedToken(shortData.access_token);
+    const userId = String(shortData.user_id || await resolveIgId(longLived.accessToken) || "");
+    if (!userId) throw new Error("Could not resolve Instagram user id");
 
-    // Get username
-    const me = await fetch(`https://graph.instagram.com/v21.0/${userId}?fields=id,username&access_token=${finalToken}`);
-    const meData = await me.json();
-
-    // Save to Supabase
-    await supabase.from("social_credentials").upsert({
-      platform: "instagram",
-      access_token: finalToken,
-      page_id: userId,
-      account_id: userId,
-      username: meData.username || "houseofjreym",
-      connected: true,
-      token_expires_at: expiresAt,
-      meta: { app_id: IG_APP_ID, user_id: userId },
-      updated_at: new Date().toISOString()
-    }, { onConflict: "platform" });
-
-    await logAgent("IBRAHIM", `Instagram OAuth connected: @${meData.username || "houseofjreym"}`, "success");
-    res.redirect(`/swarm_shop_os_v5.html?instagram=connected&user=${encodeURIComponent(meData.username || "houseofjreym")}`);
-  } catch (e) {
-    console.error("[IG] callback error:", e.message);
-    await logAgent("IBRAHIM", "Instagram OAuth callback failed: " + e.message, "error");
-    res.redirect("/swarm_shop_os_v5.html?error=" + encodeURIComponent(e.message));
+    const meResponse = await fetchWithRetry(
+      `${IG_GRAPH}/${encodeURIComponent(userId)}?fields=id,username&access_token=${encodeURIComponent(longLived.accessToken)}`,
+      {},
+      { retries: 1, timeoutMs: 10_000 },
+    );
+    const me = await meResponse.json().catch(() => ({}));
+    await saveInstagramCredential({
+      accessToken: longLived.accessToken,
+      userId,
+      username: me.username || null,
+      expiresAt: longLived.expiresAt,
+    });
+    await logAgent("IBRAHIM", `Instagram OAuth connected${me.username ? `: @${me.username}` : ""}`, "success");
+    res.redirect(`/swarm_shop_os_v7.html?instagram=connected${me.username ? `&user=${encodeURIComponent(me.username)}` : ""}`);
+  } catch (error) {
+    await logAgent("IBRAHIM", `Instagram OAuth callback failed: ${error.message}`, "error");
+    res.redirect(`/swarm_shop_os_v7.html?error=${encodeURIComponent(error.message)}`);
   }
 });
 
-// POST /api/instagram/token — paste a token directly (bypasses OAuth)
 instagramRouter.post("/token", async (req, res) => {
-  const { access_token, user_id } = req.body;
+  const { access_token, user_id } = req.body || {};
   if (!access_token) return res.status(400).json({ error: "access_token required" });
   try {
-    // Try to exchange for long-lived token first
-    let finalToken = access_token;
-    let expiresAt  = new Date(Date.now() + 5183944000).toISOString();
-    try {
-      const ll = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${IG_APP_SECRET}&access_token=${access_token}`);
-      const llData = await ll.json();
-      if (llData.access_token) { finalToken = llData.access_token; expiresAt = new Date(Date.now() + (llData.expires_in || 5183944) * 1000).toISOString(); }
-    } catch {}
+    const longLived = IG_APP_SECRET
+      ? await exchangeLongLivedToken(access_token).catch(() => ({
+          accessToken: access_token,
+          expiresAt: new Date(Date.now() + 60 * 86400000).toISOString(),
+        }))
+      : { accessToken: access_token, expiresAt: new Date(Date.now() + 60 * 86400000).toISOString() };
+    const resolvedId = user_id || await resolveIgId(longLived.accessToken);
+    if (!resolvedId) throw new Error("Token could not resolve an Instagram account");
 
-    // Verify token and get username
-    const uid = user_id || "17841436491512867";
-    const me = await fetch(`https://graph.instagram.com/v21.0/${uid}?fields=id,username&access_token=${finalToken}`);
-    const meData = await me.json();
-    if (meData.error) throw new Error("Token invalid: " + meData.error.message);
+    const meResponse = await fetchWithRetry(
+      `${IG_GRAPH}/${encodeURIComponent(resolvedId)}?fields=id,username&access_token=${encodeURIComponent(longLived.accessToken)}`,
+      {},
+      { retries: 1, timeoutMs: 10_000 },
+    );
+    const me = await meResponse.json().catch(() => ({}));
+    if (!meResponse.ok || me.error) throw new Error(me.error?.message || "Instagram token verification failed");
 
-    await supabase.from("social_credentials").upsert({
-      platform: "instagram", access_token: finalToken,
-      page_id: meData.id || uid, account_id: meData.id || uid,
-      username: meData.username || "houseofjreym",
-      connected: true, token_expires_at: expiresAt,
-      meta: { app_id: IG_APP_ID }, updated_at: new Date().toISOString()
-    }, { onConflict: "platform" });
-
-    await logAgent("IBRAHIM", `Instagram token saved: @${meData.username}`, "success");
-    res.json({ ok: true, username: meData.username, expires_at: expiresAt });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    await saveInstagramCredential({
+      accessToken: longLived.accessToken,
+      userId: String(me.id || resolvedId),
+      username: me.username || null,
+      expiresAt: longLived.expiresAt,
+    });
+    await logAgent("IBRAHIM", `Instagram token saved${me.username ? `: @${me.username}` : ""}`, "success");
+    res.json({ ok: true, username: me.username || null, expires_at: longLived.expiresAt });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
-
-// ─── POSTING ──────────────────────────────────────────────────────────────────
 
 instagramRouter.post("/post", async (req, res) => {
   try {
-    const { image_url, caption } = req.body;
+    const { image_url, caption } = req.body || {};
     if (!image_url || !caption) return res.status(400).json({ error: "image_url and caption required" });
-    const token  = await getLiveToken();
-    let userId = await resolveIgId(token);
-    if (!userId) userId = await getLiveUserId();
-    else { try { await supabase.from("social_credentials").update({ page_id: userId, account_id: userId, updated_at: new Date().toISOString() }).eq("platform","instagram"); } catch {} }
-    const base   = "https://graph.instagram.com/v21.0";
-    const c = await fetch(`${base}/${userId}/media`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_url, caption, media_type: "IMAGE", access_token: token }) });
-    const container = await c.json();
-    if (container.error) { await logAgent("INSTAGRAM","error",container.error.message); return res.status(500).json({ error: container.error.message }); }
-    if (!container.id) { await logAgent("INSTAGRAM","error","No container id: "+JSON.stringify(container)); return res.status(500).json({ error: "Container not created", detail: container }); }
-    // Poll container until Instagram finishes processing the image (avoids "Media ID is not available")
+    const token = await getLiveToken();
+    if (!token) return res.status(401).json({ error: "Instagram not connected" });
+    const userId = await resolveUserId(token);
+    if (!userId) throw new Error("Instagram user id unavailable");
+
+    const createResponse = await fetchWithRetry(`${IG_GRAPH}/${userId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url, caption, media_type: "IMAGE", access_token: token }),
+    }, { retries: 2, timeoutMs: 15_000 });
+    const container = await createResponse.json().catch(() => ({}));
+    if (!createResponse.ok || !container.id) throw new Error(container.error?.message || "Instagram media container failed");
+
     let ready = false;
-    for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 2000));
-      const s = await fetch(`${base}/${container.id}?fields=status_code,status&access_token=${token}`);
-      const sd = await s.json();
-      if (sd.status_code === "FINISHED") { ready = true; break; }
-      if (sd.status_code === "ERROR" || sd.status === "ERROR") { await logAgent("INSTAGRAM","error","Container processing failed: "+JSON.stringify(sd)); return res.status(500).json({ error: "Container processing failed", detail: sd }); }
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const statusResponse = await fetchWithRetry(
+        `${IG_GRAPH}/${container.id}?fields=status_code,status&access_token=${encodeURIComponent(token)}`,
+        {},
+        { retries: 1, timeoutMs: 10_000 },
+      );
+      const status = await statusResponse.json().catch(() => ({}));
+      if (status.status_code === "FINISHED") { ready = true; break; }
+      if (status.status_code === "ERROR" || status.status === "ERROR") {
+        throw new Error("Instagram container processing failed");
+      }
     }
-    if (!ready) { await logAgent("INSTAGRAM","error","Container not ready after polling"); return res.status(500).json({ error: "Container still processing after 20s — try again" }); }
-    const p = await fetch(`${base}/${userId}/media_publish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ creation_id: container.id, access_token: token }) });
-    const published = await p.json();
-    if (published.error) { await logAgent("INSTAGRAM","error",published.error.message); return res.status(500).json({ error: published.error.message }); }
-    await logAgent("INSTAGRAM","success",`Posted: ${published.id}`);
-    return res.json({ success: true, post_id: published.id });
-  } catch (err) { return res.status(500).json({ error: err.message }); }
+    if (!ready) throw new Error("Instagram container still processing after 20 seconds");
+
+    const publishResponse = await fetchWithRetry(`${IG_GRAPH}/${userId}/media_publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creation_id: container.id, access_token: token }),
+    }, { retries: 2, timeoutMs: 15_000 });
+    const published = await publishResponse.json().catch(() => ({}));
+    if (!publishResponse.ok || !published.id) throw new Error(published.error?.message || "Instagram publish failed");
+
+    await logAgent("INSTAGRAM", `Published Instagram post ${published.id}`, "success");
+    res.json({ success: true, post_id: published.id });
+  } catch (error) {
+    await logAgent("INSTAGRAM", `Publish failed: ${error.message}`, "error");
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// GET /api/instagram/test — verify token works
-instagramRouter.get("/test", async (req, res) => {
-  try {
-    const token  = await getLiveToken();
-    let userId = await resolveIgId(token);
-    if (!userId) userId = await getLiveUserId();
-    const r = await fetch(`https://graph.instagram.com/v21.0/${userId}?fields=id,username,followers_count,media_count&access_token=${token}`);
-    const data = await r.json();
-    if (data.error) return res.status(401).json({ connected: false, error: data.error.message, resolved_id: userId });
-    res.json({ connected: true, resolved_id: userId, ...data });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /api/instagram/auth-url — returns the OAuth URL for the frontend to use
-instagramRouter.get("/auth-url", (req, res) => {
-  const scopes = "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights";
-  const url = `https://www.instagram.com/oauth/authorize?client_id=${IG_APP_ID}&redirect_uri=${encodeURIComponent(IG_REDIRECT)}&response_type=code&scope=${scopes}`;
-  res.json({ url, redirect_uri: IG_REDIRECT });
-});
-
-// POST /api/instagram/refresh — refresh a long-lived token (before 60 days expire)
-instagramRouter.post("/refresh", async (req, res) => {
+instagramRouter.get("/test", async (_req, res) => {
   try {
     const token = await getLiveToken();
-    const r = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${token}`);
-    const data = await r.json();
-    if (data.error) throw new Error(data.error.message);
-    const expiresAt = new Date(Date.now() + (data.expires_in || 5183944) * 1000).toISOString();
-    await supabase.from("social_credentials").update({ access_token: data.access_token, token_expires_at: expiresAt, updated_at: new Date().toISOString() }).eq("platform", "instagram");
+    if (!token) return res.status(401).json({ connected: false, error: "Instagram not connected" });
+    const userId = await resolveUserId(token);
+    const response = await fetchWithRetry(
+      `${IG_GRAPH}/${userId}?fields=id,username,followers_count,media_count&access_token=${encodeURIComponent(token)}`,
+      {},
+      { retries: 1, timeoutMs: 10_000 },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) return res.status(401).json({ connected: false, error: data.error?.message || `HTTP ${response.status}` });
+    res.json({ connected: true, ...data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+instagramRouter.post("/refresh", async (_req, res) => {
+  try {
+    const token = await getLiveToken();
+    if (!token) return res.status(401).json({ error: "Instagram not connected" });
+    const response = await fetchWithRetry(
+      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`,
+      {},
+      { retries: 2, timeoutMs: 12_000 },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error || !data.access_token) throw new Error(data.error?.message || "Instagram refresh failed");
+    const expiresAt = new Date(Date.now() + Number(data.expires_in || 5183944) * 1000).toISOString();
+    await supabase
+      .from("social_credentials")
+      .update({ access_token: data.access_token, token_expires_at: expiresAt, updated_at: new Date().toISOString() })
+      .eq("platform", "instagram");
     await logAgent("IBRAHIM", "Instagram token refreshed", "success");
     res.json({ ok: true, expires_at: expiresAt });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
