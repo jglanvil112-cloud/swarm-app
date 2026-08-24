@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>House of Jreym · Admin Login</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0c0d12;color:#f7f3ea;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:24px}.card{width:min(460px,100%);background:#151721;border:1px solid #2a2d3b;border-radius:22px;padding:30px;box-shadow:0 22px 60px rgba(0,0,0,.35)}.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#c6a75e}.title{font-size:28px;margin:8px 0 8px}.sub{color:#aeb3c2;line-height:1.5;margin-bottom:24px}label{display:block;font-size:13px;margin-bottom:8px}input{width:100%;padding:14px 15px;border-radius:12px;border:1px solid #343849;background:#0f1118;color:#fff;font-size:16px;outline:none}input:focus{border-color:#c6a75e}button{width:100%;margin-top:14px;padding:14px;border:0;border-radius:12px;background:#f2e8cf;color:#17130c;font-size:15px;font-weight:700;cursor:pointer}.status{min-height:22px;margin-top:14px;font-size:13px;color:#aeb3c2}.ok{color:#8fe0a4}.bad{color:#ff9d9d}.links{margin-top:18px;display:flex;gap:12px;flex-wrap:wrap}.links a{color:#c6a75e;text-decoration:none;font-size:13px}.note{margin-top:20px;padding-top:18px;border-top:1px solid #2a2d3b;color:#8f95a5;font-size:12px;line-height:1.5}</style>
+</head>
+<body>
+  <main class="card">
+    <div class="eyebrow">House of Jreym</div>
+    <h1 class="title">SWARM Admin</h1>
+    <p class="sub">Enter the Render <strong>API_SECRET</strong> once. A signed HttpOnly session cookie keeps the dashboard authenticated without storing the secret in browser JavaScript.</p>
+    <form id="loginForm">
+      <label for="secret">Admin secret</label>
+      <input id="secret" type="password" autocomplete="current-password" required autofocus />
+      <button type="submit">Unlock dashboard</button>
+    </form>
+    <div id="status" class="status"></div>
+    <div class="links">
+      <a href="/swarm_shop_os_v7.html">Open SWARM OS</a>
+      <a href="/api/health">Health</a>
+    </div>
+    <div class="note">The secret is sent only to this server over the current connection and is not written to localStorage or sessionStorage. On production Render, use HTTPS.</div>
+  </main>
+  <script>
+    const form = document.getElementById('loginForm');
+    const secret = document.getElementById('secret');
+    const status = document.getElementById('status');
+
+    async function check() {
+      try {
+        const r = await fetch('/api/session/status', { credentials: 'same-origin' });
+        const d = await r.json();
+        if (d.authenticated) {
+          status.className = 'status ok';
+          status.textContent = 'Admin session active.';
+        }
+      } catch {}
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      status.className = 'status';
+      status.textContent = 'Signing in…';
+      try {
+        const r = await fetch('/api/session/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_secret: secret.value })
+        });
+        const d = await r.json();
+        secret.value = '';
+        if (!r.ok) throw new Error(d.error || 'Login failed');
+        status.className = 'status ok';
+        status.textContent = 'Unlocked. Opening SWARM OS…';
+        setTimeout(() => { location.href = '/swarm_shop_os_v7.html'; }, 500);
+      } catch (error) {
+        status.className = 'status bad';
+        status.textContent = error.message;
+      }
+    });
+
+    check();
+  </script>
+</body>
+</html>

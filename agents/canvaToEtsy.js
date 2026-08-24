@@ -1,14 +1,4 @@
-// agents/canvaToEtsy.js — SWARM OS
-// Orchestrates the full Canva→Etsy DRAFT path. Nothing goes live here: it creates a
-// draft and drops a publish_queue row at status 'queued'. KWAME (agents/publisher.js)
-// only activates rows a human flipped to 'approved' via the approval endpoint.
-//
-// Task payload (any of):
-//   { designId }                      -> export from Canva, vision-brief the image
-//   { imageUrl, brief? }              -> use a direct image url; brief optional
-//   { brief, fileUrl? }               -> brief provided; fileUrl is the high-res to attach
-//   { price? }                        -> optional price override
-
+// agents/canvaToEtsy.js — Canva → image-grounded Etsy DRAFT → human approval queue
 import { supabase, saveAgentOutput, logAgent } from "../lib/supabase.js";
 import { exportAndRehost, canvaAvailable } from "../lib/canva.js";
 import { briefFromImage } from "../lib/visionBrief.js";
@@ -16,70 +6,114 @@ import { buildListingCopy } from "../lib/designMeta.js";
 import { createDraftListing, attachFileFromUrl, replaceLowResFiles } from "../lib/etsyDraft.js";
 
 export async function handleCanvaToEtsy(task) {
-  const p = task?.payload || {};
+  const payload = task?.payload || {};
   const log = [];
 
-  // 1. Resolve an image URL + (optional) high-res file URL.
-  let imageUrl = p.imageUrl || null;
-  let fileUrl  = p.fileUrl  || null;
-  let designId = p.designId || null;
+  let imageUrl = payload.imageUrl || null;
+  let fileUrl = payload.fileUrl || null;
+  const designId = payload.designId || null;
 
   if (designId && canvaAvailable()) {
-    const ex = await exportAndRehost(designId, { format: "png" });
-    if (ex.available) { imageUrl = imageUrl || ex.imageUrl; fileUrl = fileUrl || ex.imageUrl; log.push(`canva export rehosted -> ${ex.imageUrl?.slice(0, 60)}`); }
+    const exported = await exportAndRehost(designId, { format: "png" });
+    if (exported.available) {
+      imageUrl ||= exported.imageUrl;
+      fileUrl ||= exported.imageUrl;
+      log.push("Canva export rehosted");
+    }
   }
 
-  // 2. Get a brief — from the payload, or generate one FROM THE IMAGE (the gap-closer).
-  let brief = p.brief || null;
+  let brief = payload.brief || null;
   if (!brief) {
-    if (!imageUrl) throw new Error("canvaToEtsy: need a brief, imageUrl, or canva designId");
+    if (!imageUrl) throw new Error("canvaToEtsy: brief, imageUrl, or Canva designId required");
     brief = await briefFromImage(imageUrl);
-    log.push(`vision brief: "${brief.subject}" / ${brief.style}`);
+    log.push(`Vision brief: ${brief.subject} / ${brief.style}`);
   }
 
-  // 3. Build copy that matches the image (no drift).
-  const copy = buildListingCopy({ ...brief, price: p.price ?? brief.price });
-  log.push(`copy built: "${copy.title.slice(0, 60)}" (${copy.tags.length} tags)`);
+  const copy = buildListingCopy({
+    ...brief,
+    price: payload.price,
+    price_locked: Number.isFinite(Number(payload.price)),
+  });
+  log.push(`Copy score ${copy.quality_score}/100 · ${copy.tags.length} tags · $${copy.price}`);
 
-  // 4. Create the DRAFT listing with when_made=2020_2026 baked in.
-  const { listing_id } = await createDraftListing(copy);
-  log.push(`draft listing created #${listing_id}`);
+  const { listing_id, price } = await createDraftListing(copy);
+  log.push(`Draft listing created #${listing_id}`);
 
-  // 5. Attach the high-res file + strip any low-res junk.
   let fileResult = null;
   if (fileUrl) {
     try {
-      const fname = `house_of_jreym_${String(copy.title).toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40)}.png`;
+      const filename = `house_of_jreym_${String(copy.title)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .slice(0, 40)}.png`;
       await replaceLowResFiles(listing_id).catch(() => {});
-      fileResult = await attachFileFromUrl(listing_id, fileUrl, fname);
-      log.push(`file attached (${fileResult.size}b)`);
-    } catch (e) {
-      log.push(`file attach failed (non-fatal): ${e.message}`);
+      fileResult = await attachFileFromUrl(listing_id, fileUrl, filename);
+      log.push(`Digital file attached (${fileResult.size} bytes)`);
+    } catch (error) {
+      log.push(`Digital file attach failed: ${error.message}`);
     }
   } else {
-    log.push("no fileUrl supplied — draft created without a digital file (attach before approving)");
+    log.push("No digital file supplied; approval will remain blocked until a file is attached");
   }
 
-  // 6. Queue for human approval. publish_queue stays 'queued' until you approve.
-  let queueId = null;
-  try {
-    const { data: row } = await supabase.from("publish_queue").insert({
+  const meta = {
+    source: "canva",
+    title: copy.title,
+    image_url: imageUrl,
+    file_attached: Boolean(fileResult?.attached),
+    file_size: fileResult?.size || 0,
+    quality_score: copy.quality_score,
+    pricing_tier: copy.pricing_tier,
+    price,
+    brief,
+  };
+
+  const { data: queueRow, error: queueError } = await supabase
+    .from("publish_queue")
+    .insert({
       agent: "KOFI",
       listing_id: String(listing_id),
       design_id: designId || null,
       status: "queued",
-      meta: { title: copy.title, image_url: imageUrl, file_attached: !!fileResult, brief },
-    }).select().single();
-    queueId = row?.id || null;
-  } catch (e) {
-    log.push(`publish_queue insert failed (run the migration?): ${e.message}`);
+      meta,
+    })
+    .select()
+    .single();
+
+  if (queueError) {
+    throw new Error(`canvaToEtsy: publish queue insert failed: ${queueError.message}`);
   }
 
   await saveAgentOutput("KOFI", "canva_to_etsy", {
-    listing_id, queue_id: queueId, title: copy.title, tags: copy.tags,
-    description: copy.description, file_attached: !!fileResult, status: "queued", log,
+    task_id: task?.id || null,
+    listing_id,
+    queue_id: queueRow.id,
+    etsy_title: copy.title,
+    tags: copy.tags,
+    description: copy.description,
+    file_attached: meta.file_attached,
+    quality_score: copy.quality_score,
+    price,
+    status: "queued",
+    log,
   });
-  await logAgent("KOFI", `Canva→Etsy draft #${listing_id} queued for approval (queue #${queueId})`, "info", null, task.id);
 
-  return { listing_id, queue_id: queueId, status: "queued", file_attached: !!fileResult, title: copy.title, log };
+  await logAgent(
+    "KOFI",
+    `Etsy draft #${listing_id} queued for human approval (queue #${queueRow.id})`,
+    meta.file_attached ? "info" : "warn",
+    { quality_score: copy.quality_score, file_attached: meta.file_attached },
+    task?.id || null,
+  );
+
+  return {
+    listing_id,
+    queue_id: queueRow.id,
+    status: "queued",
+    file_attached: meta.file_attached,
+    quality_score: copy.quality_score,
+    title: copy.title,
+    price,
+    log,
+  };
 }

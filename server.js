@@ -1,10 +1,11 @@
-// server.js — SWARM OS v5.2 — fix: Unauthorized whitelist, /api/outputs, shopify/etsy health
+// server.js — House of Jreym SWARM OS production entrypoint
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+
 import { shopifyRouter } from "./routes/shopify.js";
 import { etsyRouter } from "./routes/etsy.js";
 import { printifyRouter } from "./routes/printify.js";
@@ -19,154 +20,312 @@ import { trendingRouter } from "./routes/trending.js";
 import { podgenRouter } from "./routes/podgen.js";
 import { deliveryRouter } from "./routes/delivery.js";
 import { promoRouter } from "./routes/promo.js";
+import { metricsRouter } from "./routes/metrics.js";
 import { supabase, recordHealth, getRecentOutputs } from "./lib/supabase.js";
+import {
+  requireApiSecret,
+  timingSafeEqualText,
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+  getAdminSessionFromRequest,
+  adminSessionCookie,
+  clearAdminSessionCookie,
+} from "./lib/security.js";
 import "./workers/scheduler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
+const APP_VERSION = process.env.APP_VERSION || "6.0.0";
 
-const ALLOWED_ORIGINS = ["https://swarm-app-3nch.onrender.com","http://localhost:5173","http://localhost:4000"];
-app.use(cors({
-  origin: (o, cb) => (!o || ALLOWED_ORIGINS.includes(o)) ? cb(null, true) : cb(new Error("CORS blocked")),
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","x-api-key","Authorization","apikey"],
-  credentials: true
-}));
-app.options("*", cors());
-app.use(express.json());
-// Root = SWARM Command Room v7 (also what the embedded Shopify app shows)
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "swarm_shop_os_v7.html")));
+app.set("trust proxy", 1);
+
+const defaultOrigins = [
+  "https://swarm-app-3nch.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:4000",
+];
+const configuredOrigins = String(process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const allowedOrigins = new Set([...defaultOrigins, ...configuredOrigins]);
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error("CORS blocked"));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "x-api-key", "x-approval-key", "Authorization", "apikey"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+app.use(express.json({ limit: "1mb" }));
+
+app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "public", "swarm_shop_os_v7.html")));
 app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.static(path.join(__dirname, "public")));
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-let openai = null;
-try { if (process.env.OPENAI_API_KEY) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); } catch(e) {}
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || "";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://cufrxwpmxglgiquntlca.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || "";
+function getAnthropic() {
+  return process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
+}
 
-// AUTH MIDDLEWARE — dashboard routes are always public (no API key needed)
-const API_SECRET = process.env.API_SECRET;
-const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify", "/pipeline", "/social", "/instagram", "/ibrahim", "/admin", "/audit", "/approve", "/trending", "/podgen", "/delivery", "/promo"];
-  
-app.use("/api/", (req, res, next) => {
-  const isPublic = PUBLIC_API_PREFIXES.some(p => req.path === p || req.path.startsWith(p + "/") || req.path.startsWith("/health"));
-    if (isPublic) return next();
-      if (!API_SECRET) return next();
-        const key = req.headers["x-api-key"] || req.query.api_key;
-          if (key !== API_SECRET) return res.status(401).json({ error: "Unauthorized" });
-            next();
-            });
+function getOpenAI() {
+  if (!process.env.OPENAI_API_KEY) return null;
+  try { return new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); }
+  catch { return null; }
+}
 
-            // Rate limiting on heavy AI endpoints only
-            const rateLimiter = new Map();
-            app.use("/api/swarm/analyze", (req, res, next) => {
-              const ip = req.ip; const now = Date.now();
-                const w = rateLimiter.get(ip) || { count:0, reset:now+60000 };
-                  if (now > w.reset) { w.count=0; w.reset=now+60000; }
-                    w.count++; rateLimiter.set(ip, w);
-                      if (w.count > 100) return res.status(429).json({ error: "Rate limit exceeded" });
-                        next();
-                        });
+// Browser dashboard login: exchange API_SECRET once for a signed HttpOnly cookie.
+// The secret itself is never stored in localStorage or embedded into public HTML.
+const loginAttempts = new Map();
+app.post("/api/session/login", (req, res) => {
+  const expected = process.env.API_SECRET || "";
+  if (!expected) return res.status(503).json({ error: "API_SECRET is not configured" });
 
-                        app.use("/api/shopify", shopifyRouter);
-                        app.use("/api/etsy", etsyRouter);
-                        app.use("/api/printify", printifyRouter);
-                        app.use("/api/tasks", tasksRouter);
-app.use("/api/pipeline", pipelineRouter);
-app.use("/api/social", socialRouter);
-app.use("/api/instagram", instagramRouter);
-app.use("/api/ibrahim", ibrahimRouter);
-app.use("/api/audit", auditRouter);
+  const ip = req.ip || "unknown";
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const entry = loginAttempts.get(ip) || { count: 0, reset: now + windowMs };
+  if (now > entry.reset) {
+    entry.count = 0;
+    entry.reset = now + windowMs;
+  }
+  entry.count += 1;
+  loginAttempts.set(ip, entry);
+  if (entry.count > 10) return res.status(429).json({ error: "Too many login attempts" });
+
+  const supplied = String(req.body?.api_secret || "");
+  if (!timingSafeEqualText(supplied, expected)) {
+    return res.status(401).json({ error: "Invalid admin secret" });
+  }
+
+  entry.count = 0;
+  const token = createAdminSessionToken();
+  res.setHeader("Set-Cookie", adminSessionCookie(token));
+  res.json({ ok: true, expires_in_hours: Number(process.env.ADMIN_SESSION_SECONDS || 43200) / 3600 });
+});
+
+app.post("/api/session/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", clearAdminSessionCookie());
+  res.json({ ok: true });
+});
+
+app.get("/api/session/status", (req, res) => {
+  res.json({ authenticated: verifyAdminSessionToken(getAdminSessionFromRequest(req)) });
+});
+
+function etsyAccessGuard(req, res, next) {
+  const publicGetPaths = new Set(["/callback", "/listings", "/reviews"]);
+  if (req.method === "GET" && publicGetPaths.has(req.path)) return next();
+  return requireApiSecret(req, res, next);
+}
+
+function instagramAccessGuard(req, res, next) {
+  if (req.method === "GET" && req.path === "/callback") return next();
+  return requireApiSecret(req, res, next);
+}
+
+function shopifyAccessGuard(req, res, next) {
+  // Shopify OAuth callback remains public after HMAC verification in its router.
+  // The legacy order webhook is intentionally NOT public until raw-body HMAC
+  // verification is implemented; hourly order sync remains the fallback.
+  if (req.method === "GET" && req.path === "/callback") return next();
+  return requireApiSecret(req, res, next);
+}
+
+// Administrative and cost-bearing routers fail closed behind API_SECRET or a
+// valid signed admin-session cookie.
+app.use("/api/tasks", requireApiSecret, tasksRouter);
+app.use("/api/pipeline", requireApiSecret, pipelineRouter);
+app.use("/api/audit", requireApiSecret, auditRouter);
+app.use("/api/trending", requireApiSecret, trendingRouter);
+app.use("/api/podgen", requireApiSecret, podgenRouter);
+app.use("/api/delivery", requireApiSecret, deliveryRouter);
+app.use("/api/promo", requireApiSecret, promoRouter);
+app.use("/api/printify", requireApiSecret, printifyRouter);
+app.use("/api/metrics", requireApiSecret, metricsRouter);
+app.use("/api/social", requireApiSecret, socialRouter);
+app.use("/api/ibrahim", requireApiSecret, ibrahimRouter);
+app.use("/api/etsy", etsyAccessGuard, etsyRouter);
+app.use("/api/instagram", instagramAccessGuard, instagramRouter);
+app.use("/api/shopify", shopifyAccessGuard, shopifyRouter);
+
+// Approval uses a separate secret and fails closed inside routes/approve.js.
 app.use("/api/approve", approveRouter);
-app.use("/api/trending", trendingRouter);
-app.use("/api/podgen", podgenRouter);
-app.use("/api/delivery", deliveryRouter);
-app.use("/api/promo", promoRouter);
 
-                        // Agent outputs — feeds dashboard AMARA output panel
-                        app.get("/api/outputs", async (req, res) => {
-                          try {
-                              const limit = parseInt(req.query.limit) || 20;
-                                  const outputs = await getRecentOutputs(limit);
-                                      res.json({ outputs, count: outputs.length, timestamp: new Date().toISOString() });
-                                        } catch(err) { res.status(500).json({ error: err.message }); }
-                                        });
+const aiRate = new Map();
+function aiRateLimit(req, res, next) {
+  const key = req.ip || "unknown";
+  const now = Date.now();
+  const windowMs = 60_000;
+  const max = Number(process.env.AI_REQUESTS_PER_MINUTE) || 30;
+  const current = aiRate.get(key) || { count: 0, reset: now + windowMs };
+  if (now > current.reset) {
+    current.count = 0;
+    current.reset = now + windowMs;
+  }
+  current.count += 1;
+  aiRate.set(key, current);
+  if (current.count > max) return res.status(429).json({ error: "Rate limit exceeded" });
+  next();
+}
 
-                                        app.get("/api/health", (req, res) => res.json({
-                                          status:"ok", service:"SWARM OS", version:"5.2.0", timestamp:new Date().toISOString(),
-                                            env:{ anthropic:!!process.env.ANTHROPIC_API_KEY, openai:!!process.env.OPENAI_API_KEY, shopify:!!process.env.SHOPIFY_DOMAIN, etsy:!!process.env.ETSY_API_KEY, supabase:!!(SUPABASE_URL&&SUPABASE_KEY), printify:!!process.env.PRINTIFY_API_KEY },
-                                              features:{ autonomous_workers:true, task_queue:true, retry_system:true, rate_limiting:true, openai_fallback:true, outputs_api:true }
-                                              }));
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "SWARM OS",
+    version: APP_VERSION,
+    timestamp: new Date().toISOString(),
+    env: {
+      anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+      openai: Boolean(process.env.OPENAI_API_KEY),
+      shopify: Boolean(process.env.SHOPIFY_DOMAIN),
+      etsy: Boolean(process.env.ETSY_KEY || process.env.ETSY_API_KEY),
+      instagram: Boolean(process.env.INSTAGRAM_APP_ID && process.env.INSTAGRAM_APP_SECRET),
+      supabase: Boolean(SUPABASE_URL && SUPABASE_KEY),
+      printify: Boolean(process.env.PRINTIFY_API_KEY),
+      api_secret: Boolean(process.env.API_SECRET),
+      approval_secret: Boolean(process.env.APPROVAL_SECRET),
+    },
+    controls: {
+      human_etsy_approval: true,
+      file_required_before_publish: process.env.ALLOW_PUBLISH_WITHOUT_FILE !== "true",
+      autonomous_product_drops: process.env.AUTONOMOUS_PRODUCT_DROPS === "true",
+      public_shopify_webhooks: false,
+    },
+  });
+});
 
-                                              app.get("/api/health/anthropic", async (req, res) => {
-                                                try {
-                                                    if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ status:"fail", reason:"key missing" });
-                                                        const start = Date.now();
-                                                            const r = await anthropic.messages.create({ model:"claude-haiku-4-5-20251001", max_tokens:10, messages:[{role:"user",content:"ping"}] });
-                                                                await recordHealth("anthropic","ok",Date.now()-start);
-                                                                    res.json({ status:"ok", model:r.model, latency_ms:Date.now()-start });
-                                                                      } catch(err) { await recordHealth("anthropic","fail",null,{error:err.message}); res.status(500).json({status:"fail",reason:err.message}); }
-                                                                      });
-
-                                                                      app.get("/api/health/openai", async (req, res) => {
-                                                                        if (!openai) return res.json({ status:"degraded", reason:"No key — Anthropic handles all AI" });
-                                                                          try {
-                                                                              const start = Date.now();
-                                                                                  const r = await openai.chat.completions.create({ model:"gpt-4o-mini", max_tokens:5, messages:[{role:"user",content:"ping"}] });
-                                                                                      await recordHealth("openai","ok",Date.now()-start);
-                                                                                          res.json({ status:"ok", model:r.model, latency_ms:Date.now()-start });
-                                                                                            } catch(err) {
-                                                                                                const deg = err.status===429||err.message?.includes("quota");
-                                                                                                    await recordHealth("openai",deg?"degraded":"fail",null,{error:err.message});
-                                                                                                        res.json({ status:deg?"degraded":"fail", reason:err.message, fallback:"Anthropic claude-haiku" });
-                                                                                                          }
-                                                                                                          });
-
-                                                                                                          app.get("/api/health/supabase", async (req, res) => {
-                                                                                                            try {
-                                                                                                                const start = Date.now();
-                                                                                                                    const r = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers:{ apikey:SUPABASE_KEY } });
-                                                                                                                        const lat = Date.now()-start;
-                                                                                                                            if (r.ok) { await recordHealth("supabase","ok",lat); res.json({status:"ok",latency_ms:lat}); }
-                                                                                                                                else res.status(500).json({status:"fail"});
-                                                                                                                                  } catch(err) { res.status(500).json({status:"fail",reason:err.message}); }
-                                                                                                                                  });
-
-                                                                                                                                  // Shopify health — checks token from Supabase agent_memory first, then env
-                                                                                                                                  app.get("/api/health/shopify", async (req, res) => {
-                                                                                                                                    try {
-                                                                                                                                        let token = process.env.SHOPIFY_ACCESS_TOKEN || "";
-                                                                                                                                            const { data: _smRows } = await supabase.from("agent_memory").select("value").eq("key","shopify_access_token").limit(1); const data = _smRows && _smRows[0] ? _smRows[0] : null;
-                                                                                                                                                if (data?.value) token = data.value;
-                                                                                                                                                    const domain = process.env.SHOPIFY_DOMAIN || process.env.SHOPIFY_STORE || "";
-                                                                                                                                                        if (!token || !domain) return res.json({ status:"needs_token", reason: !token ? "no access token" : "no domain configured" });
-                                                                                                                                                            const r = await fetch(`https://${domain}/admin/api/2024-01/shop.json`, { headers:{ "X-Shopify-Access-Token": token }, signal: AbortSignal.timeout(8000) });
-                                                                                                                                                                if (r.ok) { await recordHealth("shopify","ok",null); res.json({ status:"ok", domain }); }
-                                                                                                                                                                    else { await recordHealth("shopify","fail",null,{http:r.status}); res.json({ status:"needs_token", http: r.status }); }
-                                                                                                                                                                      } catch(err) { res.json({ status:"fail", reason: err.message }); }
-                                                                                                                                                                      });
-
-                                                                                                                                                                      // Etsy health check
-                                                                                                                                                                      app.get("/api/health/etsy", async (req, res) => {
-                                                                                                                                                                        try {
-                                                                                                                                                                            const key = process.env.ETSY_KEY || process.env.ETSY_API_KEY || ""; const secret = process.env.ETSY_SECRET || "";
-                                                                                                                                                                                if (!key) return res.json({ status:"needs_token", reason:"ETSY_API_KEY not set" });
-                                                                                                                                                                                    const r = await fetch(`https://openapi.etsy.com/v3/application/openapi-ping`, { headers:{ "x-api-key": key + (secret ? ":" + secret : "") }, signal: AbortSignal.timeout(8000) });
-                                                                                                                                                                                        if (r.ok) { await recordHealth("etsy","ok",null); res.json({ status:"ok" }); }
-                                                                                                                                                                                            else { await recordHealth("etsy","fail",null,{http:r.status}); res.json({ status:"needs_token", http: r.status }); }
-                                                                                                                                                                                              } catch(err) { res.json({ status:"fail", reason: err.message }); }
-                                                                                                                                                                                              });
-
-                                                                                                                                                                                              
-// ── ADMIN: pause/resume any social post ──────────────────────────────
-app.get("/api/admin/post-status", async (req, res) => {
+app.get("/api/health/anthropic", async (_req, res) => {
+  const anthropic = getAnthropic();
+  if (!anthropic) return res.status(503).json({ status: "fail", reason: "key missing" });
   try {
-    const { post_id, status } = req.query;
+    const started = Date.now();
+    const response = await anthropic.messages.create({
+      model: process.env.AGENT_MODEL || "claude-haiku-4-5-20251001",
+      max_tokens: 8,
+      messages: [{ role: "user", content: "ping" }],
+    });
+    await recordHealth("anthropic", "ok", Date.now() - started);
+    res.json({ status: "ok", model: response.model, latency_ms: Date.now() - started });
+  } catch (error) {
+    await recordHealth("anthropic", "fail", null, { error: error.message });
+    res.status(500).json({ status: "fail", reason: error.message });
+  }
+});
+
+app.get("/api/health/openai", async (_req, res) => {
+  const openai = getOpenAI();
+  if (!openai) return res.json({ status: "degraded", reason: "OpenAI key not configured" });
+  try {
+    const started = Date.now();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 5,
+      messages: [{ role: "user", content: "ping" }],
+    });
+    await recordHealth("openai", "ok", Date.now() - started);
+    res.json({ status: "ok", model: response.model, latency_ms: Date.now() - started });
+  } catch (error) {
+    const degraded = error.status === 429 || /quota/i.test(error.message || "");
+    await recordHealth("openai", degraded ? "degraded" : "fail", null, { error: error.message });
+    res.json({ status: degraded ? "degraded" : "fail", reason: error.message });
+  }
+});
+
+app.get("/api/health/supabase", async (_req, res) => {
+  try {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(503).json({ status: "fail", reason: "Supabase not configured" });
+    const started = Date.now();
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      headers: { apikey: SUPABASE_KEY },
+      signal: AbortSignal.timeout(8000),
+    });
+    const latency = Date.now() - started;
+    if (!response.ok) return res.status(500).json({ status: "fail", http: response.status });
+    await recordHealth("supabase", "ok", latency);
+    res.json({ status: "ok", latency_ms: latency });
+  } catch (error) {
+    res.status(500).json({ status: "fail", reason: error.message });
+  }
+});
+
+app.get("/api/health/shopify", async (_req, res) => {
+  try {
+    let token = process.env.SHOPIFY_ACCESS_TOKEN || "";
+    let domain = process.env.SHOPIFY_DOMAIN || process.env.SHOPIFY_STORE || "";
+    try {
+      const { data: rows } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform", "shopify").limit(1);
+      if (rows?.[0]?.access_token) token = rows[0].access_token;
+      if (rows?.[0]?.shop) domain = rows[0].shop;
+    } catch {}
+    domain = String(domain).replace(/^https?:\/\//, "").replace(/\/$/, "");
+    if (!token || !domain) return res.json({ status: "needs_token" });
+    const response = await fetch(`https://${domain}/admin/api/2024-01/shop.json`, {
+      headers: { "X-Shopify-Access-Token": token },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return res.json({ status: "needs_token", http: response.status });
+    res.json({ status: "ok", domain });
+  } catch (error) {
+    res.json({ status: "fail", reason: error.message });
+  }
+});
+
+app.get("/api/health/etsy", async (_req, res) => {
+  try {
+    const key = process.env.ETSY_KEY || process.env.ETSY_API_KEY || "";
+    const secret = process.env.ETSY_SECRET || "";
+    if (!key) return res.json({ status: "needs_token", reason: "ETSY_KEY not set" });
+    const response = await fetch("https://openapi.etsy.com/v3/application/openapi-ping", {
+      headers: { "x-api-key": secret ? `${key}:${secret}` : key },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return res.json({ status: "needs_token", http: response.status });
+    res.json({ status: "ok" });
+  } catch (error) {
+    res.json({ status: "fail", reason: error.message });
+  }
+});
+
+app.get("/api/outputs", requireApiSecret, async (req, res) => {
+  try {
+    const outputs = await getRecentOutputs(req.query.limit);
+    res.json({ outputs, count: outputs.length, timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/stats", requireApiSecret, async (_req, res) => {
+  try {
+    const [completed, pending, running, failed, logs] = await Promise.all([
+      supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "completed"),
+      supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "running"),
+      supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "failed"),
+      supabase.from("agent_logs").select("agent,message,level,created_at").order("created_at", { ascending: false }).limit(20),
+    ]);
+    res.json({
+      tasks: { completed: completed.count, pending: pending.count, running: running.count, failed: failed.count },
+      recentLogs: logs.data || [],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/post-status", requireApiSecret, async (req, res) => {
+  try {
+    const { post_id, status } = req.body || {};
     if (!post_id || !status) return res.status(400).json({ error: "post_id and status required" });
-    const allowed = ["paused","scheduled","draft","cancelled","failed"];
+    const allowed = ["paused", "scheduled", "draft", "cancelled", "failed"];
     if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid status" });
     const { data, error } = await supabase
       .from("social_posts")
@@ -176,77 +335,81 @@ app.get("/api/admin/post-status", async (req, res) => {
       .single();
     if (error) throw error;
     res.json({ ok: true, post_id, new_status: status, post: data });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.get("/api/stats", async (req, res) => {
-                                                                                                                                                                                                try {
-                                                        
-                                                        
-                                                                                                                                                                                                  const [c,p,r,f,logs] = await Promise.all([
-                                                                                                                                                                                                          supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","completed"),
-                                                                                                                                                                                                                supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","pending"),
-                                                                                                                                                                                                                      supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","running"),
-                                                                                                                                                                                                                            supabase.from("tasks").select("*",{count:"exact",head:true}).eq("status","failed"),
-                                                                                                                                                                                                                                  supabase.from("agent_logs").select("agent,message,level,created_at").order("created_at",{ascending:false}).limit(20),
-                                                                                                                                                                                                                                      ]);
-                                                                                                                                                                                                                                          res.json({ tasks:{completed:c.count,pending:p.count,running:r.count,failed:f.count}, recentLogs:logs.data||[], timestamp:new Date().toISOString() });
-                                                                                                                                                                                                                                            } catch(err) { res.status(500).json({error:err.message}); }
-                                                                                                                                                                                                                                            });
+const SWARM_SYSTEM = "You are SWARM OS, the House of Jreym commerce command center. Give concise, evidence-aware operational recommendations. Do not claim actions were taken unless tool or database results confirm them.";
+app.post("/api/swarm", requireApiSecret, aiRateLimit, async (req, res) => {
+  const anthropic = getAnthropic();
+  if (!anthropic) return res.status(503).json({ error: "Anthropic not configured" });
+  try {
+    const { prompt, history = [], userMessage } = req.body || {};
+    const content = prompt || userMessage || "";
+    if (!content) return res.status(400).json({ error: "No message" });
+    const messages = [
+      ...history.filter((message) => message?.role && typeof message.content === "string").slice(-20),
+      { role: "user", content },
+    ];
+    const response = await anthropic.messages.create({
+      model: process.env.AGENT_MODEL || "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: SWARM_SYSTEM,
+      messages,
+    });
+    res.json({ reply: response.content?.[0]?.text || "", agent: "SWARM OS", model: response.model });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-                                                                                                                                                                                                                                            const SWARM_SYSTEM = `You are SWARM OS the autonomous AI command center for House of Jreym. 12 agents run 24/7: NANA (trends), KOFI (supply chain), AMARA (marketing), KWAME (sales), FATIMA (customer service), SEUN (analytics), AISHA (SEO), IBRAHIM (social), ZARA (inventory), DELE (pricing), IMANI (ads), ABENA (finance). OUTPUT: Tactical bullets, under 150 words.`;
+app.post("/api/openai", requireApiSecret, aiRateLimit, async (req, res) => {
+  const openai = getOpenAI();
+  if (!openai) return res.status(503).json({ error: "OpenAI not configured" });
+  try {
+    const { prompt, messages: history = [], model = "gpt-4o-mini" } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: "No prompt" });
+    const messages = [...history.slice(-20), { role: "user", content: prompt }];
+    const response = await openai.chat.completions.create({ model, max_tokens: 1024, messages });
+    res.json({ reply: response.choices?.[0]?.message?.content || "", model: response.model, agent: "OPENAI" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-                                                                                                                                                                                                                                            app.post("/api/swarm", async (req, res) => {
-                                                                                                                                                                                                                                              try {
-                                                                                                                                                                                                                                                  const { prompt, history=[], userMessage } = req.body;
-                                                                                                                                                                                                                                                      const content = prompt||userMessage||"";
-                                                                                                                                                                                                                                                          if (!content) return res.status(400).json({error:"No message"});
-                                                                                                                                                                                                                                                              const messages = [...history.filter(m=>m.role&&m.content), {role:"user",content}];
-                                                                                                                                                                                                                                                                  const response = await anthropic.messages.create({ model:"claude-haiku-4-5-20251001", max_tokens:1024, system:SWARM_SYSTEM, messages });
-                                                                                                                                                                                                                                                                      res.json({ reply:response.content[0].text, agent:"SWARM OS", model:response.model });
-                                                                                                                                                                                                                                                                        } catch(err) { res.status(500).json({error:err.message}); }
-                                                                                                                                                                                                                                                                        });
+const SPORTS_SYSTEM = "You are SWARM-X sports analysis. Return JSON only. Never present uncertain outcomes as guaranteed.";
+app.post("/api/swarm/analyze", requireApiSecret, aiRateLimit, async (req, res) => {
+  const anthropic = getAnthropic();
+  if (!anthropic) return res.status(503).json({ error: "Anthropic not configured" });
+  try {
+    const { prompt, bankroll } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: "No prompt" });
+    const response = await anthropic.messages.create({
+      model: process.env.AGENT_MODEL || "claude-haiku-4-5-20251001",
+      max_tokens: 2048,
+      system: SPORTS_SYSTEM,
+      messages: [{ role: "user", content: `Analyze: ${prompt}${bankroll ? `. Bankroll: $${bankroll}` : ""}` }],
+    });
+    const raw = (response.content?.[0]?.text || "").trim().replace(/```json\n?/g, "").replace(/```\n?/g, "");
+    let plays;
+    try { plays = JSON.parse(raw); }
+    catch { return res.status(500).json({ error: "Parse failed" }); }
+    res.json({ plays: Array.isArray(plays) ? plays : [plays], agent: "SWARM-X", model: response.model });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-                                                                                                                                                                                                                                                                        app.post("/api/openai", async (req, res) => {
-                                                                                                                                                                                                                                                                          const { prompt, messages:hist=[], model="gpt-4o-mini" } = req.body;
-                                                                                                                                                                                                                                                                            const content = prompt||"";
-                                                                                                                                                                                                                                                                              if (!content) return res.status(400).json({error:"No prompt"});
-                                                                                                                                                                                                                                                                                const messages = [...hist.filter(m=>m.role&&m.content), {role:"user",content}];
-                                                                                                                                                                                                                                                                                  if (openai) {
-                                                                                                                                                                                                                                                                                      try {
-                                                                                                                                                                                                                                                                                            const r = await openai.chat.completions.create({ model, max_tokens:1024, messages });
-                                                                                                                                                                                                                                                                                                  return res.json({ reply:r.choices[0].message.content, model:r.model, agent:"OPENAI" });
-                                                                                                                                                                                                                                                                                                      } catch(err) {
-                                                                                                                                                                                                                                                                                                            if (!err.message?.includes("quota")&&!err.message?.includes("429")) return res.status(500).json({error:err.message});
-                                                                                                                                                                                                                                                                                                                }
-                                                                                                                                                                                                                                                                                                                  }
-                                                                                                                                                                                                                                                                                                                    try {
-                                                                                                                                                                                                                                                                                                                        const r = await anthropic.messages.create({ model:"claude-haiku-4-5-20251001", max_tokens:1024, messages });
-                                                                                                                                                                                                                                                                                                                            res.json({ reply:r.content[0].text, model:r.model, agent:"ANTHROPIC_FALLBACK", fallback:true });
-                                                                                                                                                                                                                                                                                                                              } catch(err) { res.status(500).json({error:err.message}); }
-                                                                                                                                                                                                                                                                                                                              });
+app.get("/health", (_req, res) => res.json({ status: `SWARM OS ${APP_VERSION} ONLINE` }));
+app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "dist", "index.html")));
 
-                                                                                                                                                                                                                                                                                                                              const SPORTS = `You are SWARM-X Quantum Edge sports betting analyst. Return ONLY valid JSON array with fields: id,sport,game,betType,pick,odds,confidence,risk,action,reasons. action: STRONG PLAY|LEAN|SMALL BET|PASS.`;
-                                                                                                                                                                                                                                                                                                                              app.post("/api/swarm/analyze", async (req, res) => {
-                                                                                                                                                                                                                                                                                                                                try {
-                                                                                                                                                                                                                                                                                                                                    const { prompt, bankroll } = req.body;
-                                                                                                                                                                                                                                                                                                                                        const r = await anthropic.messages.create({ model:"claude-haiku-4-5-20251001", max_tokens:2048, system:SPORTS, messages:[{role:"user",content:`Analyz: ${prompt}${bankroll?`. Bankroll: $${bankroll}`:""}`}] });
-                                                                                                                                                                                                                                                                                                                                            const raw = r.content[0].text.trim().replace(/```json\n?/g,"").replace(/```\n?/g,"").trim();
-                                                                                                                                                                                                                                                                                                                                                let plays; try { plays=JSON.parse(raw); if(!Array.isArray(plays)) plays=[plays]; } catch{ return res.status(500).json({error:"Parse failed"}); }
-                                                                                                                                                                                                                                                                                                                                                    res.json({ plays:plays.map((p,i)=>({...p,id:Date.now()+i})), agent:"SWARM-X", model:r.model });
-                                                                                                                                                                                                                                                                                                                                                      } catch(err) { res.status(500).json({error:err.message}); }
-                                                                                                                                                                                                                                                                                                                                                      });
+const PORT = Number(process.env.PORT) || 4000;
+app.listen(PORT, () => {
+  console.log(`SWARM OS ${APP_VERSION} :${PORT} | API guard:${process.env.API_SECRET ? "ON" : "DISABLED"}`);
+});
 
-                                                                                                                                                                                                                                                                                                                                                      app.get("/health", (req,res) => res.json({status:"SWARM OS v5.2 ONLINE"}));
-                                                                                                                                                                                                                                                                                                                                                      app.get("*", (req,res) => res.sendFile(path.join(__dirname,"dist","index.html")));
-
-                                                                                                                                                                                                                                                                                                                                                      const PORT = process.env.PORT||4000;
-                                                                                                                                                                                                                                                                                                                                                      app.listen(PORT, () => console.log(`SWARM OS v5.2 :${PORT} | Anthropic:${process.env.ANTHROPIC_API_KEY?"OK":"MISSING"} Supabase:${SUPABASE_URL?"OK":"MISSING"}`));
-
-// ── KEEP-ALIVE: self-ping to keep Render free tier from idling to sleep ──
-const KEEPALIVE_URL = (process.env.RENDER_EXTERNAL_URL || "https://swarm-app-3nch.onrender.com").replace(/\/$/, "") + "/api/health";
+const KEEPALIVE_URL = `${(process.env.RENDER_EXTERNAL_URL || "https://swarm-app-3nch.onrender.com").replace(/\/$/, "")}/api/health`;
 setInterval(() => {
-  fetch(KEEPALIVE_URL)
-    .then(r => { if (r.ok) console.log("[keepalive] ok"); })
-    .catch(e => console.log("[keepalive] failed:", e.message));
-}, 13 * 60 * 1000); // every 13 min, under Render's ~15-min idle window
+  fetch(KEEPALIVE_URL, { signal: AbortSignal.timeout(8000) }).catch(() => {});
+}, 13 * 60 * 1000);

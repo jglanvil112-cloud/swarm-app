@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "syntax": "node --check server.js && node --check agents/executor.js && node --check agents/canvaToEtsy.js && node --check agents/publisher.js && node --check workers/scheduler.js && node --check routes/approve.js && node --check routes/audit.js && node --check routes/metrics.js && node --check routes/instagram.js && node --check lib/etsyDraft.js && node --check lib/security.js && node --check lib/pricing.js && node --check lib/seo.js && node --check lib/designMeta.js && node --check lib/visionBrief.js",
+    "test": "node --test test/*.test.js",
+    "check": "npm run syntax && npm test && npm run build",
     "preview": "vite preview",
     "start": "node server.js"
   },
