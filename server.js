@@ -22,7 +22,15 @@ import { deliveryRouter } from "./routes/delivery.js";
 import { promoRouter } from "./routes/promo.js";
 import { metricsRouter } from "./routes/metrics.js";
 import { supabase, recordHealth, getRecentOutputs } from "./lib/supabase.js";
-import { requireApiSecret } from "./lib/security.js";
+import {
+  requireApiSecret,
+  timingSafeEqualText,
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+  getAdminSessionFromRequest,
+  adminSessionCookie,
+  clearAdminSessionCookie,
+} from "./lib/security.js";
 import "./workers/scheduler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -72,6 +80,45 @@ function getOpenAI() {
   catch { return null; }
 }
 
+// Browser dashboard login: exchange API_SECRET once for a signed HttpOnly cookie.
+// The secret itself is never stored in localStorage or embedded into public HTML.
+const loginAttempts = new Map();
+app.post("/api/session/login", (req, res) => {
+  const expected = process.env.API_SECRET || "";
+  if (!expected) return res.status(503).json({ error: "API_SECRET is not configured" });
+
+  const ip = req.ip || "unknown";
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const entry = loginAttempts.get(ip) || { count: 0, reset: now + windowMs };
+  if (now > entry.reset) {
+    entry.count = 0;
+    entry.reset = now + windowMs;
+  }
+  entry.count += 1;
+  loginAttempts.set(ip, entry);
+  if (entry.count > 10) return res.status(429).json({ error: "Too many login attempts" });
+
+  const supplied = String(req.body?.api_secret || "");
+  if (!timingSafeEqualText(supplied, expected)) {
+    return res.status(401).json({ error: "Invalid admin secret" });
+  }
+
+  entry.count = 0;
+  const token = createAdminSessionToken();
+  res.setHeader("Set-Cookie", adminSessionCookie(token));
+  res.json({ ok: true, expires_in_hours: Number(process.env.ADMIN_SESSION_SECONDS || 43200) / 3600 });
+});
+
+app.post("/api/session/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", clearAdminSessionCookie());
+  res.json({ ok: true });
+});
+
+app.get("/api/session/status", (req, res) => {
+  res.json({ authenticated: verifyAdminSessionToken(getAdminSessionFromRequest(req)) });
+});
+
 function etsyAccessGuard(req, res, next) {
   const publicGetPaths = new Set(["/callback", "/listings", "/reviews"]);
   if (req.method === "GET" && publicGetPaths.has(req.path)) return next();
@@ -84,14 +131,15 @@ function instagramAccessGuard(req, res, next) {
 }
 
 function shopifyAccessGuard(req, res, next) {
-  // OAuth callback must remain reachable by Shopify. The legacy order webhook is
-  // intentionally not public until it has raw-body HMAC verification; hourly order
-  // sync remains the supported fallback.
+  // Shopify OAuth callback remains public after HMAC verification in its router.
+  // The legacy order webhook is intentionally NOT public until raw-body HMAC
+  // verification is implemented; hourly order sync remains the fallback.
   if (req.method === "GET" && req.path === "/callback") return next();
   return requireApiSecret(req, res, next);
 }
 
-// Administrative and cost-bearing routers fail closed behind API_SECRET.
+// Administrative and cost-bearing routers fail closed behind API_SECRET or a
+// valid signed admin-session cookie.
 app.use("/api/tasks", requireApiSecret, tasksRouter);
 app.use("/api/pipeline", requireApiSecret, pipelineRouter);
 app.use("/api/audit", requireApiSecret, auditRouter);
@@ -107,7 +155,7 @@ app.use("/api/etsy", etsyAccessGuard, etsyRouter);
 app.use("/api/instagram", instagramAccessGuard, instagramRouter);
 app.use("/api/shopify", shopifyAccessGuard, shopifyRouter);
 
-// Approval is deliberately separate from API_SECRET and fails closed inside the router.
+// Approval uses a separate secret and fails closed inside routes/approve.js.
 app.use("/api/approve", approveRouter);
 
 const aiRate = new Map();
@@ -212,11 +260,7 @@ app.get("/api/health/shopify", async (_req, res) => {
     let token = process.env.SHOPIFY_ACCESS_TOKEN || "";
     let domain = process.env.SHOPIFY_DOMAIN || process.env.SHOPIFY_STORE || "";
     try {
-      const { data: rows } = await supabase
-        .from("oauth_tokens")
-        .select("access_token,shop")
-        .eq("platform", "shopify")
-        .limit(1);
+      const { data: rows } = await supabase.from("oauth_tokens").select("access_token,shop").eq("platform", "shopify").limit(1);
       if (rows?.[0]?.access_token) token = rows[0].access_token;
       if (rows?.[0]?.shop) domain = rows[0].shop;
     } catch {}
@@ -268,12 +312,7 @@ app.get("/api/stats", requireApiSecret, async (_req, res) => {
       supabase.from("agent_logs").select("agent,message,level,created_at").order("created_at", { ascending: false }).limit(20),
     ]);
     res.json({
-      tasks: {
-        completed: completed.count,
-        pending: pending.count,
-        running: running.count,
-        failed: failed.count,
-      },
+      tasks: { completed: completed.count, pending: pending.count, running: running.count, failed: failed.count },
       recentLogs: logs.data || [],
       timestamp: new Date().toISOString(),
     });
