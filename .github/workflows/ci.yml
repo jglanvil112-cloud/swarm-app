@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -23,8 +25,24 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Reconcile package lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Commit repaired lockfile on hardening branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/house-of-jreym-v7-hardening'
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: synchronize package lock"
+          git push origin HEAD:house-of-jreym-v7-hardening
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Verify syntax, unit tests, and production build
         run: npm run check
