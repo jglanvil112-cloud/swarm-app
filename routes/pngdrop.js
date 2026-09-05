@@ -27,6 +27,11 @@ export const pngdropRouter = express.Router();
 const APPROVAL_SECRET = process.env.APPROVAL_SECRET || "";
 const FAL_KEY = process.env.FAL_KEY || process.env.FAL_AI_KEY || process.env.fal_ai_KEY || process.env.fal_ai_key || "";
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
+const OPENAI_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || "";
+// PNGDROP_SKIP_GATE=true → no AI gate; every design lands as an Etsy DRAFT for manual
+// review (CEO 9/5, Anthropic credits at zero). Drafts never auto-activate, so the
+// human review IS the gate in this mode. Flip back to "false" once credits are topped up.
+const SKIP_GATE = process.env.PNGDROP_SKIP_GATE === "true";
 const ETSY_BASE = "https://openapi.etsy.com/v3/application";
 const ETSY_KEY = process.env.ETSY_KEY || "06k7svc5tbl35c6oh7k399ak";
 const ETSY_SECRET = process.env.ETSY_SECRET || "";
@@ -127,7 +132,25 @@ async function falGenerateRetry(model, prompt, tries = 2) {
 
 // ── Claude-vision gate: IP + slogan legibility. Text is EXPECTED here (unlike podgen). ──
 async function visionGate(imageUrl, expectedText) {
-  if (!ANTHROPIC_KEY) return { risky: true, reason: "no vision key — held for safety" };
+  if (SKIP_GATE) return { risky: false, text_ok: null, reason: "gate skipped — MANUAL REVIEW REQUIRED before activate", manual: true };
+  const q = `This is an AI-generated design file for a sublimation/PNG Etsy shop. The design is SUPPOSED to contain exactly this text: "${expectedText}". Answer: (1) Does the rendered text match that slogan exactly, with no misspellings, duplicated words, extra letters, or garbled glyphs? (2) Does the image contain any trademarked logo, brand name, copyrighted character, licensed mascot, real identifiable person, or a near-copy of a famous artwork? (3) Is it blurry, garbled, or low quality? Reply ONLY with JSON: {"risky":true|false,"text_ok":true|false,"reason":"short"} — risky must be true if text_ok is false or (2) or (3) is yes.`;
+  const parse = t => JSON.parse(String(t || "").replace(/```json|```/g, "").trim());
+  // Fallback gate: OpenAI vision when the Anthropic key is missing or out of credits.
+  const openaiGate = async () => {
+    if (!OPENAI_KEY) return null;
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + OPENAI_KEY },
+      body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: 200, messages: [{ role: "user", content: [
+        { type: "text", text: q }, { type: "image_url", image_url: { url: imageUrl } } ] }] })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error?.message || "openai " + r.status);
+    return parse(j.choices?.[0]?.message?.content);
+  };
+  if (!ANTHROPIC_KEY) {
+    try { const g = await openaiGate(); if (g) return { ...g, via: "openai" }; } catch (e) { /* fall through */ }
+    return { risky: true, reason: "no vision key — held for safety" };
+  }
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -141,8 +164,13 @@ async function visionGate(imageUrl, expectedText) {
       })
     });
     const j = await r.json();
-    const txt = (j.content || []).map(b => b.text || "").join("").replace(/```json|```/g, "").trim();
-    return JSON.parse(txt);
+    if (!r.ok) {
+      // credit/auth failure on Anthropic → try OpenAI before holding
+      try { const g = await openaiGate(); if (g) return { ...g, via: "openai" }; } catch (e) { /* fall through */ }
+      return { risky: true, reason: "gate unavailable (" + (j.error?.message || r.status).toString().slice(0, 60) + ") — held" };
+    }
+    const txt = (j.content || []).map(b => b.text || "").join("");
+    return parse(txt);
   } catch (e) { return { risky: true, reason: "gate error — held for safety" }; }
 }
 
@@ -251,7 +279,7 @@ export async function runPngDrop(concept, { dry = false } = {}) {
 pngdropRouter.get("/concepts", (req, res) => res.json({ count: CONCEPTS.length, price: PRICE_SINGLE, model: MODEL, concepts: CONCEPTS.map(c => ({ id: c.id, niche: c.niche, text: c.text, title: c.title })) }));
 
 // GET /api/pngdrop/status
-pngdropRouter.get("/status", (req, res) => res.json({ model: MODEL, px: IMG_PX, dpi: DPI, price: PRICE_SINGLE, fal_key_present: !!FAL_KEY, vision_key_present: !!ANTHROPIC_KEY, etsy_shop_id: ETSY_SHOP_ID || null, bucket: BUCKET, ts: new Date().toISOString() }));
+pngdropRouter.get("/status", (req, res) => res.json({ model: MODEL, skip_gate: SKIP_GATE, openai_key_present: !!OPENAI_KEY, px: IMG_PX, dpi: DPI, price: PRICE_SINGLE, fal_key_present: !!FAL_KEY, vision_key_present: !!ANTHROPIC_KEY, etsy_shop_id: ETSY_SHOP_ID || null, bucket: BUCKET, ts: new Date().toISOString() }));
 
 // POST /api/pngdrop/run (GATED) — body { concept: "<id>", dry?: true } or a full custom concept object
 pngdropRouter.post("/run", async (req, res) => {
