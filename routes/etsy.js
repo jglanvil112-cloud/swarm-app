@@ -1561,7 +1561,7 @@ async function runShopRollout(perTick=2, dry=false){
   for(const off of [0,100,200]){
     const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100&offset="+off,{headers:authH(t)});
     if(!lr.ok){ if(lr.status===429) return {error:"429 quota — will retry", processed:0}; continue; }
-    const ld=await lr.json(); (ld.results||[]).forEach(l=>{ if(!done.has(String(l.listing_id))) undone.push({id:l.listing_id,title:l.title,description:l.description}); });
+    const ld=await lr.json(); (ld.results||[]).forEach(l=>{ if(!done.has(String(l.listing_id)) && !/\bPNG\b/i.test(l.title||"")) undone.push({id:l.listing_id,title:l.title,description:l.description}); }); // PNG lane (routes/pngdrop.js) is excluded — it has its own product mockups
     if(undone.length>=perTick || (ld.results||[]).length<100) break;
   }
   if(!undone.length) return {done:true, processed:0, total_done:done.size, note:"all active listings rolled out"};
