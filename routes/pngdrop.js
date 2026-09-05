@@ -21,6 +21,7 @@ import express from "express";
 import sharp from "sharp";
 import { supabase, logAgent } from "../lib/supabase.js";
 import { createDraftListing, attachFileFromUrl, activateListing, getEtsyToken } from "../lib/etsyDraft.js";
+import { applyMockups } from "../routes/mockups.js";
 
 export const pngdropRouter = express.Router();
 
@@ -305,6 +306,8 @@ export async function runPngDrop(concept, { dry = false } = {}) {
       listing_id = d.listing_id;
       try { image_id = await attachListingImage(listing_id, preview, token); } catch (e) { err = "image: " + e.message.slice(0, 120); }
       try { file = await attachFileFromUrl(listing_id, pngUrl, `house_of_jreym_${c.id}_${uid}.png`, token); } catch (e) { err = (err ? err + " | " : "") + "file: " + e.message.slice(0, 120); }
+      // product mockups (tee/sweat/mug) — best-effort, never blocks the draft
+      try { if (process.env.PNGDROP_MOCKUPS !== "false") await applyMockups(listing_id); } catch (e) { err = (err ? err + " | " : "") + "mockups: " + e.message.slice(0, 80); }
     } catch (e) { err = "listing: " + e.message.slice(0, 160); }
   }
 
