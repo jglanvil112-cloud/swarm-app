@@ -19,6 +19,7 @@ import { trendingRouter } from "./routes/trending.js";
 import { podgenRouter } from "./routes/podgen.js";
 import { deliveryRouter } from "./routes/delivery.js";
 import { promoRouter } from "./routes/promo.js";
+import { pngdropRouter } from "./routes/pngdrop.js";
 import { supabase, recordHealth, getRecentOutputs } from "./lib/supabase.js";
 import "./workers/scheduler.js";
 
@@ -49,7 +50,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KE
 
 // AUTH MIDDLEWARE — dashboard routes are always public (no API key needed)
 const API_SECRET = process.env.API_SECRET;
-const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify", "/pipeline", "/social", "/instagram", "/ibrahim", "/admin", "/audit", "/approve", "/trending", "/podgen", "/delivery", "/promo"];
+const PUBLIC_API_PREFIXES = ["/health", "/stats", "/outputs", "/swarm", "/shopify", "/etsy", "/tasks", "/printify", "/pipeline", "/social", "/instagram", "/ibrahim", "/admin", "/audit", "/approve", "/trending", "/podgen", "/delivery", "/promo", "/pngdrop"];
   
 app.use("/api/", (req, res, next) => {
   const isPublic = PUBLIC_API_PREFIXES.some(p => req.path === p || req.path.startsWith(p + "/") || req.path.startsWith("/health"));
@@ -85,6 +86,7 @@ app.use("/api/trending", trendingRouter);
 app.use("/api/podgen", podgenRouter);
 app.use("/api/delivery", deliveryRouter);
 app.use("/api/promo", promoRouter);
+app.use("/api/pngdrop", pngdropRouter);
 
                         // Agent outputs — feeds dashboard AMARA output panel
                         app.get("/api/outputs", async (req, res) => {
