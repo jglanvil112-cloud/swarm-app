@@ -85,6 +85,48 @@ export const CONCEPTS = [
     prompt: `hand-drawn mixed-breed dog portrait wearing a wildflower collar with script lettering "My dog is my therapist", ink and watercolor texture, warm neutral palette, flat design`,
     title: "My Dog Is My Therapist PNG, Dog Mom Sublimation, Funny Dog Lover Shirt Png, Pet Tumbler Png, Digital Download",
     tags: ["dog mom png","dog lover png","funny dog png","dog sublimation","pet lover png","dog therapist png","dog shirt design","dog tumbler png","rescue dog png","wildflower dog png","pet mom png","sublimation design","instant download"] },
+
+  // ── Batch 2 (CEO 9/5: "use a variety") — each one a different style family so the shop reads as a range, not a template ──
+  { id: "nurse-night", niche: "nurse", style: "chalkboard", text: "Night shift survivor",
+    prompt: `chalk hand-lettering "Night shift survivor" on a dark slate chalkboard texture with a chalk-drawn crescent moon and coffee cup, dusty white and pale yellow chalk, smudged edges, flat design`,
+    title: "Night Shift Survivor PNG, Funny Nurse Sublimation, Chalkboard Nurse Shirt Png, Night Nurse Png, Digital Download",
+    tags: ["night shift png","night nurse png","nurse sublimation","funny nurse png","chalkboard png","nurse humor png","nurse tumbler png","rn life png","cna png","er nurse png","nurse gift png","sublimation design","instant download"] },
+  { id: "teacher-watercolor", niche: "teacher", style: "watercolor", text: "Raising tiny humans",
+    prompt: `loose watercolor illustration of stacked books with a small potted plant and pencils on top, soft bleeding pigment edges, script lettering "Raising tiny humans" beneath, blush sage and ochre palette, flat design`,
+    title: "Raising Tiny Humans PNG, Watercolor Teacher Sublimation, Kindergarten Teacher Shirt Png, Preschool Png, Digital Download",
+    tags: ["teacher png","watercolor teacher","kindergarten png","preschool png","teacher sublimation","tiny humans png","daycare png","teacher gift png","teacher shirt png","first grade png","teacher tumbler png","sublimation design","instant download"] },
+  { id: "mom-neon", niche: "mom", style: "neon", text: "Running on coffee and chaos",
+    prompt: `glowing neon sign lettering "Running on coffee and chaos" in hot pink and electric blue neon tubes with a neon coffee cup outline, soft glow, on a solid white background, flat design`,
+    title: "Coffee And Chaos PNG, Neon Mom Life Sublimation, Funny Mom Shirt Png, Mama Tumbler Wrap Png, Digital Download",
+    tags: ["mom life png","neon png","coffee and chaos","funny mom png","mom sublimation","mama shirt png","neon sign png","mom tumbler png","coffee mom png","mothers day png","toddler mom png","sublimation design","instant download"] },
+  { id: "grad-papercut", niche: "graduation", style: "papercut", text: "Officially done",
+    prompt: `layered paper-cut style design of a graduation cap with a curling tassel and confetti pieces, stacked paper shadows, bold cut-out lettering "Officially done", navy gold and white, flat design`,
+    title: "Officially Done PNG, Papercut Graduation Sublimation, Grad Cap Shirt Png, Class Of 2027 Party Png, Digital Download",
+    tags: ["graduation png","officially done png","grad cap png","class of 2027","grad sublimation","papercut png","graduation shirt png","senior png","college grad png","grad party png","graduation gift png","sublimation design","instant download"] },
+  { id: "dog-woodcut", niche: "pets", style: "woodcut", text: "Dog hair is my glitter",
+    prompt: `vintage woodcut engraving of a scruffy terrier mid-shake with fur flying, crosshatch shading, banner ribbon lettering "Dog hair is my glitter", black ink with a single mustard accent, flat design`,
+    title: "Dog Hair Is My Glitter PNG, Woodcut Dog Mom Sublimation, Funny Dog Lover Shirt Png, Pet Tumbler Png, Digital Download",
+    tags: ["dog mom png","dog hair glitter","funny dog png","dog sublimation","woodcut dog png","terrier png","dog lover png","dog shirt design","pet mom png","dog tumbler png","rescue dog png","sublimation design","instant download"] },
+  { id: "faith-brush", niche: "faith", style: "brush", text: "Be still",
+    prompt: `bold black brush-stroke calligraphy "Be still" with rough dry-brush texture and a small gold-leaf leaf accent, minimal, lots of white space, flat design`,
+    title: "Be Still PNG, Brush Calligraphy Faith Sublimation, Minimal Christian Shirt Png, Scripture Png, Digital Download",
+    tags: ["be still png","faith png","christian png","brush lettering png","scripture png","minimal christian","bible verse png","faith shirt png","christian tumbler","worship png","psalm png","sublimation design","instant download"] },
+  { id: "fall-embroidery", niche: "seasonal", style: "embroidery", text: "Sweater weather club",
+    prompt: `embroidered patch style design with visible stitch texture, a knitted sweater and steaming mug motif, merrowed patch border, thread lettering "Sweater weather club", rust cream and forest green, flat design`,
+    title: "Sweater Weather Club PNG, Embroidery Patch Fall Sublimation, Cozy Autumn Shirt Png, Fall Tumbler Png, Digital Download",
+    tags: ["sweater weather png","fall png","autumn sublimation","embroidery patch png","cozy fall png","fall shirt png","pumpkin spice png","fall tumbler png","october png","thanksgiving png","hello fall png","sublimation design","instant download"] },
+  { id: "courier-badge", niche: "occupation", style: "retro badge", text: "Delivered with attitude",
+    prompt: `retro 1950s trucking company badge with a cargo van silhouette, wing motifs, and bold slab-serif lettering "Delivered with attitude", cream red and navy, worn print texture, flat design`,
+    title: "Delivered With Attitude PNG, Delivery Driver Sublimation, Courier Shirt Png, Trucker Badge Png, Digital Download",
+    tags: ["delivery driver png","courier png","trucker png","driver sublimation","delivery shirt png","van life png","retro badge png","driver gift png","trucker tumbler png","essential worker","funny driver png","sublimation design","instant download"] },
+  { id: "mental-lineheart", niche: "mental health", style: "continuous line", text: "It's okay to not be okay",
+    prompt: `single continuous-line drawing of a face in profile flowing into a heart shape, one unbroken thin black line, small serif caption "It's okay to not be okay", one soft lavender accent, flat design`,
+    title: "Its Okay To Not Be Okay PNG, Line Art Mental Health Sublimation, Therapist Shirt Png, Self Care Png, Digital Download",
+    tags: ["mental health png","okay not okay png","line art png","self care png","therapist png","anxiety awareness","mental health shirt","counselor png","wellness png","one line art png","kindness png","sublimation design","instant download"] },
+  { id: "heritage-kente", niche: "heritage", style: "geometric", text: "Culture is my crown",
+    prompt: `bold geometric crown built from original interlocking kente-inspired stripe blocks in gold black green and red, art-deco lettering "Culture is my crown" beneath, flat vector design`,
+    title: "Culture Is My Crown PNG, African Heritage Sublimation, Black Pride Shirt Png, Melanin Tumbler Png, Digital Download",
+    tags: ["black pride png","african heritage png","culture crown png","melanin png","heritage sublimation","black history png","juneteenth png","black owned png","afrocentric png","kente inspired png","black queen png","sublimation design","instant download"] },
 ];
 
 const IP_BLOCK = ["disney","marvel","pixar","nike","adidas","jordan","gucci","louis vuitton","supreme","nfl","nba","mlb","fifa",
@@ -239,7 +281,8 @@ export async function runPngDrop(concept, { dry = false } = {}) {
   const hay = `${c.prompt} ${c.title} ${c.text}`.toLowerCase();
   if (IP_BLOCK.some(t => hay.includes(t))) return { ok: false, reason: "concept tripped IP blocklist", uid };
 
-  const prompt = `${c.prompt}. Isolated on a pure solid flat white background, nothing else in the scene — no mockup, no shirt, no mug, no frame, no shadow, no border. Centered with generous margins. Text spelled exactly: "${c.text}". No brand names, no logos, no trademarks, no copyrighted characters, no real people — 100% original design.`;
+  const styleLine = c.style ? ` Art style: ${c.style} — commit fully to this style, do not default to a generic retro badge.` : "";
+  const prompt = `${c.prompt}.${styleLine} Isolated on a pure solid flat white background, nothing else in the scene — no mockup, no shirt, no mug, no frame, no shadow, no border. Centered with generous margins. Text spelled exactly: "${c.text}". No brand names, no logos, no trademarks, no copyrighted characters, no real people — 100% original design.`;
   if (dry) return { ok: true, dry: true, uid, model: MODEL, prompt, listing: { title: c.title, tags: c.tags, price: PRICE_SINGLE } };
 
   const gen = await falGenerateRetry(MODEL, prompt);
