@@ -44,7 +44,7 @@ async function designPngFromListing(lid, t) {
   // the flat design is the image that was uploaded first (lowest listing_image_id), not necessarily rank 1
   const flat = [...imgs].sort((a, b) => a.listing_image_id - b.listing_image_id)[0];
   const buf = Buffer.from(await (await fetch(flat.url_fullxfull)).arrayBuffer());
-  return { png: await knockoutWhite(buf), count: imgs.length };
+  return { png: await knockoutWhite(buf), count: imgs.length, flatId: flat.listing_image_id };
 }
 
 async function uploadImage(lid, jpeg, rank, t) {
@@ -81,13 +81,22 @@ async function pngListings(t) {
 
 export async function applyMockups(lid, { force = false, keys = ORDER } = {}) {
   const t = await getEtsyToken(); if (!t) throw new Error("no Etsy token");
-  const { png, count } = await designPngFromListing(lid, t);
+  const { png, count, flatId } = await designPngFromListing(lid, t);
   if (count >= 4 && !force) return { listing_id: lid, skipped: "already has mockups" };
   const done = [], errors = [];
   for (const [key, rank] of keys) {
     try { const jpg = await composite(png, key); done.push({ key, rank, image_id: await uploadImage(lid, jpg, rank, t) }); }
     catch (e) { errors.push({ key, error: e.message.slice(0, 140) }); }
   }
+  // demote stray images (e.g. wall-art rollout frames) behind ours: re-post with listing_image_id + a high rank
+  try {
+    const after = await listingImages(lid, t);
+    const ours = new Set([flatId, ...done.map(d => d.image_id)].filter(Boolean));
+    let rank = 10;
+    for (const im of after) if (!ours.has(im.listing_image_id)) {
+      await fetch(`${ETSY_BASE}/shops/${ETSY_SHOP_ID}/listings/${lid}/images`, { method: "POST", headers: { ...authH(t), "Content-Type": "application/json" }, body: JSON.stringify({ listing_image_id: im.listing_image_id, rank: rank++ }) }).catch(() => {});
+    }
+  } catch (e) { /* cosmetic */ }
   await logAgent("AMARA", `Mockups ${lid}: ${done.map(d => d.key).join("+") || "none"}${errors.length ? " ⚠ " + errors.map(e => e.key + ":" + e.error.slice(0, 40)).join("; ") : ""}`, errors.length ? "warn" : "success");
   return { listing_id: lid, done, errors };
 }
