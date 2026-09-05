@@ -88,7 +88,7 @@ export const CONCEPTS = [
 
   // ── Batch 2 (CEO 9/5: "use a variety") — each one a different style family so the shop reads as a range, not a template ──
   { id: "nurse-night", niche: "nurse", style: "chalkboard", text: "Night shift survivor",
-    prompt: `chalk hand-lettering "Night shift survivor" on a dark slate chalkboard texture with a chalk-drawn crescent moon and coffee cup, dusty white and pale yellow chalk, smudged edges, flat design`,
+    prompt: `chalk-style hand-lettering "Night shift survivor" drawn in charcoal-black and pale yellow chalk strokes with a chalk-drawn crescent moon and coffee cup, dusty smudged texture on the letters themselves, NO chalkboard, NO board, NO dark rectangle behind it, letters float isolated, flat design`,
     title: "Night Shift Survivor PNG, Funny Nurse Sublimation, Chalkboard Nurse Shirt Png, Night Nurse Png, Digital Download",
     tags: ["night shift png","night nurse png","nurse sublimation","funny nurse png","chalkboard png","nurse humor png","nurse tumbler png","rn life png","cna png","er nurse png","nurse gift png","sublimation design","instant download"] },
   { id: "teacher-watercolor", niche: "teacher", style: "watercolor", text: "Raising tiny humans",
@@ -120,7 +120,7 @@ export const CONCEPTS = [
     title: "Delivered With Attitude PNG, Delivery Driver Sublimation, Courier Shirt Png, Trucker Badge Png, Digital Download",
     tags: ["delivery driver png","courier png","trucker png","driver sublimation","delivery shirt png","van life png","retro badge png","driver gift png","trucker tumbler png","essential worker","funny driver png","sublimation design","instant download"] },
   { id: "mental-lineheart", niche: "mental health", style: "continuous line", text: "It's okay to not be okay",
-    prompt: `single continuous-line drawing of a face in profile flowing into a heart shape, one unbroken thin black line, small serif caption "It's okay to not be okay", one soft lavender accent, flat design`,
+    prompt: `single continuous-line drawing of a face in profile flowing into a heart shape, one unbroken bold black line, hand-lettered caption "It's okay to not be okay" beneath in a friendly script, one soft lavender fill accent inside the heart, NO paper, NO card, NO frame, NO border, NO drop shadow, elements float isolated, flat design`,
     title: "Its Okay To Not Be Okay PNG, Line Art Mental Health Sublimation, Therapist Shirt Png, Self Care Png, Digital Download",
     tags: ["mental health png","okay not okay png","line art png","self care png","therapist png","anxiety awareness","mental health shirt","counselor png","wellness png","one line art png","kindness png","sublimation design","instant download"] },
   { id: "heritage-kente", niche: "heritage", style: "geometric", text: "Culture is my crown",
