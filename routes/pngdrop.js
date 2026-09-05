@@ -112,7 +112,7 @@ export const CONCEPTS = [
     title: "Be Still PNG, Brush Calligraphy Faith Sublimation, Minimal Christian Shirt Png, Scripture Png, Digital Download",
     tags: ["be still png","faith png","christian png","brush lettering png","scripture png","minimal christian","bible verse png","faith shirt png","christian tumbler","worship png","psalm png","sublimation design","instant download"] },
   { id: "fall-embroidery", niche: "seasonal", style: "embroidery", text: "Sweater weather club",
-    prompt: `embroidered patch style design with visible stitch texture, a knitted sweater and steaming mug motif, merrowed patch border, thread lettering "Sweater weather club", rust cream and forest green, flat design`,
+    prompt: `embroidered patch style design with visible thread texture, a knitted sweater and steaming mug motif, merrowed patch border, thread lettering "Sweater weather club", rust cream and forest green, flat design`,
     title: "Sweater Weather Club PNG, Embroidery Patch Fall Sublimation, Cozy Autumn Shirt Png, Fall Tumbler Png, Digital Download",
     tags: ["sweater weather png","fall png","autumn sublimation","embroidery patch png","cozy fall png","fall shirt png","pumpkin spice png","fall tumbler png","october png","thanksgiving png","hello fall png","sublimation design","instant download"] },
   { id: "courier-badge", niche: "occupation", style: "retro badge", text: "Delivered with attitude",
@@ -131,7 +131,7 @@ export const CONCEPTS = [
 
 const IP_BLOCK = ["disney","marvel","pixar","nike","adidas","jordan","gucci","louis vuitton","supreme","nfl","nba","mlb","fifa",
   "olympics","star wars","harry potter","pokemon","pokémon","mickey","spider-man","batman","superman","barbie","coca-cola","pepsi",
-  "celebrity","logo of","stitch","paw patrol","grinch","peeps","magical kingdom","world cup","that girl"];
+  "celebrity","logo of","lilo","paw patrol","grinch","peeps","magical kingdom","world cup","that girl"];
 
 function requireApproval(req, res) {
   if (!APPROVAL_SECRET) { res.status(503).json({ error: "approval not configured" }); return false; }
