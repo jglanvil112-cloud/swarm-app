@@ -214,4 +214,22 @@ catalogRouter.post("/retitle", async (req, res) => {
   })();
 });
 
+// POST /api/catalog/set-titles (GATED) — { items:[{id,title,tags}] } hand-written titles, no AI
+catalogRouter.post("/set-titles", async (req, res) => {
+  if (!requireApproval(req, res)) return;
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "items[] required" });
+  const t = await getEtsyToken(); const done = [], failed = [];
+  for (const it of items) {
+    const body = {}; if (it.title) body.title = String(it.title).slice(0, 140); if (Array.isArray(it.tags)) body.tags = it.tags.map(TAG_OK).filter(Boolean).slice(0, 13);
+    try {
+      const r = await fetch(`${ETSY_BASE}/shops/${ETSY_SHOP_ID}/listings/${it.id}`, { method: "PATCH", headers: authH(t), body: JSON.stringify(body) });
+      if (r.ok) done.push(it.id); else failed.push({ id: it.id, status: r.status, body: (await r.text()).slice(0, 120) });
+    } catch (e) { failed.push({ id: it.id, error: e.message.slice(0, 100) }); }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  await logAgent("AISHA", `Catalog set-titles: ${done.length} updated${failed.length ? " ⚠ " + failed.length + " failed" : ""}`, failed.length ? "warn" : "success");
+  res.json({ updated: done, failed });
+});
+
 console.log("[catalog] armed — GET /api/catalog/dupes, POST /api/catalog/dedup {dry:false}");
