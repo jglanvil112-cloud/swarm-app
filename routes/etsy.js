@@ -1576,7 +1576,7 @@ async function runShopRollout(perTick=2, dry=false){
   }
   return {processed:out.length, total_done:done.size+out.slice().filter(x=>x.marked).length, results:out};
 }
-export async function runShopRolloutTick(){ try{ if(!(await _rolloutEnabled())) return {idle:true}; return await runShopRollout(2,false); }catch(e){ return {error:e.message}; } }
+export async function runShopRolloutTick(){ try{ if(process.env.ETSY_DRIPS_DISABLED==="true") return {idle:true,disabled:true}; if(!(await _rolloutEnabled())) return {idle:true}; return await runShopRollout(2,false); }catch(e){ return {error:e.message}; } }
 
 etsyRouter.get("/rollout-once",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ res.json(await runShopRollout(parseInt(req.query.n||"1"), req.query.dry==="1")); }catch(e){ res.status(500).json({error:e.message}); } });
 etsyRouter.get("/rollout-start",async(req,res)=>{ if(req.query.key!=="swarm-os-key-2025")return res.status(403).json({error:"forbidden"}); try{ await saveAgentOutput("DELE","rollout_enabled",{etsy_title:"rollout",data:{at:new Date().toISOString()}}); res.json({ok:true,enabled:true,note:"cron rolls SEO+mockup ~2 listings / 7 min until all active listings are done"}); }catch(e){ res.status(500).json({error:e.message}); } });
@@ -1929,6 +1929,7 @@ cron2.schedule("0 15,45 * * * *",async()=>{
 // Every 20 min: rewrite 3 active listing titles via Claude into buyer-clear format.
 // Skips already-polished (agent_outputs output_type=title_polish). Quota-aware: idles on 429.
 async function titleClarityTick(n=3){
+  if(process.env.ETSY_DRIPS_DISABLED==="true")return{skip:"disabled"}; // CEO 9/5: catalog.js owns titles + covers now
   const K=process.env.ANTHROPIC_API_KEY||"";if(!K)return{skip:"no key"};
   const t=await getEtsyToken();if(!t)return{skip:"no etsy auth"};
   const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100",{headers:authH(t)});
@@ -1965,6 +1966,7 @@ async function uploadListingImage(t,lid,buf,fname,rank){
   return fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/"+lid+"/images",{method:"POST",headers:{...authH(t),"Content-Type":"multipart/form-data; boundary="+boundary},body});
 }
 async function photoEnrichTick(n=2){
+  if(process.env.ETSY_DRIPS_DISABLED==="true")return{skip:"disabled"}; // CEO 9/5: catalog.js owns titles + covers now
   const t=await getEtsyToken();if(!t)return{skip:"no etsy auth"};
   const sharp=(await import("sharp")).default;
   const lr=await fetch(ETSY_BASE+"/shops/"+ETSY_SHOP_ID+"/listings/active?limit=100",{headers:authH(t)});
