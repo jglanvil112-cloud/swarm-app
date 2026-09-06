@@ -387,7 +387,23 @@ async function etsySyncTick(maxPerTick = 4) {
   // on the HOJ pet storefront — never mirror a pet piece to Etsy.
   const isPet = p => isPetTitle(p.title) || isPetTitle(p.tags);
   out.skipped_pet = products.filter(isPet).length;
-  const todo = products.filter(p => !synced.has(String(p.id)) && p.image?.src && !isPet(p)).slice(0, maxPerTick);
+  // CEO 9/5: the agent_logs latch is not enough (it was lost while Supabase was restricted →
+  // the same designs were re-listed hourly, 9 copies of one piece). Also check Etsy ITSELF:
+  // skip any product whose design core already exists as an active/draft/inactive listing.
+  const etsyCores = new Set();
+  const coreOf = s => String(s || "").toLowerCase().replace(/\(hoj-[^)]*\)/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\b(original|digital|wall|art|download|printable|afrocentric|instant|decor|print|prints)\b/g, "").replace(/\s+/g, " ").trim();
+  try {
+    for (const st of ["active", "draft", "inactive"]) {
+      for (let off = 0; off < 500; off += 100) {
+        const r = await fetch(`${ETSY_BASE2}/shops/${ETSY_SHOP_ID2}/listings?state=${st}&limit=100&offset=${off}`, { headers: eAuth(et) });
+        const j = await r.json().catch(() => ({})); const rows = j.results || [];
+        rows.forEach(l => etsyCores.add(coreOf(l.title)));
+        if (rows.length < 100) break;
+      }
+    }
+  } catch (e) { /* if the check fails we still have the latch */ }
+  out.skipped_existing = products.filter(p => etsyCores.has(coreOf(p.title))).length;
+  const todo = products.filter(p => !synced.has(String(p.id)) && p.image?.src && !isPet(p) && !etsyCores.has(coreOf(p.title))).slice(0, maxPerTick);
   if (!todo.length) return out;
 
   let returnPolicyId = 1;
